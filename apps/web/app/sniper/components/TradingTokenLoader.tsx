@@ -135,7 +135,10 @@ function formatPriceOrTime(price: number | null | undefined, timestamp: string |
 }
 
 function holderTradeLabel(row: HolderIntelRow) {
-  if (row.pnlStatus === 'trade-tape-estimate') return 'Matched trade history';
+  if (row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'trade-tape-estimate') return 'Matched trade history';
+  if (row.pnlStatus === 'transfer-only') return 'Transfer-only history';
+  if (row.pnlStatus === 'provider-limited') return 'Provider limited';
+  if (row.pnlStatus === 'balance-only') return 'Balance only';
   if (row.lifecycleStatus === 'not-configured') return 'Need Helius';
   if (row.lifecycleStatus === 'empty') return 'No sampled flow';
   if (row.boughtTokens || row.soldTokens) return 'Partial trade history';
@@ -160,7 +163,7 @@ function HolderWalletTable({ rows, source, status, note }: { rows: HolderIntelRo
       {rows.slice(0, 25).map((row, index) => {
         const pct = row.pctSupply ?? row.pct ?? null;
         const pnlClass = typeof row.totalPnlUsd === 'number' ? row.totalPnlUsd >= 0 ? 'positivePnlCell' : 'negativePnlCell' : '';
-        const tradeMatched = row.pnlStatus === 'trade-tape-estimate';
+        const tradeMatched = row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'trade-tape-estimate';
         return <div className="terminalDataRow holderIntelRow" role="row" key={`${row.tokenAccount}-${index}`}>
           <span>{row.rank ?? index + 1}</span>
           <strong><a href={row.owner ? `https://solscan.io/account/${row.owner}` : '#'} target="_blank" rel="noreferrer">{compactAddress(row.owner)}</a><small>{compactAddress(row.tokenAccount)}</small></strong>
@@ -278,7 +281,7 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
   const holderRows = terminalSnapshot?.holders?.rows ?? stats?.holders?.rows ?? [];
   const holderSource = terminalSnapshot?.holders?.source ?? stats?.holders?.source ?? stats?.holders?.status ?? 'loading';
   const valuedHolderRows = holderRows.filter((row) => typeof row.valueUsd === 'number').length;
-  const tradeMatchedHolderRows = holderRows.filter((row) => row.pnlStatus === 'trade-tape-estimate').length;
+  const tradeMatchedHolderRows = holderRows.filter((row) => row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'trade-tape-estimate').length;
   const marketSources = marketFeed?.sources ?? {};
   const marketTransactions = marketFeed?.transactions ?? { m5: { buys: 0, sells: 0 }, h1: { buys: 0, sells: 0 }, h6: { buys: 0, sells: 0 }, h24: { buys: 0, sells: 0 } };
   const jupiterRouteLabels = marketSources.jupiter?.routeLabels ?? [];

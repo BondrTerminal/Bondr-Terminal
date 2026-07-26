@@ -175,6 +175,13 @@ function holderSummary(stats: Json | null, trades: TradeRow[], pool: Json | null
       const valueUsd = priceUsd !== null ? amount * priceUsd : null;
       const statsForWallet = owner ? tape.get(owner) : null;
       const walletLifecycle = owner ? lifecycle.rows.get(owner) : undefined;
+      const pnlStatus = statsForWallet
+        ? 'trade-tape-priced'
+        : walletLifecycle?.txCount
+          ? 'transfer-only'
+          : lifecycle.status === 'not-configured' || lifecycle.status === 'limited'
+            ? 'provider-limited'
+            : 'balance-only';
       const boughtTokens = statsForWallet?.boughtTokens ?? (walletLifecycle?.txCount ? walletLifecycle.boughtTokens : null);
       const soldTokens = statsForWallet?.soldTokens ?? (walletLifecycle?.txCount ? walletLifecycle.soldTokens : null);
       const buyVolumeUsd = statsForWallet?.buyVolumeUsd ?? null;
@@ -206,7 +213,7 @@ function holderSummary(stats: Json | null, trades: TradeRow[], pool: Json | null
         realizedPnlUsd,
         unrealizedPnlUsd,
         totalPnlUsd,
-        pnlStatus: statsForWallet ? 'trade-tape-estimate' : 'trade-tape-needed',
+        pnlStatus,
         ownerSolBalance: typeof row.ownerSolBalance === 'number' ? row.ownerSolBalance : null,
         ownerBalanceStatus: row.ownerBalanceStatus ?? null,
         firstSeenAt: statsForWallet?.firstSeenAt ?? walletLifecycle?.firstEntryAt ?? null,
@@ -365,7 +372,7 @@ export async function GET(request: Request) {
   const effectiveProfile = smoke ? 'smoke' : prototype ? 'prototype' : liveRead ? 'live-read' : 'standard';
   const boundedLimit = Math.min(Math.max(limit, 1), smoke ? 10 : prototype ? 30 : liveRead ? 50 : 100);
   const boundedHolderLimit = Math.min(Math.max(holderLimit, 1), smoke ? 1 : prototype ? 25 : liveRead ? 50 : 250);
-  const [health, pool, marketFeed, pumpToken, stats, transactions, fresh, bundles, devSold, pumpMigrations, backend] = await Promise.all([
+  const [health, pool, marketFeed, pumpToken, stats, transactions, fresh, bundles, devSold, pumpMigrations, backend, providerEnvAudit] = await Promise.all([
     skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', note: 'Skipped provider health probe during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, '/api/indexer-health'),
     readJson(origin, `/api/token-pool-index?mint=${qMint}`),
     readJson(origin, `/api/token-market-feed?mint=${qMint}`),
@@ -376,7 +383,8 @@ export async function GET(request: Request) {
     skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', clusters: [], summary: { sampledTransactions: 0, suspectedClusters: 0 }, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, `/api/bundle-clustering-index?mint=${qMint}&limit=${boundedLimit}`),
     skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', wallets: [], summary: { walletsWithOutgoingTransfers: 0, totalOutgoingAmount: 0, totalIncomingAmount: 0 }, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson<{ wallets?: DevWalletRow[]; summary?: Json; source?: string }>(origin, `/api/dev-sold-classifier?mint=${qMint}${devParam}&limit=${boundedLimit}`),
     skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', migrations: [], note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, `/api/pumpfun/migrations?limit=50`),
-    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', execution: { terminalOrders: { orders: [], execution: 'prototype-skip' }, bundleSequencer: { execution: 'prototype-skip' }, orderEngine: {} }, wallets: { rows: [], tokenBalances: { rows: [] } }, note: 'Skipped during prototype scan to keep scanner responsive.' }) : readJson(origin, `/api/terminal-backend?mint=${qMint}${projectParam}`)
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', execution: { terminalOrders: { orders: [], execution: 'prototype-skip' }, bundleSequencer: { execution: 'prototype-skip' }, orderEngine: {} }, wallets: { rows: [], tokenBalances: { rows: [] } }, note: 'Skipped during prototype scan to keep scanner responsive.' }) : readJson(origin, `/api/terminal-backend?mint=${qMint}${projectParam}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', providers: {}, note: 'Skipped provider env audit during prototype scan.' }) : readJson(origin, '/api/terminal/provider-env-audit')
   ]);
 
   const trades = transactions?.trades ?? [];
@@ -392,6 +400,7 @@ export async function GET(request: Request) {
   const risk = riskVerdict({ stats: stats as Json | null, pool: pool as Json | null, trades, holders: holderRows, tradeTape });
   const liveChecklist = liveReadinessChecklist({ profile: effectiveProfile, trades, holders: holderRows, tradeTape, stats: stats as Json | null, pool: pool as Json | null, holderLifecycleStatus: holderLifecycle.status });
   const paperDecision = paperTradeDecision({ mint, priceUsd: snapshotPriceUsd, tradeTape, risk });
+  const paperLedger = await readJson(origin, `/api/paper-ledger?mint=${qMint}${snapshotPriceUsd !== null ? `&currentPriceUsd=${encodeURIComponent(String(snapshotPriceUsd))}` : ''}`);
   const pumpCreator = (pumpToken as { creator?: string | null } | null)?.creator ?? null;
   const pumpDevTokens = pumpCreator && !skipHeavy ? await readJson(origin, `/api/pumpfun/dev-tokens?creator=${encodeURIComponent(pumpCreator)}&limit=50`) : { status: pumpCreator ? (prototype ? 'prototype' : 'smoke') : 'missing-creator', source: skipHeavy ? 'prototype-skip' : 'pumpfun', tokens: [], note: skipHeavy ? 'Skipped during prototype scan to avoid upstream 429 pressure.' : undefined };
   const devRows = (devSold?.wallets ?? []).map((row) => ({ ...row, source: devSold?.source ?? 'helius-required' }));
@@ -413,6 +422,7 @@ export async function GET(request: Request) {
       bundles: (bundles as Json | null)?.source ?? null,
       devSold: devSold?.source ?? null
     },
+    providerEnvAudit,
     pool,
     marketFeed,
     holders: holderRows,
@@ -428,6 +438,7 @@ export async function GET(request: Request) {
     riskVerdict: risk,
     liveReadiness: liveChecklist,
     paperTradeDecision: paperDecision,
+    paperLedger,
     orders: ((backend as Json | null)?.execution as Json | undefined)?.terminalOrders ?? null,
     execution: 'terminal-token-snapshot-read'
   });
