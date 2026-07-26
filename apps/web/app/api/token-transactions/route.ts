@@ -200,6 +200,7 @@ async function fetchHeliusTrades(mint: string, limit: number): Promise<ProviderR
     const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${encodeURIComponent(apiKey)}&limit=${Math.min(Math.max(limit, 1), 100)}`;
     const response = await fetchWithTimeout(url, HELIUS_TIMEOUT_MS, { headers: { accept: 'application/json' } });
     if (response.status === 429) return { rows: [], status: 'rate-limited', note: 'Helius rate limited parsed transaction request.' };
+    if (response.status === 401 || response.status === 403) return { rows: [], status: 'unavailable', note: `Helius ${response.status} ${response.statusText}: verify HELIUS_API_KEY value/scope in Vercel.` };
     if (!response.ok) return { rows: [], status: 'unavailable', note: `Helius ${response.status} ${response.statusText}` };
     const rawRows = await response.json() as HeliusTransaction[];
     const rows = rawRows.flatMap((row): IndexedTrade[] => {
@@ -232,9 +233,11 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
     const url = `https://public-api.birdeye.so/defi/txs/token?address=${encodeURIComponent(mint)}&offset=0&limit=${Math.min(Math.max(limit, 1), 50)}`;
     const response = await fetchWithTimeout(url, BIRDEYE_TIMEOUT_MS, { headers: { accept: 'application/json', 'x-chain': 'solana', 'X-API-KEY': apiKey } });
     if (response.status === 429) return { rows: [], status: 'rate-limited', note: 'Birdeye rate limited token tx request.' };
+    if (response.status === 401 || response.status === 403) return { rows: [], status: 'unavailable', note: `Birdeye ${response.status} ${response.statusText}: verify BIRDEYE_API_KEY value and Data Services plan access.` };
     if (!response.ok) return { rows: [], status: 'unavailable', note: `Birdeye ${response.status} ${response.statusText}` };
-    const payload = await response.json() as { data?: { items?: BirdeyeTx[] } | BirdeyeTx[] };
-    const items = Array.isArray(payload.data) ? payload.data : payload.data?.items ?? [];
+    const payload = await response.json() as { data?: { items?: BirdeyeTx[]; solana?: BirdeyeTx[]; transactions?: BirdeyeTx[]; txs?: BirdeyeTx[] } | BirdeyeTx[]; items?: BirdeyeTx[]; success?: boolean; message?: string };
+    const dataObject = !Array.isArray(payload.data) && payload.data && typeof payload.data === 'object' ? payload.data : null;
+    const items = Array.isArray(payload.data) ? payload.data : dataObject?.items ?? dataObject?.solana ?? dataObject?.transactions ?? dataObject?.txs ?? payload.items ?? [];
     const rows = items.map((item): IndexedTrade => withTradeMeta({
       timestamp: item.blockUnixTime ? new Date(item.blockUnixTime * 1000).toISOString() : item.blockTime ?? null,
       side: normalizeSide(item.side ?? item.type),
@@ -245,7 +248,8 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
       txHash: item.txHash ?? item.tx_hash ?? null,
       source: 'birdeye'
     })).filter((trade) => trade.wallet || trade.txHash);
-    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : 'Birdeye returned no token tx rows.' };
+    const payloadShape = Array.isArray(payload.data) ? 'data[]' : dataObject ? `data{${Object.keys(dataObject).slice(0, 8).join(',')}}` : `root{${Object.keys(payload).slice(0, 8).join(',')}}`;
+    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : `Birdeye returned no token tx rows. Payload shape: ${payloadShape}${payload.message ? `; message: ${payload.message}` : ''}`, payloadShape };
   }, 'Birdeye unavailable.');
 }
 
@@ -346,9 +350,11 @@ export async function GET(request: Request) {
       dexscreenerPair: pairResult.latencyMs,
       birdeye: birdeye.latencyMs,
       helius: helius.latencyMs,
+      solscan: solscan.latencyMs,
       pumpfun: pumpfun.latencyMs,
       geckoterminal: gecko.latencyMs
     },
+    providers: Object.fromEntries(Object.entries(providers).map(([provider, result]) => [provider, { status: result.status, rows: result.rows.length, latencyMs: result.latencyMs, note: result.note ?? null, payloadShape: typeof result.payloadShape === 'string' ? result.payloadShape : null }])),
     recommendedFixes: [
       'Add Helius or Birdeye for wallet-attributed trade tape.',
       'Use /api/market-data/probe-token to pick an active memecoin mint instead of USDC for tape testing.'

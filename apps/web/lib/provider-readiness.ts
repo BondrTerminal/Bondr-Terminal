@@ -99,17 +99,33 @@ async function fetchProbe(url: string) {
   });
 }
 
+async function fetchProbeWithHeaders(url: string, headers: Record<string, string>) {
+  return timed(async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json', ...headers }, cache: 'no-store' });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return response.status;
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+}
+
 export async function buildProviderReadiness() {
   const observedAt = new Date().toISOString();
   const rpc = configuredSolanaRpc();
   const connection = new Connection(rpc.url, 'confirmed');
-  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe] = await Promise.all([
+  const birdeyeKey = process.env.BIRDEYE_API_KEY?.trim();
+  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe, birdeyeProbe] = await Promise.all([
     timed(async () => connection.getSlot('confirmed')),
     timed(async () => connection.getLatestBlockhash('confirmed')),
     fetchProbe(`https://lite-api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=1000000&slippageBps=100`),
     fetchProbe(`https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`),
     fetchProbe('https://api.geckoterminal.com/api/v2/networks/solana/pools/BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'),
-    fetchProbe(`https://api.rugcheck.xyz/v1/tokens/${USDC_MINT}/report/summary`)
+    fetchProbe(`https://api.rugcheck.xyz/v1/tokens/${USDC_MINT}/report/summary`),
+    birdeyeKey ? fetchProbeWithHeaders(`https://public-api.birdeye.so/defi/txs/token?address=${USDC_MINT}&offset=0&limit=1`, { 'X-API-KEY': birdeyeKey, 'x-chain': 'solana' }) : Promise.resolve({ value: null, probe: { status: 'optional-not-configured' as ProviderState, latencyMs: null, checkedAt: new Date().toISOString(), error: null } })
   ]);
 
   const heliusConfigured = rpc.provider === 'helius-rpc-url' || rpc.provider === 'helius-api-key';
@@ -117,6 +133,8 @@ export async function buildProviderReadiness() {
   const rpcHealthy = slotProbe.probe.status === 'ok' && blockhashProbe.probe.status === 'ok';
   const rpcLiveSuitable = rpc.configured && rpcHealthy && rpcLatencyOk;
   const rpcStatus: ProviderState = rpc.configured ? (rpcLiveSuitable ? 'ok' : rpcHealthy ? 'partial' : 'unavailable') : (slotProbe.probe.status === 'ok' ? 'public-fallback' : 'unavailable');
+  const heliusSourceStatus: ProviderState = heliusConfigured ? (rpc.provider === 'helius-api-key' || rpc.provider === 'helius-rpc-url' ? (rpcHealthy ? 'ok' : 'unavailable') : 'ok') : 'optional-not-configured';
+  const birdeyeSourceStatus: ProviderState = birdeyeKey ? (birdeyeProbe.probe.status === 'ok' ? 'ok' : birdeyeProbe.probe.status === 'unavailable' && String(birdeyeProbe.probe.error ?? '').includes('429') ? 'partial' : 'unavailable') : 'optional-not-configured';
   const sources = {
     solanaRpc: {
       status: rpcStatus,
@@ -135,16 +153,20 @@ export async function buildProviderReadiness() {
       note: rpcLiveSuitable ? 'Configured private Solana RPC meets current live-readiness threshold.' : rpc.configured ? 'Configured Solana RPC is present but does not meet every live-readiness threshold yet.' : 'Using public fallback RPC; safe for read-only checks but not reliable enough for production live mode.'
     },
     helius: {
-      status: heliusConfigured ? 'ok' : 'optional-not-configured',
+      status: heliusSourceStatus,
       configured: heliusConfigured,
+      credentialProbeLatencyMs: heliusConfigured ? slotProbe.probe.latencyMs : null,
+      credentialProbeError: heliusConfigured && heliusSourceStatus !== 'ok' ? slotProbe.probe.error ?? blockhashProbe.probe.error ?? 'Helius RPC probe failed.' : null,
       featuresUnlockedIfConfigured: ['enhanced transaction history', 'more reliable RPC', 'wallet/token transfer parsing', 'holder/fresh-wallet enrichment'],
-      note: heliusConfigured ? 'Helius detected server-side; secret value not exposed.' : 'Optional but strongly recommended before live terminal operation.'
+      note: heliusConfigured ? (heliusSourceStatus === 'ok' ? 'Helius detected and RPC probe succeeded; secret value not exposed.' : 'Helius env is present, but the provider rejected or failed the runtime probe. Verify the key/value in Vercel.') : 'Optional but strongly recommended before live terminal operation.'
     },
     birdeye: {
-      status: configured('BIRDEYE_API_KEY') ? 'ok' : 'optional-not-configured',
-      configured: configured('BIRDEYE_API_KEY'),
+      status: birdeyeSourceStatus,
+      configured: Boolean(birdeyeKey),
+      credentialProbeLatencyMs: birdeyeProbe.probe.latencyMs,
+      credentialProbeError: birdeyeKey && birdeyeSourceStatus !== 'ok' ? birdeyeProbe.probe.error : null,
       featuresUnlockedIfConfigured: ['preferred token transaction history', 'wallet-attributed trade history', 'higher-confidence PnL inputs'],
-      note: configured('BIRDEYE_API_KEY') ? 'Birdeye configured server-side.' : 'Optional provider for better token history/PnL.'
+      note: birdeyeKey ? (birdeyeSourceStatus === 'ok' ? 'Birdeye configured and credential probe succeeded.' : 'Birdeye env is present, but the provider rejected or failed the runtime probe. Verify the API key and plan access.') : 'Optional provider for better token history/PnL.'
     },
     bitquery: {
       status: configured('BITQUERY_API_KEY') ? 'ok' : 'optional-not-configured',
@@ -200,8 +222,8 @@ export async function buildProviderReadiness() {
   ].filter((item): item is string => Boolean(item));
 
   const optionalProviderGaps = [
-    !heliusConfigured ? 'Helius optional-not-configured: enhanced transaction history unavailable.' : null,
-    !configured('BIRDEYE_API_KEY') ? 'Birdeye optional-not-configured: preferred token transaction history unavailable.' : null,
+    !heliusConfigured ? 'Helius optional-not-configured: enhanced transaction history unavailable.' : heliusSourceStatus !== 'ok' ? 'Helius configured but runtime probe failed: verify API key/RPC URL.' : null,
+    !birdeyeKey ? 'Birdeye optional-not-configured: preferred token transaction history unavailable.' : birdeyeSourceStatus !== 'ok' ? 'Birdeye configured but credential probe failed: verify API key and plan access.' : null,
     !configured('SOLSCAN_API_KEY') && !configured('SOLSCAN_PRO_API_KEY') ? 'Solscan optional-not-configured: preferred ranked holder API unavailable.' : null,
     !configured('BITQUERY_API_KEY') ? 'Bitquery optional-not-configured: deep bundle/same-block clustering unavailable.' : null
   ].filter((item): item is string => Boolean(item));
@@ -215,7 +237,7 @@ export async function buildProviderReadiness() {
     optionalProviderGaps,
     providerCapabilities: providerCapabilityMatrix(),
     recommendedProbe: { route: '/api/market-data/probe-token', envOverride: 'RECOMMENDED_PROBE_MINT', note: 'Use this instead of USDC when testing active memecoin trade tape.' },
-    historyAndPnlConfidence: { status: heliusConfigured || configured('BIRDEYE_API_KEY') ? 'provider-assisted' : 'low-history-confidence', note: heliusConfigured || configured('BIRDEYE_API_KEY') ? 'At least one history provider is configured.' : 'Current holdings can hydrate from RPC, but wallet-attributed history/PnL remains low confidence without Helius or Birdeye.' },
+    historyAndPnlConfidence: { status: heliusSourceStatus === 'ok' || birdeyeSourceStatus === 'ok' ? 'provider-assisted' : 'low-history-confidence', note: heliusSourceStatus === 'ok' || birdeyeSourceStatus === 'ok' ? 'At least one history provider passed its runtime probe.' : 'Current holdings can hydrate from fallback sources, but wallet-attributed history/PnL remains low confidence until Helius or Birdeye runtime probes pass.' },
     secretsExposed: false,
     liveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
     execution: process.env.LIVE_TRADING_ENABLED === 'true' ? 'live-gated-browser-wallet' : 'live-disabled-readiness-only'
