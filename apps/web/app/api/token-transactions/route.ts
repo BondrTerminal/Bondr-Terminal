@@ -78,6 +78,20 @@ type BirdeyeTx = {
   priceUsd?: number | string;
   volumeUsd?: number | string;
   value?: number | string;
+  tokenAmount?: number | string;
+  token_amount?: number | string;
+  amountIn?: number | string;
+  amountOut?: number | string;
+  volume?: number | string;
+  volume_usd?: number | string;
+  valueUsd?: number | string;
+  usdValue?: number | string;
+  tokenPrice?: number | string;
+  token_price?: number | string;
+  priceUSD?: number | string;
+  base?: Record<string, unknown>;
+  quote?: Record<string, unknown>;
+  token?: Record<string, unknown>;
 };
 
 type TradeTapeCache = { observedAt: string; mint: string; primary: string; trades: IndexedTrade[] };
@@ -138,6 +152,25 @@ function normalizeSide(kind?: string): 'buy' | 'sell' | 'unknown' {
   if (normalized.includes('buy')) return 'buy';
   if (normalized.includes('sell')) return 'sell';
   return 'unknown';
+}
+
+function numberFrom(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function primitiveShape(row: Record<string, unknown> | undefined) {
+  if (!row) return null;
+  return Object.fromEntries(Object.entries(row).slice(0, 40).map(([key, value]) => {
+    if (value === null || value === undefined) return [key, String(value)];
+    if (typeof value === 'object') return [key, Array.isArray(value) ? `array(${value.length})` : `object{${Object.keys(value as Record<string, unknown>).slice(0, 12).join(',')}}`];
+    const text = String(value);
+    return [key, `${typeof value}:${text.length > 80 ? `${text.slice(0, 80)}…` : text}`];
+  }));
 }
 
 function withTradeMeta<T extends Omit<IndexedTrade, 'provider' | 'confidence' | 'attributionStatus'>>(trade: T): IndexedTrade {
@@ -238,18 +271,26 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
     const payload = await response.json() as { data?: { items?: BirdeyeTx[]; solana?: BirdeyeTx[]; transactions?: BirdeyeTx[]; txs?: BirdeyeTx[] } | BirdeyeTx[]; items?: BirdeyeTx[]; success?: boolean; message?: string };
     const dataObject = !Array.isArray(payload.data) && payload.data && typeof payload.data === 'object' ? payload.data : null;
     const items = Array.isArray(payload.data) ? payload.data : dataObject?.items ?? dataObject?.solana ?? dataObject?.transactions ?? dataObject?.txs ?? payload.items ?? [];
-    const rows = items.map((item): IndexedTrade => withTradeMeta({
+    const rows = items.map((item): IndexedTrade => {
+      const base = item.base ?? {};
+      const quote = item.quote ?? {};
+      const token = item.token ?? {};
+      const amount = numberFrom(item.amount, item.tokenAmount, item.token_amount, item.amountOut, item.amountIn, token.amount, base.amount, quote.amount);
+      const volumeUsd = numberFrom(item.volumeUsd, item.valueUsd, item.usdValue, item.volume_usd, item.value, item.volume, quote.valueUsd, quote.usdValue, base.valueUsd, base.usdValue);
+      const priceUsd = numberFrom(item.priceUsd, item.priceUSD, item.price, item.tokenPrice, item.token_price, token.priceUsd, token.price, base.priceUsd, base.price, volumeUsd !== null && amount ? volumeUsd / amount : null);
+      return withTradeMeta({
       timestamp: item.blockUnixTime ? new Date(item.blockUnixTime * 1000).toISOString() : item.blockTime ?? null,
       side: normalizeSide(item.side ?? item.type),
       wallet: item.owner ?? item.signer ?? null,
-      amount: item.amount !== undefined ? Number(item.amount) : null,
-      priceUsd: item.priceUsd !== undefined ? Number(item.priceUsd) : item.price !== undefined ? Number(item.price) : null,
-      volumeUsd: item.volumeUsd !== undefined ? Number(item.volumeUsd) : item.value !== undefined ? Number(item.value) : null,
+      amount,
+      priceUsd,
+      volumeUsd,
       txHash: item.txHash ?? item.tx_hash ?? null,
       source: 'birdeye'
-    })).filter((trade) => trade.wallet || trade.txHash);
+      });
+    }).filter((trade) => trade.wallet || trade.txHash);
     const payloadShape = Array.isArray(payload.data) ? 'data[]' : dataObject ? `data{${Object.keys(dataObject).slice(0, 8).join(',')}}` : `root{${Object.keys(payload).slice(0, 8).join(',')}}`;
-    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : `Birdeye returned no token tx rows. Payload shape: ${payloadShape}${payload.message ? `; message: ${payload.message}` : ''}`, payloadShape };
+    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : `Birdeye returned no token tx rows. Payload shape: ${payloadShape}${payload.message ? `; message: ${payload.message}` : ''}`, payloadShape, sampleKeys: items[0] ? Object.keys(items[0]).sort() : [], samplePrimitiveShape: primitiveShape(items[0] as Record<string, unknown> | undefined) };
   }, 'Birdeye unavailable.');
 }
 
@@ -354,7 +395,7 @@ export async function GET(request: Request) {
       pumpfun: pumpfun.latencyMs,
       geckoterminal: gecko.latencyMs
     },
-    providers: Object.fromEntries(Object.entries(providers).map(([provider, result]) => [provider, { status: result.status, rows: result.rows.length, latencyMs: result.latencyMs, note: result.note ?? null, payloadShape: typeof result.payloadShape === 'string' ? result.payloadShape : null }])),
+    providers: Object.fromEntries(Object.entries(providers).map(([provider, result]) => [provider, { status: result.status, rows: result.rows.length, latencyMs: result.latencyMs, note: result.note ?? null, payloadShape: typeof result.payloadShape === 'string' ? result.payloadShape : null, sampleKeys: Array.isArray(result.sampleKeys) ? result.sampleKeys : null, samplePrimitiveShape: result.samplePrimitiveShape ?? null }])),
     recommendedFixes: [
       'Add Helius or Birdeye for wallet-attributed trade tape.',
       'Use /api/market-data/probe-token to pick an active memecoin mint instead of USDC for tape testing.'
