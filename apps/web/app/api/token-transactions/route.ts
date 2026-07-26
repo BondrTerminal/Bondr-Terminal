@@ -146,6 +146,16 @@ async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestIn
   }
 }
 
+async function fetchWithVercelCache(url: string, timeoutMs: number, init?: RequestInit, revalidateSeconds = 45): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal, cache: 'force-cache', next: { revalidate: revalidateSeconds } } as RequestInit & { next: { revalidate: number } });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function sameMint(a?: string, b?: string) {
   return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 }
@@ -291,7 +301,7 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
     const apiKey = process.env.BIRDEYE_API_KEY?.trim();
     if (!apiKey) return { rows: [], status: 'not-configured', note: 'BIRDEYE_API_KEY not configured.' };
     const url = `https://public-api.birdeye.so/defi/txs/token?address=${encodeURIComponent(mint)}&offset=0&limit=${Math.min(Math.max(limit, 1), 50)}`;
-    const response = await fetchWithTimeout(url, BIRDEYE_TIMEOUT_MS, { headers: { accept: 'application/json', 'x-chain': 'solana', 'X-API-KEY': apiKey } });
+    const response = await fetchWithVercelCache(url, BIRDEYE_TIMEOUT_MS, { headers: { accept: 'application/json', 'x-chain': 'solana', 'X-API-KEY': apiKey } }, Math.ceil(BIRDEYE_CACHE_TTL_MS / 1000));
     if (response.status === 429) return { rows: [], status: 'rate-limited', note: 'Birdeye rate limited token tx request.' };
     if (response.status === 401 || response.status === 403) return { rows: [], status: 'unavailable', note: `Birdeye ${response.status} ${response.statusText}: verify BIRDEYE_API_KEY value and Data Services plan access.` };
     if (!response.ok) return { rows: [], status: 'unavailable', note: `Birdeye ${response.status} ${response.statusText}` };
