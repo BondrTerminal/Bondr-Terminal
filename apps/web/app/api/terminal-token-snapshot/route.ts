@@ -267,6 +267,83 @@ function positionSummary(backend: Json | null, traders: ReturnType<typeof topTra
   };
 }
 
+function liveReadinessChecklist(args: { profile: string; trades: TradeRow[]; holders: ReturnType<typeof holderSummary>; tradeTape: Json; stats: Json | null; pool: Json | null; holderLifecycleStatus: string }) {
+  const supply = objectValue(args.stats?.supply);
+  const concentration = objectValue(args.stats?.concentration);
+  const market = objectValue(args.pool?.summary);
+  const tradeStatus = typeof args.tradeTape.status === 'string' ? args.tradeTape.status : args.trades.length ? 'ok' : 'empty';
+  const checks = [
+    { id: 'token_identity', label: 'Token identity loads', status: args.pool || args.stats ? 'pass' : 'fail', evidence: args.pool ? 'Pool/token metadata loaded.' : 'No pool/token metadata loaded.' },
+    { id: 'supply_authorities', label: 'Supply/authority data', status: supply.uiAmount || args.stats?.rugcheck ? 'pass' : 'partial', evidence: supply.status ? `Supply ${String(supply.status)}.` : 'Supply falls back to RugCheck/provider metadata when RPC is unavailable.' },
+    { id: 'holder_concentration', label: 'Holder concentration', status: args.holders.rows?.length ? 'pass' : 'fail', evidence: `${args.holders.rows?.length ?? 0} holder rows from ${String(args.holders.source ?? 'unknown')}.` },
+    { id: 'holder_wallet_attribution', label: 'Holder wallet attribution', status: args.holderLifecycleStatus === 'ok' ? 'pass' : args.holders.rows?.length ? 'partial' : 'fail', evidence: `Lifecycle source status: ${args.holderLifecycleStatus}.` },
+    { id: 'trade_tape', label: 'Nonzero trade tape', status: args.trades.length ? 'pass' : 'fail', evidence: `${args.trades.length} rows · ${String(args.tradeTape.primary ?? 'none')} · ${tradeStatus}.` },
+    { id: 'market_feed', label: 'Price/liquidity/volume', status: market.priceUsd || market.liquidityUsd || market.marketCap ? 'pass' : 'partial', evidence: `Price ${market.priceUsd ?? 'n/a'} · liquidity ${market.liquidityUsd ?? 'n/a'} · mcap ${market.marketCap ?? 'n/a'}.` },
+    { id: 'provider_clarity', label: 'Provider status clarity', status: 'pass', evidence: 'Snapshot includes tradeTape blockers, optionalProviderGaps, holder source, and profile.' },
+    { id: 'paper_trading', label: 'Paper quote decision path', status: 'partial', evidence: 'Quote-only endpoint exists; UI decision panel must fetch quote before any execution.' },
+    { id: 'execution_gates', label: 'Live execution disabled', status: 'pass', evidence: 'Snapshot is read-only; signing/broadcasting remain disabled.' }
+  ];
+  const failed = checks.filter((check) => check.status === 'fail').map((check) => check.id);
+  const partial = checks.filter((check) => check.status === 'partial').map((check) => check.id);
+  return {
+    status: failed.length ? 'blocked' : partial.length ? 'partial' : 'ready-for-paper',
+    profile: args.profile,
+    summary: `${checks.filter((check) => check.status === 'pass').length}/${checks.length} checks passing`,
+    checks,
+    failed,
+    partial,
+    liveTradingAllowed: false,
+    note: 'Live-readiness means the terminal can observe and paper-simulate; real signing/trading remains disabled until separate execution gates pass.'
+  };
+}
+
+function riskVerdict(args: { stats: Json | null; pool: Json | null; trades: TradeRow[]; holders: ReturnType<typeof holderSummary>; tradeTape: Json }) {
+  const concentration = objectValue(args.stats?.concentration);
+  const rugcheck = objectValue(args.stats?.rugcheck);
+  const lp = objectValue(args.stats?.lpBurned);
+  const dev = objectValue(args.stats?.devHolding);
+  const top10Pct = numberOrNull(concentration.top10Pct);
+  const liquidityUsd = numberOrNull(objectValue(args.pool?.summary).liquidityUsd);
+  const reasons: string[] = [];
+  if (!args.trades.length) reasons.push('No recent trade tape; cannot trust live entry/exit timing.');
+  if (top10Pct !== null && top10Pct >= 70) reasons.push(`Top 10 concentration is high (${top10Pct.toFixed(1)}%).`);
+  if (liquidityUsd !== null && liquidityUsd < 10_000) reasons.push(`Liquidity is thin (${liquidityUsd.toFixed(0)} USD).`);
+  if (rugcheck.rugged === true) reasons.push('RugCheck reports rugged=true.');
+  if (dev.pct && Number(dev.pct) >= 5) reasons.push(`Dev wallets still show ${Number(dev.pct).toFixed(2)}% of supply.`);
+  const authorityFlags = [rugcheck.mintAuthority ? 'mint authority present' : null, rugcheck.freezeAuthority ? 'freeze authority present' : null].filter(Boolean);
+  reasons.push(...authorityFlags as string[]);
+  const status = reasons.some((reason) => reason.includes('RugCheck') || reason.includes('authority') || reason.includes('high')) ? 'DO_NOT_TRADE' : reasons.length ? 'HIGH_RISK' : 'SAFE_TO_WATCH';
+  return {
+    status,
+    liveTradingAllowed: false,
+    reasons,
+    checks: {
+      top10Pct,
+      liquidityUsd,
+      holderRows: args.holders.rows?.length ?? 0,
+      tradeRows: args.trades.length,
+      lpStatus: lp.status ?? null,
+      rugcheck: rugcheck ? { rugged: rugcheck.rugged ?? null, riskCount: Array.isArray(rugcheck.risks) ? rugcheck.risks.length : null } : null
+    },
+    note: status === 'SAFE_TO_WATCH' ? 'No automatic blockers in sampled data; still paper-simulate first.' : 'Risk verdict blocks live trading until reviewed.'
+  };
+}
+
+function paperTradeDecision(args: { mint: string; priceUsd: number | null; tradeTape: Json; risk: ReturnType<typeof riskVerdict> }) {
+  return {
+    status: 'quote-required',
+    execution: 'paper-only-no-sign-no-send',
+    liveTradingEnabled: false,
+    defaultRequest: { mint: args.mint, side: 'Buy', amount: '0.01', spendAsset: 'SOL', slippageBps: 100 },
+    quoteRoute: '/api/execution-quote',
+    requiredBeforeLive: ['Jupiter quote preview', 'slippage/price-impact review', 'risk verdict review', 'human confirmation', 'dry-run simulation', 'durable intent log'],
+    currentPriceUsd: args.priceUsd,
+    riskStatus: args.risk.status,
+    tradeTapeRows: args.tradeTape.rows ?? 0,
+    note: 'This panel can preview a paper decision only. It never builds, signs, or broadcasts a transaction.'
+  };
+}
+
 export async function GET(request: Request) {
   const { origin, searchParams } = new URL(request.url);
   const mint = searchParams.get('mint')?.trim() ?? '';
@@ -276,6 +353,7 @@ export async function GET(request: Request) {
   const smoke = searchParams.get('smoke') === '1';
   const profile = searchParams.get('profile')?.trim() ?? '';
   const prototype = profile === 'prototype' || searchParams.get('prototype') === '1';
+  const liveRead = profile === 'live-read' || searchParams.get('liveRead') === '1';
   const skipHeavy = smoke || prototype;
   if (!mint || !ADDRESS_RE.test(mint)) return Response.json({ error: 'Missing or invalid mint.' }, { status: 400 });
 
@@ -284,8 +362,9 @@ export async function GET(request: Request) {
   const projectParam = project ? `&project=${encodeURIComponent(project)}` : '';
   const devParam = devWallets ? `&devWallets=${encodeURIComponent(devWallets)}` : '';
 
-  const boundedLimit = Math.min(Math.max(limit, 1), smoke ? 10 : prototype ? 30 : 100);
-  const boundedHolderLimit = Math.min(Math.max(holderLimit, 1), smoke ? 1 : prototype ? 25 : 250);
+  const effectiveProfile = smoke ? 'smoke' : prototype ? 'prototype' : liveRead ? 'live-read' : 'standard';
+  const boundedLimit = Math.min(Math.max(limit, 1), smoke ? 10 : prototype ? 30 : liveRead ? 50 : 100);
+  const boundedHolderLimit = Math.min(Math.max(holderLimit, 1), smoke ? 1 : prototype ? 25 : liveRead ? 50 : 250);
   const [health, pool, marketFeed, pumpToken, stats, transactions, fresh, bundles, devSold, pumpMigrations, backend] = await Promise.all([
     skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', note: 'Skipped provider health probe during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, '/api/indexer-health'),
     readJson(origin, `/api/token-pool-index?mint=${qMint}`),
@@ -310,6 +389,9 @@ export async function GET(request: Request) {
   const holderLifecycle = await holderWalletLifecycles(statsHolderRows, mint, !skipHeavy);
   const holderRows = holderSummary(stats as Json | null, trades, pool as Json | null, holderLifecycle);
   const positionRows = positionSummary(backend as Json | null, traderRows, snapshotPriceUsd);
+  const risk = riskVerdict({ stats: stats as Json | null, pool: pool as Json | null, trades, holders: holderRows, tradeTape });
+  const liveChecklist = liveReadinessChecklist({ profile: effectiveProfile, trades, holders: holderRows, tradeTape, stats: stats as Json | null, pool: pool as Json | null, holderLifecycleStatus: holderLifecycle.status });
+  const paperDecision = paperTradeDecision({ mint, priceUsd: snapshotPriceUsd, tradeTape, risk });
   const pumpCreator = (pumpToken as { creator?: string | null } | null)?.creator ?? null;
   const pumpDevTokens = pumpCreator && !skipHeavy ? await readJson(origin, `/api/pumpfun/dev-tokens?creator=${encodeURIComponent(pumpCreator)}&limit=50`) : { status: pumpCreator ? (prototype ? 'prototype' : 'smoke') : 'missing-creator', source: skipHeavy ? 'prototype-skip' : 'pumpfun', tokens: [], note: skipHeavy ? 'Skipped during prototype scan to avoid upstream 429 pressure.' : undefined };
   const devRows = (devSold?.wallets ?? []).map((row) => ({ ...row, source: devSold?.source ?? 'helius-required' }));
@@ -319,6 +401,7 @@ export async function GET(request: Request) {
     observedAt: new Date().toISOString(),
     mint,
     project: project || null,
+    profile: effectiveProfile,
     sources: {
       health,
       pumpfun: { token: (pumpToken as Json | null)?.status ?? null, migrations: (pumpMigrations as Json | null)?.status ?? null, devTokens: (pumpDevTokens as Json | null)?.status ?? null },
@@ -342,6 +425,9 @@ export async function GET(request: Request) {
     pumpfun: { token: pumpToken, migrations: pumpMigrations, devTokens: pumpDevTokens },
     terminal: backend,
     positions: positionRows,
+    riskVerdict: risk,
+    liveReadiness: liveChecklist,
+    paperTradeDecision: paperDecision,
     orders: ((backend as Json | null)?.execution as Json | undefined)?.terminalOrders ?? null,
     execution: 'terminal-token-snapshot-read'
   });

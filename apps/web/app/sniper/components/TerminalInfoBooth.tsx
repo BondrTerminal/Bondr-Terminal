@@ -111,8 +111,24 @@ type TerminalBackendShape = {
 type BundlePayload = { status?: string; execution?: string; reason?: string | null; error?: string; legs?: Array<Record<string, unknown>> };
 type TradeTapeState = { status?: string; primary?: string; rows?: number; blockers?: string[]; optionalProviderGaps?: string[]; recommendedFixes?: string[]; latencyMs?: number | null; note?: string | null };
 
+type PaperTradeDecision = {
+  status?: string;
+  execution?: string;
+  liveTradingEnabled?: boolean;
+  defaultRequest?: { mint?: string; side?: string; amount?: string; spendAsset?: string; slippageBps?: number };
+  quoteRoute?: string;
+  requiredBeforeLive?: string[];
+  currentPriceUsd?: number | null;
+  riskStatus?: string;
+  tradeTapeRows?: number;
+  note?: string | null;
+};
+
+type RiskVerdict = { status?: string; reasons?: string[]; note?: string | null; liveTradingAllowed?: boolean; checks?: Record<string, unknown> };
+type LiveReadiness = { status?: string; summary?: string; checks?: Array<{ id?: string; label?: string; status?: string; evidence?: string }>; failed?: string[]; partial?: string[]; liveTradingAllowed?: boolean; note?: string | null };
+
 type Tab = (typeof tabs)[number];
-const tabs = ['Transactions', 'Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Wallets', 'Bundle', 'Risk', 'Migration', 'Signals'] as const;
+const tabs = ['Transactions', 'Paper', 'Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Wallets', 'Bundle', 'Risk', 'Migration', 'Signals'] as const;
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function formatPct(value: number | null | undefined, fallback = 'API limited') {
@@ -200,7 +216,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
     }
 
     const devWallets = wallets.map((wallet) => wallet.address).join(',');
-    const query = new URLSearchParams({ mint: activeMint, holderLimit: '25', limit: '30', profile: 'prototype' });
+    const query = new URLSearchParams({ mint: activeMint, holderLimit: '40', limit: '50', profile: 'live-read' });
     if (projectId) query.set('project', projectId);
     if (devWallets) query.set('devWallets', devWallets);
 
@@ -258,6 +274,9 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
   const positionRows = (snapshot as SnapshotWithPositions | null)?.positions?.rows ?? [];
   const trades = snapshot?.trades?.rows ?? [];
   const tradeTape = ((snapshot as (TerminalTokenSnapshot & { tradeTape?: TradeTapeState }) | null)?.tradeTape ?? (snapshot?.trades as { tradeTape?: TradeTapeState } | undefined)?.tradeTape ?? null) as TradeTapeState | null;
+  const paperDecision = ((snapshot as (TerminalTokenSnapshot & { paperTradeDecision?: PaperTradeDecision }) | null)?.paperTradeDecision ?? null) as PaperTradeDecision | null;
+  const riskVerdict = ((snapshot as (TerminalTokenSnapshot & { riskVerdict?: RiskVerdict }) | null)?.riskVerdict ?? null) as RiskVerdict | null;
+  const liveReadiness = ((snapshot as (TerminalTokenSnapshot & { liveReadiness?: LiveReadiness }) | null)?.liveReadiness ?? null) as LiveReadiness | null;
   const topTraders = (snapshot?.trades?.topTraders ?? []) as UiTopTrader[];
   const holders = snapshot?.holders;
   const holderRows = (holders?.rows ?? []) as UiHolderRow[];
@@ -352,7 +371,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
     ['Market data', snapshot?.execution ?? snapshotStatus, 'Terminal snapshot'],
     ['Live stream', snapshotStatus, 'Realtime updates'],
     ['Pool age', String((sources?.poolAge as { source?: string; firstSeenAt?: string } | undefined)?.source ?? 'loading'), String((sources?.poolAge as { firstSeenAt?: string } | undefined)?.firstSeenAt ?? 'waiting')],
-    ['Trade tape', sourceValue(snapshot, 'tradeTape'), 'Indexed swaps'],
+    ['Trade tape', sourceValue(snapshot, 'tradeTape'), `${tradeTape?.rows ?? trades.length} indexed swaps`],
     ['Holders', String(holders?.source ?? sourceValue(snapshot, 'holders')), 'Wallet ownership'],
     ['Fresh/snipers', sourceValue(snapshot, 'fresh'), 'Wallet classifier'],
     ['Bundles', sourceValue(snapshot, 'bundles'), 'Slot clustering'],
@@ -383,6 +402,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
 
       <div className="terminalTabPanel">
         {activeTab === 'Transactions' && <TradeTable trades={trades} tradeTape={tradeTape} />}
+        {activeTab === 'Paper' && <PaperDecisionPanel mint={activeMint} decision={paperDecision} risk={riskVerdict} liveReadiness={liveReadiness} />}
         {activeTab === 'Positions' && <PositionsPanel wallets={renderedWallets} tokenRows={tokenRows} positionRows={positionRows} positionSummary={(snapshot as SnapshotWithPositions | null)?.positions?.summary ?? null} tokenInventory={tokenInventory} flow={backend?.accounting ?? flow} mint={activeMint} />}
         {activeTab === 'Orders' && <OrdersPanel orders={orders} openCount={openOrders.length} triggeredCount={triggeredOrders.length} execution={backend?.execution?.terminalOrders?.execution} onEvaluate={() => void evaluateOrders()} onCancel={(id) => void cancelOrder(id)} loading={tabActionLoading} />}
         {activeTab === 'Holders' && <HoldersPanel holders={holders} rows={holderRows} />}
@@ -390,12 +410,70 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
         {activeTab === 'Dev Tokens' && <DevTokensPanel rows={devRows} tokenRows={tokenRows} pumpfunTokens={pumpfunDevTokens} pumpfunStatus={pumpfun?.devTokens?.status ?? 'loading'} pumpfunToken={pumpfun?.token} devSource={sourceValue(snapshot, 'devSold')} />}
         {activeTab === 'Wallets' && <WalletsPanel wallets={renderedWallets} selectedWalletId={selectedWallet?.id ?? ''} bundleWalletIds={bundleWalletIds} tokenRows={tokenRows} onSelect={setSelectedWalletId} onToggleBundle={toggleBundleWallet} onOpenPositions={() => setActiveTab('Positions')} />}
         {activeTab === 'Bundle' && <BundlePanel wallets={bundleWallets} bundleRows={bundleRows} execution={backend?.execution?.bundleSequencer?.execution ?? backend?.bundle?.engineStatus} onPreflight={() => void preflightSelectedBundle()} loading={!activeMint || !bundleWallets.length || tabActionLoading} />}
-        {activeTab === 'Risk' && <RowsTable head={['Source', 'Status', 'Route']} rows={sourceRows} />}
+        {activeTab === 'Risk' && <RiskPanel rows={sourceRows} risk={riskVerdict} liveReadiness={liveReadiness} />}
         {activeTab === 'Migration' && <MigrationPanel poolSummary={poolSummary} pumpfunToken={pumpfun?.token} pumpfunMigrations={pumpfunMigrations} pumpfunMigrationStatus={pumpfun?.migrations?.status ?? 'loading'} bundleWalletCount={bundleWallets.length} />}
         {activeTab === 'Signals' && <SignalsPanel freshRows={freshRows} bundleRows={bundleRows} topTraders={topTraders} holderRows={holderRows} holderValuedRows={holderValuedRows} holderPnlRows={holderPnlRows} traderPnlRows={traderPnlRows} pumpfunRows={String((snapshot?.trades?.summary as Record<string, unknown> | null)?.pumpfunRows ?? (pumpfun?.token ? 'token-read' : 'loading'))} liquidityUsd={poolSummary?.liquidityUsd} sourceFresh={sourceValue(snapshot, 'fresh')} sourceBundles={sourceValue(snapshot, 'bundles')} />}
       </div>
     </section>
   );
+}
+
+function PaperDecisionPanel({ mint, decision, risk, liveReadiness }: { mint: string; decision?: PaperTradeDecision | null; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null }) {
+  const defaults = decision?.defaultRequest ?? { mint, side: 'Buy', amount: '0.01', spendAsset: 'SOL', slippageBps: 100 };
+  const [amount, setAmount] = useState(String(defaults.amount ?? '0.01'));
+  const [side, setSide] = useState(String(defaults.side ?? 'Buy'));
+  const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState('idle');
+
+  async function previewQuote() {
+    if (!mint) return;
+    setQuoteStatus('quoting');
+    setQuote(null);
+    try {
+      const response = await fetch('/api/execution-quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mint, side, amount, spendAsset: defaults.spendAsset ?? 'SOL', slippageBps: defaults.slippageBps ?? 100, mode: 'paper-preview' })
+      });
+      const payload = await response.json() as Record<string, unknown>;
+      setQuote(payload);
+      setQuoteStatus(response.ok ? 'quote-ready' : String(payload.error ?? 'quote-error'));
+    } catch (error) {
+      setQuoteStatus(error instanceof Error ? error.message : 'quote failed');
+    }
+  }
+
+  const quoteObject = (quote?.quote ?? {}) as Record<string, unknown>;
+  const routeLabels = Array.isArray(quoteObject.routeLabels) ? quoteObject.routeLabels.map(String).join(' / ') : '—';
+  return <div className="paperDecisionSurface">
+    <RowsTable head={['Gate', 'Status', 'Why']} rows={[
+      ['Execution mode', decision?.execution ?? 'paper-only-no-sign-no-send', 'No transaction build, signing, or broadcast.'],
+      ['Risk verdict', risk?.status ?? decision?.riskStatus ?? 'loading', risk?.reasons?.[0] ?? risk?.note ?? 'Risk panel must be reviewed before live.'],
+      ['Live-readiness', `${liveReadiness?.status ?? 'loading'} · ${liveReadiness?.summary ?? 'pending checks'}`, liveReadiness?.note ?? 'Terminal must observe reality before trading.'],
+      ['Trade tape rows', String(decision?.tradeTapeRows ?? 0), 'Nonzero wallet-attributed tape required for high-confidence PnL.'],
+      ['Live trading', decision?.liveTradingEnabled ? 'enabled' : 'disabled', 'Deliberately blocked for Sprint 1.']
+    ]} />
+    <div className="terminalTabActionBar"><strong>Paper quote preview</strong><span>{quoteStatus}</span><input value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="Paper amount" /><button type="button" onClick={() => setSide(side === 'Buy' ? 'Sell' : 'Buy')}>{side}</button><button type="button" onClick={() => void previewQuote()} disabled={!mint || quoteStatus === 'quoting'}>Preview quote</button></div>
+    <RowsTable head={['Quote field', 'Value', 'Source']} rows={[
+      ['Input amount', String((quote?.request as Record<string, unknown> | undefined)?.amount ?? amount), 'operator paper request'],
+      ['Expected out', String(quoteObject.outAmount ?? 'quote required'), 'Jupiter quote-only'],
+      ['Price impact', String(quoteObject.priceImpactPct ?? 'quote required'), 'Jupiter quote-only'],
+      ['Route', routeLabels, 'Jupiter route plan'],
+      ['Safety', String(quote?.safety ?? decision?.note ?? 'quote only'), 'server guardrail']
+    ]} />
+    <RowsTable head={['Before live', 'Status', 'Gate']} rows={(decision?.requiredBeforeLive ?? ['Jupiter quote preview', 'slippage/price-impact review', 'risk verdict review', 'human confirmation', 'dry-run simulation', 'durable intent log']).map((item) => [item, item === 'Jupiter quote preview' && quoteStatus === 'quote-ready' ? 'previewed' : 'required', 'blocked until explicit live sprint'])} />
+  </div>;
+}
+
+function RiskPanel({ rows, risk, liveReadiness }: { rows: string[][]; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null }) {
+  const checklistRows = (liveReadiness?.checks ?? []).map((check) => [check.label ?? check.id ?? 'check', check.status ?? 'unknown', check.evidence ?? 'No evidence returned.']);
+  const reasonRows = (risk?.reasons?.length ? risk.reasons : [risk?.note ?? 'No automatic blockers in sampled data.']).map((reason, index) => [`Risk ${index + 1}`, reason, risk?.status ?? 'loading']);
+  return <div className="riskReadinessSurface">
+    <RowsTable head={['Verdict', 'Status', 'Reason']} rows={[[risk?.status ?? 'loading', risk?.liveTradingAllowed ? 'live allowed' : 'live blocked', risk?.note ?? 'Risk verdict is read-only.']]} />
+    <RowsTable head={['Reason', 'Detail', 'Verdict']} rows={reasonRows} />
+    <RowsTable head={['Checklist', 'Status', 'Evidence']} rows={checklistRows.length ? checklistRows : [['Live-readiness', 'loading', 'Waiting for snapshot checklist.']]} />
+    <RowsTable head={['Source', 'Status', 'Route']} rows={rows} />
+  </div>;
 }
 
 function TradeTable({ trades, tradeTape }: { trades: TerminalTradeEvent[]; tradeTape?: TradeTapeState | null }) {

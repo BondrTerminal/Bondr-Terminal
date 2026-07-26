@@ -228,7 +228,7 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
           symbol: data.bestPair?.base?.symbol
         }
       }));
-      void fetch(`/api/terminal/snapshot?mint=${encodeURIComponent(mint)}&holderLimit=25&limit=30&profile=prototype&devWallets=${encodeURIComponent(devWallets.join(','))}`)
+      void fetch(`/api/terminal/snapshot?mint=${encodeURIComponent(mint)}&holderLimit=40&limit=50&profile=live-read&devWallets=${encodeURIComponent(devWallets.join(','))}`)
         .then((response) => response.ok ? response.json() : null)
         .then((payload) => {
           setTerminalSnapshot(payload as TerminalSnapshotLite | null);

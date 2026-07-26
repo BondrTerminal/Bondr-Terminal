@@ -121,17 +121,20 @@ function normalize(raw: Json, observedAt: string) {
     wallets: section(statusFrom(backendWallets, 'ok'), 'terminal-backend', observedAt, backendWallets, { rows: backendWallets.rows ?? [], balances: backendWallets.tokenBalances ?? null }),
     orders: section(statusFrom(orderState, 'ok'), 'terminal-order-engine', observedAt, orderState, { rows: orderState.orders ?? [], lifecycle: 'created → evaluated → triggered → transaction_built → signed_client_side → broadcast → confirmed/failed', nextAction: 'Triggered orders require explicit build/sign/broadcast action.' }),
     bundle: bundleState,
-    risk: section('partial', 'classifiers', observedAt, { freshWallets: raw.freshWallets ?? null, snipers: raw.snipers ?? null, bundles: raw.bundles ?? null, devTokens }, { note: 'Risk quality depends on configured Helius/Birdeye/Bitquery/provider coverage.' }),
+    risk: section(statusFrom(raw.riskVerdict, 'partial'), 'terminal-risk-verdict', observedAt, { verdict: raw.riskVerdict ?? null, freshWallets: raw.freshWallets ?? null, snipers: raw.snipers ?? null, bundles: raw.bundles ?? null, devTokens }, { note: noteFrom(raw.riskVerdict) ?? 'Risk quality depends on configured Helius/Birdeye/Bitquery/provider coverage.' }),
+    liveReadiness: section(statusFrom(raw.liveReadiness, 'partial'), 'terminal-live-readiness-checklist', observedAt, raw.liveReadiness ?? null),
+    paperTradeDecision: section(statusFrom(raw.paperTradeDecision, 'quote-required'), 'paper-trade-decision', observedAt, raw.paperTradeDecision ?? null),
     providerHealth: providerStatus(raw, observedAt),
     executionCapabilities: section(statusFrom(capabilities, 'ok'), 'execution-capabilities', observedAt, capabilities, { liveTradingEnabled: objectValue(capabilities).liveTradingEnabled ?? false })
   };
 }
 
 export async function GET(request: Request) {
-  const { origin, search } = new URL(request.url);
+  const { origin, search, searchParams } = new URL(request.url);
+  const prototype = searchParams.get('profile') === 'prototype' || searchParams.get('prototype') === '1';
   const [response, providerReadinessResponse] = await Promise.all([
     fetch(`${origin}/api/terminal-token-snapshot${search}`, { cache: 'no-store' }),
-    fetch(`${origin}/api/provider-readiness`, { cache: 'no-store' }).catch(() => null)
+    prototype ? Promise.resolve(null) : fetch(`${origin}/api/provider-readiness`, { cache: 'no-store' }).catch(() => null)
   ]);
   const providerReadiness = providerReadinessResponse?.ok ? await providerReadinessResponse.json().catch(() => null) : null;
   const raw = await response.json().catch(() => ({ status: 'error', error: 'Terminal token snapshot returned invalid JSON.' })) as Json;
