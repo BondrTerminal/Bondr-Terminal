@@ -1,4 +1,4 @@
-import { createPaperEntry, closePaperEntry, listPaperLedger, summarizePaperLedger } from '../../../lib/paper-ledger';
+import { createPaperEntryAsync, closePaperEntryAsync, listPaperLedgerAsync, paperLedgerStorageMetadata, summarizePaperLedgerAsync } from '../../../lib/paper-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mint = searchParams.get('mint')?.trim() || null;
   const currentPriceUsd = searchParams.get('currentPriceUsd') ? Number(searchParams.get('currentPriceUsd')) : null;
-  const entries = listPaperLedger({ mint, status: 'all' }).slice(0, 100);
+  const entries = (await listPaperLedgerAsync({ mint, status: 'all' })).slice(0, 100);
   return Response.json({
     status: 'ok',
     observedAt: new Date().toISOString(),
@@ -14,7 +14,8 @@ export async function GET(request: Request) {
     liveTradingEnabled: false,
     mint,
     entries,
-    summary: summarizePaperLedger(mint, Number.isFinite(currentPriceUsd) ? currentPriceUsd : null),
+    summary: await summarizePaperLedgerAsync(mint, Number.isFinite(currentPriceUsd) ? currentPriceUsd : null),
+    storage: paperLedgerStorageMetadata(),
     secretsExposed: false
   });
 }
@@ -29,10 +30,10 @@ export async function POST(request: Request) {
   try {
     const action = String(body.action ?? 'entry');
     if (action === 'exit') {
-      const entry = closePaperEntry(String(body.id ?? ''), body.exitPriceUsd);
+      const entry = await closePaperEntryAsync(String(body.id ?? ''), body.exitPriceUsd);
       return Response.json({ status: 'ok', observedAt: new Date().toISOString(), action, entry, execution: 'paper-only-no-sign-no-send', liveTradingEnabled: false });
     }
-    const entry = createPaperEntry({
+    const entry = await createPaperEntryAsync({
       mint: String(body.mint ?? ''),
       side: String(body.side ?? 'buy'),
       amountIn: body.amountIn ?? body.amount,
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       quote: body.quote,
       priceUsd: body.priceUsd
     });
-    return Response.json({ status: 'ok', observedAt: new Date().toISOString(), action: 'entry', entry, execution: 'paper-only-no-sign-no-send', liveTradingEnabled: false });
+    return Response.json({ status: 'ok', observedAt: new Date().toISOString(), action: 'entry', entry, storage: paperLedgerStorageMetadata(), execution: 'paper-only-no-sign-no-send', liveTradingEnabled: false });
   } catch (error) {
     return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: error instanceof Error ? error.message : 'Paper ledger mutation failed.', execution: 'paper-only-no-sign-no-send', liveTradingEnabled: false }, { status: 400 });
   }

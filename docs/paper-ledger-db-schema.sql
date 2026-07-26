@@ -1,0 +1,29 @@
+-- Meridian paper ledger DB schema for Neon/Supabase/PostgREST-style Data API.
+-- Required env for dependency-free HTTP adapter:
+--   NEON_DATA_API_URL=https://<project>.neon.tech/rest/v1 or compatible PostgREST base URL
+--   NEON_API_KEY=<server-side API key>
+-- Do not expose these values to the browser.
+
+create table if not exists terminal_paper_ledger (
+  id text primary key,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  mint text not null,
+  side text not null check (side in ('buy', 'sell')),
+  status text not null check (status in ('open', 'closed')),
+  amount_in numeric not null,
+  spend_asset text not null,
+  tokens numeric not null,
+  entry_price_usd numeric,
+  exit_price_usd numeric,
+  realized_pnl_usd numeric,
+  quote jsonb,
+  notes jsonb not null default '[]'::jsonb,
+  execution text not null default 'paper-only-no-sign-no-send'
+);
+
+create index if not exists terminal_paper_ledger_mint_created_idx
+  on terminal_paper_ledger (mint, created_at desc);
+
+create index if not exists terminal_paper_ledger_status_idx
+  on terminal_paper_ledger (status);
