@@ -278,10 +278,6 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
   const freshPct = freshIndex?.summary?.freshPct ?? null;
   const bestLpScan = lpIndex?.scans?.find((scan) => scan.lpScan && !('error' in scan.lpScan));
   const bestLpData = bestLpScan?.lpScan && !('error' in bestLpScan.lpScan) ? bestLpScan.lpScan as { burnedPct?: number | null; lockedPct?: number | null } : null;
-  const holderRows = terminalSnapshot?.holders?.rows ?? stats?.holders?.rows ?? [];
-  const holderSource = terminalSnapshot?.holders?.source ?? stats?.holders?.source ?? stats?.holders?.status ?? 'loading';
-  const valuedHolderRows = holderRows.filter((row) => typeof row.valueUsd === 'number').length;
-  const tradeMatchedHolderRows = holderRows.filter((row) => row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'trade-tape-estimate').length;
   const marketSources = marketFeed?.sources ?? {};
   const marketTransactions = marketFeed?.transactions ?? { m5: { buys: 0, sells: 0 }, h1: { buys: 0, sells: 0 }, h6: { buys: 0, sells: 0 }, h24: { buys: 0, sells: 0 } };
   const jupiterRouteLabels = marketSources.jupiter?.routeLabels ?? [];
@@ -328,8 +324,6 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
             <div><span>24h volume</span><strong>{formatUsd(intel.bestPair?.volume24h)}</strong></div>
             <div><span>Pool age</span><strong>{formatAge(intel.bestPair?.pairCreatedAt)}</strong></div>
             <div><span>Pairs</span><strong>{intel.pairCount}</strong></div>
-            <div><span>Holders</span><strong>{holderRows.length ? holderRows.length : stats?.holders?.totalHolders ?? stats?.holders?.tokenAccountCount ?? '—'}</strong><small>{holderSource}</small></div>
-            <div><span>Holder coverage</span><strong>{valuedHolderRows}/{holderRows.length || 0}</strong><small>{tradeMatchedHolderRows} trade-history matches</small></div>
           </div>
 
           <div className="chartToolbar">
