@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "intents": [
+    {
+      "expectedSigner": "11111111111111111111111111111111",
+      "expectedMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "expectedSide": "buy",
+      "expectedAmount": "0.001",
+      "slippageBps": 100,
+      "allowedPrograms": [
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",
+        "11111111111111111111111111111111",
+        "ComputeBudget111111111111111111111111111111",
+        "TokenkegQfeZyiNwAJbNbLqPFXCWuBvf9Ss623VQ5DA",
+        "TokenzQdBNbLqP5VEhdkAS6EP1rH4D9Lr6VY7UG6w",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+      ],
+      "requiredAccounts": [
+        "11111111111111111111111111111111",
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ],
+      "sourceRoute": "probe-local-dev",
+      "orderId": null,
+      "bundleId": null,
+      "quoteHash": null,
+      "routeHash": null,
+      "transactionMessageHash": null,
+      "note": "Local-dev terminal intent created without broadcasting.",
+      "status": "created",
+      "id": "7b6afcc9-bac9-4124-95a3-67b713efee1c",
+      "createdAt": "2026-07-22T19:47:28.231Z",
+      "updatedAt": "2026-07-22T19:47:28.231Z",
+      "expiresAt": "2026-07-22T19:57:28.231Z"
+    }
+  ],
+  "audit": []
+}

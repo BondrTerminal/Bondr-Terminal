@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "pnpm --filter @soulana/market-maker-web build",
+  "devCommand": "pnpm --filter @soulana/market-maker-web dev",
+  "installCommand": "corepack enable && corepack prepare pnpm@11.9.0 --activate && corepack pnpm install --config.dangerously-allow-all-builds=true",
+  "outputDirectory": "apps/web/.next"
+}

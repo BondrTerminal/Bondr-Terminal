@@ -1,0 +1,223 @@
+import { Connection } from '@solana/web3.js';
+import { serverEnvConfigured } from './server-env';
+import { configuredSolanaRpc } from './solana-rpc';
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const TIMEOUT_MS = 5_000;
+
+export type ProviderState = 'ok' | 'partial' | 'unavailable' | 'public-fallback' | 'optional-not-configured' | 'blocked-by-live-gate' | 'error';
+
+type RuntimeProbe = {
+  status: ProviderState;
+  latencyMs: number | null;
+  checkedAt: string;
+  error: string | null;
+  [key: string]: unknown;
+};
+
+
+function providerCapabilityMatrix() {
+  return {
+    dexscreener: {
+      unlocks: ['pool discovery', 'price', 'liquidity', 'volume', 'active-token probe candidates'],
+      missingImpact: 'Market context degraded, but not wallet-attributed trade tape.',
+      classification: 'optional-market-context'
+    },
+    jupiter: {
+      unlocks: ['quote checks', 'route labels', 'route preview'],
+      missingImpact: 'Quote preview and swap-build readiness degrade; no server signing.',
+      classification: 'execution-preview'
+    },
+    birdeye: {
+      unlocks: ['preferred token trade tape', 'wallet-attributed transaction history', 'PnL confidence'],
+      missingImpact: 'Trade tape degraded; wallet-attributed history degraded; PnL confidence reduced.',
+      classification: 'confidence-reducing'
+    },
+    helius: {
+      unlocks: ['parsed transactions', 'token-transfer fallback', 'holder/history enrichment', 'private RPC option'],
+      missingImpact: 'Trade tape fallback degraded; holders/history/PnL confidence reduced; private RPC still required before live.',
+      classification: 'confidence-reducing-and-live-rpc-gate'
+    },
+    solscan: {
+      unlocks: ['ranked token holder list', 'holder-count cross-check'],
+      missingImpact: 'Holder rows fall back to Helius/RPC/Pump.fun/RugCheck; exact ranked holder coverage can degrade.',
+      classification: 'optional-holder-enrichment'
+    },
+    pumpfun: {
+      unlocks: ['bonding/pump token tape', 'creator token context', 'migration context'],
+      missingImpact: 'Only affects pump/bonding tokens. Non-pump 404 is not a fatal provider outage.',
+      classification: 'optional-token-specific'
+    },
+    geckoterminal: {
+      unlocks: ['best-effort pool trades', 'chart candles'],
+      missingImpact: 'Can rate-limit; should never block terminal snapshot.',
+      classification: 'best-effort-fallback'
+    },
+    bitquery: {
+      unlocks: ['pool age', 'deep historical DEX context', 'same-block clustering research'],
+      missingImpact: 'Pool-age and deep clustering confidence reduced.',
+      classification: 'optional-confidence'
+    }
+  };
+}
+
+function configured(name: string) {
+  return serverEnvConfigured(name);
+}
+
+async function timed<T>(fn: () => Promise<T>, timeoutMs = TIMEOUT_MS): Promise<{ value: T | null; probe: RuntimeProbe }> {
+  const started = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const value = await Promise.race([
+      fn(),
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+    ]);
+    clearTimeout(timeout);
+    return { value, probe: { status: 'ok', latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: null } };
+  } catch (error) {
+    clearTimeout(timeout);
+    return { value: null, probe: { status: 'unavailable', latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: error instanceof Error ? error.message : 'unknown error' } };
+  }
+}
+
+async function fetchProbe(url: string) {
+  return timed(async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const headers: Record<string, string> = { accept: 'application/json' };
+      if (process.env.JUPITER_API_KEY && url.includes('jup.ag')) headers['x-api-key'] = process.env.JUPITER_API_KEY;
+      const response = await fetch(url, { signal: controller.signal, headers, cache: 'no-store' });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return response.status;
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+}
+
+export async function buildProviderReadiness() {
+  const observedAt = new Date().toISOString();
+  const rpc = configuredSolanaRpc();
+  const connection = new Connection(rpc.url, 'confirmed');
+  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe] = await Promise.all([
+    timed(async () => connection.getSlot('confirmed')),
+    timed(async () => connection.getLatestBlockhash('confirmed')),
+    fetchProbe(`https://lite-api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=1000000&slippageBps=100`),
+    fetchProbe(`https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`),
+    fetchProbe('https://api.geckoterminal.com/api/v2/networks/solana/pools/BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'),
+    fetchProbe(`https://api.rugcheck.xyz/v1/tokens/${USDC_MINT}/report/summary`)
+  ]);
+
+  const heliusConfigured = rpc.provider === 'helius-rpc-url' || rpc.provider === 'helius-api-key';
+  const rpcLatencyOk = (slotProbe.probe.latencyMs ?? 9999) < 1500 && (blockhashProbe.probe.latencyMs ?? 9999) < 1500;
+  const rpcHealthy = slotProbe.probe.status === 'ok' && blockhashProbe.probe.status === 'ok';
+  const rpcLiveSuitable = rpc.configured && rpcHealthy && rpcLatencyOk;
+  const rpcStatus: ProviderState = rpc.configured ? (rpcLiveSuitable ? 'ok' : rpcHealthy ? 'partial' : 'unavailable') : (slotProbe.probe.status === 'ok' ? 'public-fallback' : 'unavailable');
+  const sources = {
+    solanaRpc: {
+      status: rpcStatus,
+      configured: rpc.configured,
+      provider: rpc.provider,
+      recentSlot: slotProbe.value,
+      latestBlockhashAvailable: blockhashProbe.probe.status === 'ok',
+      latestBlockhashLatencyMs: blockhashProbe.probe.latencyMs,
+      suitableForLiveMode: rpcLiveSuitable,
+      minimumReliabilityThreshold: { configuredPrivateRpc: true, currentSlotAvailable: true, latestBlockhashAvailable: true, slotLatencyMsUnder: 1500, blockhashLatencyMsUnder: 1500, noPublicFallback: true },
+      thresholdPasses: { configuredPrivateRpc: rpc.configured, currentSlotAvailable: slotProbe.probe.status === 'ok', latestBlockhashAvailable: blockhashProbe.probe.status === 'ok', slotLatencyOk: (slotProbe.probe.latencyMs ?? 9999) < 1500, blockhashLatencyOk: (blockhashProbe.probe.latencyMs ?? 9999) < 1500, noPublicFallback: rpc.configured },
+      remediation: rpc.configured ? null : 'Set HELIUS_RPC_URL, HELIUS_API_KEY, QUICKNODE_RPC_URL, TRITON_RPC_URL, or SOLANA_RPC_URL before live trading.',
+      latencyMs: slotProbe.probe.latencyMs,
+      rateLimitOrError: slotProbe.probe.error,
+      features: ['wallet SOL balances', 'SPL token account scans', 'recent blockhash', 'current slot'],
+      note: rpcLiveSuitable ? 'Configured private Solana RPC meets current live-readiness threshold.' : rpc.configured ? 'Configured Solana RPC is present but does not meet every live-readiness threshold yet.' : 'Using public fallback RPC; safe for read-only checks but not reliable enough for production live mode.'
+    },
+    helius: {
+      status: heliusConfigured ? 'ok' : 'optional-not-configured',
+      configured: heliusConfigured,
+      featuresUnlockedIfConfigured: ['enhanced transaction history', 'more reliable RPC', 'wallet/token transfer parsing', 'holder/fresh-wallet enrichment'],
+      note: heliusConfigured ? 'Helius detected server-side; secret value not exposed.' : 'Optional but strongly recommended before live terminal operation.'
+    },
+    birdeye: {
+      status: configured('BIRDEYE_API_KEY') ? 'ok' : 'optional-not-configured',
+      configured: configured('BIRDEYE_API_KEY'),
+      featuresUnlockedIfConfigured: ['preferred token transaction history', 'wallet-attributed trade history', 'higher-confidence PnL inputs'],
+      note: configured('BIRDEYE_API_KEY') ? 'Birdeye configured server-side.' : 'Optional provider for better token history/PnL.'
+    },
+    bitquery: {
+      status: configured('BITQUERY_API_KEY') ? 'ok' : 'optional-not-configured',
+      configured: configured('BITQUERY_API_KEY'),
+      featuresUnlockedIfConfigured: ['same-block clustering', 'bundle analysis', 'advanced trade graph enrichment'],
+      note: configured('BITQUERY_API_KEY') ? 'Bitquery configured server-side.' : 'Optional provider for bundle/fresh-wallet analytics.'
+    },
+    solscan: {
+      status: configured('SOLSCAN_API_KEY') || configured('SOLSCAN_PRO_API_KEY') ? 'ok' : 'optional-not-configured',
+      configured: configured('SOLSCAN_API_KEY') || configured('SOLSCAN_PRO_API_KEY'),
+      featuresUnlockedIfConfigured: ['ranked token holders before RPC/RugCheck fallbacks', 'holder-count cross-check'],
+      note: configured('SOLSCAN_API_KEY') || configured('SOLSCAN_PRO_API_KEY') ? 'Solscan holder API configured server-side.' : 'Optional holder source. Terminal falls back to Helius DAS, Solana RPC largest accounts, Pump.fun, then RugCheck.'
+    },
+    jupiter: {
+      status: jupiterProbe.probe.status,
+      configured: true,
+      quoteLatencyMs: jupiterProbe.probe.latencyMs,
+      quoteError: jupiterProbe.probe.error,
+      features: ['quote preview', 'unsigned swap build when live gate allows'],
+      note: 'No-key quote route available; swap build remains live-gated and browser-signed.'
+    },
+    dexscreener: {
+      status: dexProbe.probe.status,
+      configured: true,
+      latencyMs: dexProbe.probe.latencyMs,
+      error: dexProbe.probe.error,
+      features: ['pairs', 'liquidity', 'volume', 'aggregate tx windows'],
+      note: 'No-key market data fallback.'
+    },
+    geckoterminal: {
+      status: geckoProbe.probe.status,
+      configured: true,
+      latencyMs: geckoProbe.probe.latencyMs,
+      error: geckoProbe.probe.error,
+      features: ['OHLCV chart', 'pool trade rows'],
+      note: 'No-key chart/trade fallback.'
+    },
+    rugcheck: {
+      status: rugProbe.probe.status,
+      configured: true,
+      latencyMs: rugProbe.probe.latencyMs,
+      error: rugProbe.probe.error,
+      features: ['risk summary', 'holder/rug hints where available'],
+      note: 'No-key risk fallback; availability can vary by token.'
+    }
+  } as const;
+
+  const blockingForLive = [
+    !rpc.configured ? 'Configure reliable private Solana RPC before live trading.' : null,
+    rpc.configured && !rpcLiveSuitable ? 'Configured Solana RPC does not meet live reliability threshold.' : null,
+    blockhashProbe.probe.status !== 'ok' ? 'RPC latest blockhash probe unavailable.' : null,
+    jupiterProbe.probe.status !== 'ok' ? 'Jupiter quote route unavailable.' : null
+  ].filter((item): item is string => Boolean(item));
+
+  const optionalProviderGaps = [
+    !heliusConfigured ? 'Helius optional-not-configured: enhanced transaction history unavailable.' : null,
+    !configured('BIRDEYE_API_KEY') ? 'Birdeye optional-not-configured: preferred token transaction history unavailable.' : null,
+    !configured('SOLSCAN_API_KEY') && !configured('SOLSCAN_PRO_API_KEY') ? 'Solscan optional-not-configured: preferred ranked holder API unavailable.' : null,
+    !configured('BITQUERY_API_KEY') ? 'Bitquery optional-not-configured: deep bundle/same-block clustering unavailable.' : null
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    status: blockingForLive.length ? 'partial' as const : 'ok' as const,
+    observedAt,
+    source: 'provider-readiness',
+    sources,
+    blockingForLive,
+    optionalProviderGaps,
+    providerCapabilities: providerCapabilityMatrix(),
+    recommendedProbe: { route: '/api/market-data/probe-token', envOverride: 'RECOMMENDED_PROBE_MINT', note: 'Use this instead of USDC when testing active memecoin trade tape.' },
+    historyAndPnlConfidence: { status: heliusConfigured || configured('BIRDEYE_API_KEY') ? 'provider-assisted' : 'low-history-confidence', note: heliusConfigured || configured('BIRDEYE_API_KEY') ? 'At least one history provider is configured.' : 'Current holdings can hydrate from RPC, but wallet-attributed history/PnL remains low confidence without Helius or Birdeye.' },
+    secretsExposed: false,
+    liveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
+    execution: process.env.LIVE_TRADING_ENABLED === 'true' ? 'live-gated-browser-wallet' : 'live-disabled-readiness-only'
+  };
+}

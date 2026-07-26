@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+
+allowBuilds:
+  '@stellar/stellar-sdk': set this to true or false
+  better-sqlite3: true
+  bigint-buffer: true
+  blake-hash: set this to true or false
+  bufferutil: true
+  esbuild: true
+  protobufjs: true
+  sharp: set this to true or false
+  tiny-secp256k1: set this to true or false
+  usb: set this to true or false
+  utf-8-validate: true

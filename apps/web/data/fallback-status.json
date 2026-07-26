@@ -1,0 +1,58 @@
+{
+  "mode": "dry-run",
+  "health": "warning",
+  "cluster": "mainnet-beta",
+  "venue": "jupiter-read-only",
+  "lastObservationAt": "2026-07-08T05:25:36.277Z",
+  "liveTradingEnabled": false,
+  "wallet": {
+    "name": "operator-public-wallet",
+    "pubkey": "8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz",
+    "solBalance": 0,
+    "tokenBalance": 0
+  },
+  "token": {
+    "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "symbol": "USDC",
+    "decimals": 6,
+    "supplyUi": 8274806157.542187
+  },
+  "quote": {
+    "mint": "So11111111111111111111111111111111111111112",
+    "symbol": "SOL",
+    "decimals": 9
+  },
+  "market": {
+    "referencePrice": 0.012717468715026962,
+    "estimatedSlippageBps": 0,
+    "volatilityBps": null
+  },
+  "risk": {
+    "maxTotalSolExposure": 0.02,
+    "maxTradeSol": 0.001,
+    "maxTradesPerMinute": 1,
+    "maxSlippageBps": 50,
+    "maxDailyLossSol": 0.005,
+    "killSwitchDrawdownBps": 200,
+    "maxMarketDataAgeMs": 15000
+  },
+  "strategy": {
+    "autonomy": "autonomous-paper",
+    "objective": "Continuously quote both sides, scalp spread when fills occur, and keep inventory near target inside the risk envelope.",
+    "engineState": "observing",
+    "baseSpreadBps": 40,
+    "minSpreadBps": 20,
+    "maxSpreadBps": 200,
+    "inventorySkewBps": 75,
+    "targetInventoryUi": 500,
+    "maxInventoryUi": 1000,
+    "minDelayMs": 10000,
+    "maxDelayMs": 60000
+  },
+  "notes": [
+    "Fallback data is safe, public, and read-only.",
+    "Runtime status file can override this when observation output is available.",
+    "Live trading remains disabled by schema."
+  ],
+  "source": "fallback"
+}

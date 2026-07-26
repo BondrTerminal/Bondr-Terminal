@@ -1,0 +1,26 @@
+{
+  "source": "https://solana.com/docs/rpc/http",
+  "pulledAt": "2026-07-22",
+  "note": "Current Solana docs list 52 HTTP JSON-RPC methods, not 48. Public RPC endpoints are free/shared but rate-limited.",
+  "publicEndpoints": {
+    "mainnetBeta": "https://api.mainnet-beta.solana.com",
+    "devnet": "https://api.devnet.solana.com",
+    "testnet": "https://api.testnet.solana.com",
+    "local": "http://localhost:8899"
+  },
+  "categories": {
+    "accounts": ["getAccountInfo", "getBalance", "getLargestAccounts", "getMinimumBalanceForRentExemption", "getMultipleAccounts", "getProgramAccounts"],
+    "tokens": ["getTokenAccountBalance", "getTokenAccountsByDelegate", "getTokenAccountsByOwner", "getTokenLargestAccounts", "getTokenSupply"],
+    "transactions": ["getFeeForMessage", "getLatestBlockhash", "getRecentPrioritizationFees", "getSignaturesForAddress", "getSignatureStatuses", "getTransaction", "getTransactionCount", "isBlockhashValid", "requestAirdrop", "sendTransaction", "simulateTransaction"],
+    "blocks": ["getBlock", "getBlockCommitment", "getBlockHeight", "getBlockProduction", "getBlocks", "getBlocksWithLimit", "getBlockTime", "getFirstAvailableBlock", "getRecentPerformanceSamples", "minimumLedgerSlot"],
+    "cluster": ["getClusterNodes", "getEpochInfo", "getEpochSchedule", "getGenesisHash", "getHealth", "getHighestSnapshotSlot", "getIdentity", "getLeaderSchedule", "getMaxRetransmitSlot", "getMaxShredInsertSlot", "getSlot", "getSlotLeader", "getSlotLeaders", "getVersion", "getVoteAccounts"],
+    "economics": ["getInflationGovernor", "getInflationRate", "getInflationReward", "getStakeMinimumDelegation", "getSupply"]
+  },
+  "terminalPriority": {
+    "holderReader": ["getTokenSupply", "getTokenLargestAccounts", "getProgramAccounts", "getAccountInfo", "getMultipleAccounts"],
+    "walletPositionReader": ["getBalance", "getTokenAccountsByOwner", "getTokenAccountBalance", "getMultipleAccounts"],
+    "signatureTradeIndexer": ["getSignaturesForAddress", "getTransaction", "getBlock", "getBlockTime", "getSlot"],
+    "executionLifecycle": ["getLatestBlockhash", "getFeeForMessage", "getRecentPrioritizationFees", "simulateTransaction", "sendTransaction", "getSignatureStatuses", "isBlockhashValid"],
+    "rpcHealth": ["getHealth", "getVersion", "getSlot", "getBlockHeight", "getRecentPerformanceSamples", "getFirstAvailableBlock", "minimumLedgerSlot"]
+  }
+}

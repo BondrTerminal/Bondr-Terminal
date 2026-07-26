@@ -1,0 +1,7 @@
+.next/
+out/
+.env
+.env.*
+!.env.example
+.vercel/
+.vercel

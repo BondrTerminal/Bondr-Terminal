@@ -1,0 +1,581 @@
+{
+  "projects": [
+    {
+      "id": "meridian-demo",
+      "name": "MERIDIAN-DEMO",
+      "ticker": "MRDN",
+      "status": "pending",
+      "launchPath": "pump.fun",
+      "tokenMint": null,
+      "pool": null,
+      "metadata": {
+        "name": "Meridian Demo",
+        "symbol": "MRDN",
+        "description": "Internal launch workspace for Meridian project-command testing.",
+        "imageUrl": "",
+        "website": "",
+        "twitter": "",
+        "telegram": ""
+      },
+      "walletGroupId": "project-alpha",
+      "fundingPlan": {
+        "budgetSol": 5,
+        "feeReserveSol": 0.4,
+        "liquiditySol": 2.5,
+        "devBuySol": 0.4,
+        "collectionWalletId": "treasury"
+      },
+      "deploymentState": {
+        "stage": "metadata",
+        "ready": false,
+        "disabledReason": "Metadata image/socials and launch confirmation are incomplete."
+      },
+      "monitor": {
+        "holders": [
+          {
+            "label": "Unique holders",
+            "value": "Waiting",
+            "detail": "Token not deployed"
+          }
+        ],
+        "orders": [
+          {
+            "label": "Active orders",
+            "value": "0",
+            "detail": "No deployment yet"
+          }
+        ],
+        "positions": [
+          {
+            "label": "Project inventory",
+            "value": "0",
+            "detail": "No mint yet"
+          }
+        ],
+        "topTraders": [
+          {
+            "label": "Top trader",
+            "value": "Waiting",
+            "detail": "No trades yet"
+          }
+        ],
+        "devTokens": [
+          {
+            "label": "Remaining dev tokens",
+            "value": "0",
+            "detail": "No token configured"
+          }
+        ]
+      },
+      "moduleLinks": {
+        "deployment": "/deployment?project=meridian-demo",
+        "wallets": "/wallets?project=meridian-demo",
+        "sniper": "/sniper?project=meridian-demo",
+        "dashboard": "/project-dashboard?project=meridian-demo",
+        "liquidity": "/liquidity?project=meridian-demo"
+      }
+    },
+    {
+      "id": "ocean-test",
+      "name": "OCEAN-TEST",
+      "ticker": "OCEAN",
+      "status": "deployed",
+      "launchPath": "raydium",
+      "tokenMint": "So11111111111111111111111111111111111111112",
+      "pool": "SOL/USDC reference pool",
+      "metadata": {
+        "name": "Ocean Test",
+        "symbol": "OCEAN",
+        "description": "Deployed monitoring reference workspace.",
+        "imageUrl": "",
+        "website": "",
+        "twitter": "",
+        "telegram": ""
+      },
+      "walletGroupId": "project-beta",
+      "fundingPlan": {
+        "budgetSol": 3,
+        "feeReserveSol": 0.3,
+        "liquiditySol": 1.8,
+        "devBuySol": 0.2,
+        "collectionWalletId": "treasury"
+      },
+      "deploymentState": {
+        "stage": "monitoring",
+        "ready": true,
+        "disabledReason": "Live actions disabled; monitoring only."
+      },
+      "monitor": {
+        "holders": [
+          {
+            "label": "Unique holders",
+            "value": "142",
+            "detail": "Reference data"
+          },
+          {
+            "label": "Top 10",
+            "value": "38%",
+            "detail": "Needs concentration watch"
+          }
+        ],
+        "orders": [
+          {
+            "label": "Active orders",
+            "value": "0",
+            "detail": "No live execution"
+          }
+        ],
+        "positions": [
+          {
+            "label": "Project inventory",
+            "value": "18%",
+            "detail": "Reference allocation"
+          }
+        ],
+        "topTraders": [
+          {
+            "label": "Top buyer",
+            "value": "4.2 SOL",
+            "detail": "Reference data"
+          }
+        ],
+        "devTokens": [
+          {
+            "label": "Remaining dev tokens",
+            "value": "12%",
+            "detail": "Monitor for exits"
+          }
+        ]
+      },
+      "moduleLinks": {
+        "deployment": "/deployment?project=ocean-test",
+        "wallets": "/wallets?project=ocean-test",
+        "sniper": "/sniper?mint=So11111111111111111111111111111111111111112",
+        "dashboard": "/project-dashboard?project=ocean-test",
+        "liquidity": "/liquidity?project=ocean-test"
+      }
+    },
+    {
+      "id": "cto-sample",
+      "name": "CTO-SAMPLE",
+      "ticker": "CTO",
+      "status": "cto",
+      "launchPath": "pump.fun",
+      "tokenMint": null,
+      "pool": null,
+      "metadata": {
+        "name": "CTO Sample",
+        "symbol": "CTO",
+        "description": "Community takeover diligence workspace.",
+        "imageUrl": "",
+        "website": "",
+        "twitter": "",
+        "telegram": ""
+      },
+      "walletGroupId": "cto-team",
+      "fundingPlan": {
+        "budgetSol": 1.5,
+        "feeReserveSol": 0.15,
+        "liquiditySol": 0.6,
+        "devBuySol": 0,
+        "collectionWalletId": "treasury"
+      },
+      "deploymentState": {
+        "stage": "cto-review",
+        "ready": false,
+        "disabledReason": "Ownership state and dev-token exposure require review."
+      },
+      "monitor": {
+        "holders": [
+          {
+            "label": "Original deployer",
+            "value": "Unknown",
+            "detail": "Needs investigation"
+          }
+        ],
+        "orders": [
+          {
+            "label": "Active orders",
+            "value": "0",
+            "detail": "Monitoring only"
+          }
+        ],
+        "positions": [
+          {
+            "label": "Team position",
+            "value": "0",
+            "detail": "Not acquired"
+          }
+        ],
+        "topTraders": [
+          {
+            "label": "CTO lead",
+            "value": "Unassigned",
+            "detail": "Needs owner"
+          }
+        ],
+        "devTokens": [
+          {
+            "label": "Dev wallet",
+            "value": "Unknown",
+            "detail": "Needs scan"
+          }
+        ]
+      },
+      "moduleLinks": {
+        "deployment": "/deployment?project=cto-sample",
+        "wallets": "/wallets?project=cto-sample",
+        "sniper": "/sniper?project=cto-sample",
+        "dashboard": "/project-dashboard?project=cto-sample",
+        "liquidity": "/liquidity?project=cto-sample"
+      }
+    },
+    {
+      "id": "sniper-lab",
+      "name": "SNIPER-LAB",
+      "ticker": "SNIPE",
+      "status": "draft",
+      "launchPath": "unselected",
+      "tokenMint": null,
+      "pool": null,
+      "metadata": {
+        "name": "Sniper Lab",
+        "symbol": "SNIPE",
+        "description": "Token intelligence and terminal testing workspace.",
+        "imageUrl": "",
+        "website": "",
+        "twitter": "",
+        "telegram": ""
+      },
+      "walletGroupId": "trading-lab",
+      "fundingPlan": {
+        "budgetSol": 0,
+        "feeReserveSol": 0,
+        "liquiditySol": 0,
+        "devBuySol": 0,
+        "collectionWalletId": "treasury"
+      },
+      "deploymentState": {
+        "stage": "draft",
+        "ready": false,
+        "disabledReason": "Launch path, metadata, and wallet group are incomplete."
+      },
+      "monitor": {
+        "holders": [
+          {
+            "label": "Unique holders",
+            "value": "\u2014",
+            "detail": "No token loaded"
+          }
+        ],
+        "orders": [
+          {
+            "label": "Active orders",
+            "value": "0",
+            "detail": "Disabled"
+          }
+        ],
+        "positions": [
+          {
+            "label": "Position",
+            "value": "0",
+            "detail": "No token loaded"
+          }
+        ],
+        "topTraders": [
+          {
+            "label": "Top trader",
+            "value": "\u2014",
+            "detail": "No token loaded"
+          }
+        ],
+        "devTokens": [
+          {
+            "label": "Dev tokens",
+            "value": "\u2014",
+            "detail": "No token loaded"
+          }
+        ]
+      },
+      "moduleLinks": {
+        "deployment": "/deployment?project=sniper-lab",
+        "wallets": "/wallets?project=sniper-lab",
+        "sniper": "/sniper?project=sniper-lab",
+        "dashboard": "/project-dashboard?project=sniper-lab",
+        "liquidity": "/liquidity?project=sniper-lab"
+      }
+    }
+  ],
+  "wallets": [
+    {
+      "id": "operator",
+      "role": "Operator",
+      "address": "8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz",
+      "scope": "global",
+      "groupId": "global-core",
+      "status": "read-only",
+      "balanceSol": 0.42,
+      "purpose": "Primary read-only profile wallet",
+      "archived": false,
+      "createdAt": "2026-07-19T12:00:00.000Z",
+      "lastActivityAt": "2026-07-19T20:10:00.000Z"
+    },
+    {
+      "id": "deploy-01",
+      "role": "Deploy 01",
+      "address": "48pY33bB42nvkK6ssbhFu8UM8ZR6ysngQ5cH5uHqb4kj",
+      "scope": "project",
+      "groupId": "project-alpha",
+      "status": "empty",
+      "balanceSol": 0,
+      "purpose": "Deployment preparation",
+      "archived": false,
+      "createdAt": "2026-07-19T13:20:00.000Z",
+      "lastActivityAt": "2026-07-19T13:35:00.000Z"
+    },
+    {
+      "id": "trade-01",
+      "role": "Trade 01",
+      "address": "FTw2d46715bLiAnddkvYimaZGp8YUcacqZmf4TbvnxfX",
+      "scope": "project",
+      "groupId": "trading-lab",
+      "status": "empty",
+      "balanceSol": 0,
+      "purpose": "Future SOL pair trading wallet",
+      "archived": false,
+      "createdAt": "2026-07-19T17:00:00.000Z",
+      "lastActivityAt": "2026-07-19T17:15:00.000Z"
+    },
+    {
+      "id": "treasury",
+      "role": "Treasury",
+      "address": "97TFNnYdCvr7nCiyKnBWauxasvUTeAbwCnyPp6jkCVAs",
+      "scope": "global",
+      "groupId": "global-core",
+      "status": "empty",
+      "balanceSol": 0,
+      "purpose": "Collection and reserves",
+      "archived": false,
+      "createdAt": "2026-07-19T12:05:00.000Z",
+      "lastActivityAt": "2026-07-19T20:00:00.000Z"
+    },
+    {
+      "id": "retired-deploy-00",
+      "role": "Retired Deploy 00",
+      "address": "7WYx8puCyRsyBNH9unvPVTStysjRRSXn5P9QbVpRUpsa",
+      "scope": "project",
+      "groupId": "project-alpha",
+      "status": "archived",
+      "balanceSol": 0,
+      "purpose": "Archived launch wallet record for dashboard testing",
+      "archived": true,
+      "createdAt": "2026-07-10T10:00:00.000Z",
+      "lastActivityAt": "2026-07-12T10:00:00.000Z",
+      "archivedAt": "2026-07-18T12:00:00.000Z",
+      "archiveReason": "Retired after test launch; retained for audit trail."
+    }
+  ],
+  "walletGroups": [
+    {
+      "id": "global-core",
+      "name": "Global Core",
+      "scope": "global",
+      "walletIds": [
+        "operator",
+        "treasury"
+      ]
+    },
+    {
+      "id": "project-alpha",
+      "name": "Project Alpha",
+      "scope": "project",
+      "walletIds": [
+        "deploy-01",
+        "retired-deploy-00"
+      ]
+    },
+    {
+      "id": "project-beta",
+      "name": "Project Beta",
+      "scope": "project",
+      "walletIds": [
+        "operator",
+        "treasury"
+      ]
+    },
+    {
+      "id": "cto-team",
+      "name": "CTO Team",
+      "scope": "project",
+      "walletIds": [
+        "operator"
+      ]
+    },
+    {
+      "id": "trading-lab",
+      "name": "Trading Lab",
+      "scope": "project",
+      "walletIds": [
+        "trade-01"
+      ]
+    }
+  ],
+  "flowEvents": [
+    {
+      "id": "flow-001",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-19T14:00:00.000Z",
+      "type": "sell",
+      "solAmount": 1.8,
+      "tokenAmount": 120000,
+      "note": "Recorded realized sell"
+    },
+    {
+      "id": "flow-002",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-18T12:00:00.000Z",
+      "type": "buy",
+      "solAmount": 0.75,
+      "tokenAmount": 70000,
+      "note": "Recorded buy"
+    },
+    {
+      "id": "flow-003",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-17T16:00:00.000Z",
+      "type": "sell",
+      "solAmount": 2.14,
+      "tokenAmount": 100000,
+      "note": "Recorded realized sell"
+    },
+    {
+      "id": "flow-004",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-16T10:00:00.000Z",
+      "type": "buy",
+      "solAmount": 0.35,
+      "tokenAmount": 25000,
+      "note": "Recorded buy"
+    },
+    {
+      "id": "flow-005",
+      "projectId": "ocean-test",
+      "timestamp": "2026-07-15T11:00:00.000Z",
+      "type": "buy",
+      "solAmount": 2.15,
+      "tokenAmount": 80000,
+      "note": "Reference buy"
+    },
+    {
+      "id": "flow-006",
+      "projectId": "ocean-test",
+      "timestamp": "2026-07-14T11:00:00.000Z",
+      "type": "sell",
+      "solAmount": 1.73,
+      "tokenAmount": 60000,
+      "note": "Reference sell"
+    },
+    {
+      "id": "flow-007",
+      "projectId": "cto-sample",
+      "timestamp": "2026-07-19T18:00:00.000Z",
+      "type": "buy",
+      "solAmount": 0.32,
+      "tokenAmount": 9000,
+      "note": "CTO position test"
+    },
+    {
+      "id": "flow-008",
+      "projectId": "cto-sample",
+      "timestamp": "2026-07-19T19:00:00.000Z",
+      "type": "sell",
+      "solAmount": 0.5,
+      "tokenAmount": 9000,
+      "note": "CTO realized exit test"
+    }
+  ],
+  "eventLog": [
+    {
+      "id": "evt-001",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-19T13:25:00.000Z",
+      "level": "info",
+      "module": "deployment",
+      "message": "Project workspace created from Pump.fun path."
+    },
+    {
+      "id": "evt-002",
+      "projectId": "meridian-demo",
+      "timestamp": "2026-07-19T13:35:00.000Z",
+      "level": "warn",
+      "module": "wallets",
+      "message": "Project wallet group has one empty deploy wallet."
+    },
+    {
+      "id": "evt-003",
+      "projectId": "ocean-test",
+      "timestamp": "2026-07-19T15:00:00.000Z",
+      "level": "info",
+      "module": "monitor",
+      "message": "Post-launch holder monitor connected to project event stream."
+    },
+    {
+      "id": "evt-004",
+      "projectId": "cto-sample",
+      "timestamp": "2026-07-19T16:10:00.000Z",
+      "level": "warn",
+      "module": "cto",
+      "message": "Original deployer and dev-token exposure require investigation."
+    },
+    {
+      "id": "evt-005",
+      "projectId": "sniper-lab",
+      "timestamp": "2026-07-19T17:15:00.000Z",
+      "level": "info",
+      "module": "sniper",
+      "message": "Read-only token intelligence route prepared."
+    }
+  ],
+  "walletActivity": [
+    {
+      "id": "wallet-act-001",
+      "walletId": "operator",
+      "timestamp": "2026-07-19T20:10:00.000Z",
+      "type": "balance_observed",
+      "status": "info",
+      "message": "Read-only balance snapshot observed for operator wallet."
+    },
+    {
+      "id": "wallet-act-002",
+      "walletId": "deploy-01",
+      "timestamp": "2026-07-19T13:35:00.000Z",
+      "type": "readiness_warning",
+      "status": "warn",
+      "message": "Deploy wallet is empty; funding plan is not ready."
+    },
+    {
+      "id": "wallet-act-003",
+      "walletId": "trade-01",
+      "timestamp": "2026-07-19T17:15:00.000Z",
+      "type": "terminal_attached",
+      "status": "info",
+      "message": "Trading Lab wallet attached to Sniper terminal context."
+    },
+    {
+      "id": "wallet-act-004",
+      "walletId": "treasury",
+      "timestamp": "2026-07-19T20:00:00.000Z",
+      "type": "collection_target",
+      "status": "info",
+      "message": "Treasury wallet selected as default collection wallet."
+    },
+    {
+      "id": "wallet-act-005",
+      "walletId": "retired-deploy-00",
+      "timestamp": "2026-07-18T12:00:00.000Z",
+      "type": "archived",
+      "status": "warn",
+      "message": "Wallet archived and hidden from active dashboard by default."
+    }
+  ]
+}

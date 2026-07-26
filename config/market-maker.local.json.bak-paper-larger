@@ -1,0 +1,43 @@
+{
+  "mode": "dry-run",
+  "cluster": "mainnet-beta",
+  "rpcUrlEnv": "HELIUS_RPC_URL",
+  "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "quoteMint": "So11111111111111111111111111111111111111112",
+  "wallets": [
+    {
+      "name": "operator-public-wallet",
+      "pubkey": "8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz",
+      "maxSolToUse": 0.01,
+      "minSolReserve": 0.02,
+      "maxTokenInventory": 1000,
+      "targetTokenInventory": 500
+    }
+  ],
+  "globalRisk": {
+    "maxTotalSolExposure": 0.02,
+    "maxTradeSol": 0.001,
+    "maxTradesPerMinute": 1,
+    "maxSlippageBps": 50,
+    "maxDailyLossSol": 0.005,
+    "killSwitchDrawdownBps": 200,
+    "maxMarketDataAgeMs": 15000
+  },
+  "quoting": {
+    "baseSpreadBps": 40,
+    "minSpreadBps": 20,
+    "maxSpreadBps": 200,
+    "inventorySkewBps": 75,
+    "volatilitySpreadMultiplier": 1,
+    "minDelayMs": 10000,
+    "maxDelayMs": 60000
+  },
+  "execution": {
+    "venues": [
+      "jupiter"
+    ],
+    "priorityFeeLamports": 0,
+    "useJito": false,
+    "maxRetries": 0
+  }
+}
