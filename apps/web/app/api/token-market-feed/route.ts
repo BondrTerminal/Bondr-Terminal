@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import { dexKind, sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
+
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const JUPITER_TIMEOUT_MS = 5_000;
 const DEX_TIMEOUT_MS = 5_000;
@@ -35,25 +37,6 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   }
 }
 
-function dexKind(dexId?: string) {
-  const normalized = (dexId ?? '').toLowerCase();
-  if (normalized.includes('raydium')) return 'raydium';
-  if (normalized.includes('pump')) return 'pumpswap';
-  if (normalized.includes('orca')) return 'orca';
-  if (normalized.includes('meteora')) return 'meteora';
-  return normalized || 'unknown';
-}
-
-function sameMint(a?: string, b?: string) {
-  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
-}
-
-function pairScore(pair: DexPair, mint: string) {
-  const baseMatch = sameMint(pair.baseToken?.address, mint) ? 1_000_000_000 : 0;
-  const quoteMatch = sameMint(pair.quoteToken?.address, mint) ? 100_000_000 : 0;
-  return baseMatch + quoteMatch + (pair.liquidity?.usd ?? 0);
-}
-
 function summarizeTransactions(pairs: DexPair[]) {
   const empty = { buys: 0, sells: 0 };
   return pairs.reduce((acc, pair) => {
@@ -75,7 +58,7 @@ export async function GET(request: Request) {
     .then(async (response) => response.ok ? await response.json() as { pairs?: DexPair[] } : { pairs: [] })
     .catch(() => ({ pairs: [] as DexPair[] }));
   const pairs = (dexResult.pairs ?? []).filter((pair) => pair.chainId === 'solana' && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)));
-  const sortedPairs = [...pairs].sort((a, b) => pairScore(b, mint) - pairScore(a, mint));
+  const sortedPairs = sortMainLiquidityPairs(pairs, mint);
   const bestPair = sortedPairs[0];
   const txns = summarizeTransactions(sortedPairs);
   const venues = Array.from(new Set(sortedPairs.map((pair) => dexKind(pair.dexId))));

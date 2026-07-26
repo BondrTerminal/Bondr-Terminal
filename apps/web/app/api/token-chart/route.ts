@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import { sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
+
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const TIMEOUT_MS = 7_000;
 
@@ -15,9 +17,6 @@ const FRAME_MAP: Record<string, { timeframe: 'minute' | 'hour' | 'day'; aggregat
   '1d': { timeframe: 'day', aggregate: '1', limit: '180' }
 };
 
-function sameMint(a?: string, b?: string) { return Boolean(a && b && a.toLowerCase() === b.toLowerCase()); }
-function score(pair: DexPair, mint: string) { return (sameMint(pair.baseToken?.address, mint) ? 1_000_000_000 : 0) + (sameMint(pair.quoteToken?.address, mint) ? 100_000_000 : 0) + (pair.liquidity?.usd ?? 0); }
-
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -29,9 +28,8 @@ async function bestPool(mint: string): Promise<DexPair | null> {
   const response = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
   if (!response.ok) return null;
   const payload = await response.json() as { pairs?: DexPair[] };
-  return (payload.pairs ?? [])
-    .filter((pair) => pair.chainId === 'solana' && pair.pairAddress && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)))
-    .sort((a, b) => score(b, mint) - score(a, mint))[0] ?? null;
+  return sortMainLiquidityPairs((payload.pairs ?? [])
+    .filter((pair) => pair.chainId === 'solana' && pair.pairAddress && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint))), mint)[0] ?? null;
 }
 
 export async function GET(request: Request) {

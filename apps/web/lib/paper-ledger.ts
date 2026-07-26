@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { atomicJsonWrite } from './mutation-safety';
 
 export type PaperLedgerSide = 'buy' | 'sell';
@@ -25,89 +26,111 @@ export type PaperLedgerEntry = {
 };
 
 type PaperLedgerStore = { version: 1; entries: PaperLedgerEntry[] };
+type DbPaperLedgerRow = {
+  id: string;
+  created_at: string | Date;
+  updated_at: string | Date;
+  mint: string;
+  side: string;
+  status: string;
+  amount_in: string | number;
+  spend_asset: string;
+  tokens: string | number;
+  entry_price_usd: string | number | null;
+  exit_price_usd: string | number | null;
+  realized_pnl_usd: string | number | null;
+  quote: unknown;
+  notes: unknown;
+  execution: string;
+};
 
 const PAPER_LEDGER_PATH = process.env.VERCEL
   ? join('/tmp', 'terminal-paper-ledger.json')
   : join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'terminal-paper-ledger.json');
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+const globalForPaperLedger = globalThis as typeof globalThis & { __meridianPaperLedgerPool?: Pool; __meridianPaperLedgerSchemaReady?: Promise<void> };
+
 function emptyStore(): PaperLedgerStore { return { version: 1, entries: [] }; }
 
-function neonConfigured() {
-  return Boolean(process.env.NEON_DATA_API_URL?.trim() && process.env.NEON_API_KEY?.trim());
+function databaseConfigured() {
+  return Boolean(process.env.DATABASE_URL?.trim());
 }
 
-function neonTableUrl(path = '') {
-  const base = process.env.NEON_DATA_API_URL?.trim()?.replace(/\/$/, '') ?? '';
-  return `${base}/terminal_paper_ledger${path}`;
+function paperLedgerPool() {
+  if (!databaseConfigured()) return null;
+  if (!globalForPaperLedger.__meridianPaperLedgerPool) {
+    globalForPaperLedger.__meridianPaperLedgerPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 2,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 8_000,
+      ssl: process.env.DATABASE_URL?.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+    });
+  }
+  return globalForPaperLedger.__meridianPaperLedgerPool;
 }
 
-async function neonFetch(path: string, init?: RequestInit) {
-  const response = await fetch(neonTableUrl(path), {
-    ...init,
-    headers: {
-      apikey: process.env.NEON_API_KEY ?? '',
-      authorization: `Bearer ${process.env.NEON_API_KEY ?? ''}`,
-      'content-type': 'application/json',
-      accept: 'application/json',
-      prefer: 'return=representation',
-      ...(init?.headers ?? {})
-    },
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error(`Neon Data API ${response.status} ${response.statusText}`);
-  return response.json() as Promise<unknown>;
+async function ensurePaperLedgerSchema() {
+  const pool = paperLedgerPool();
+  if (!pool) return;
+  if (!globalForPaperLedger.__meridianPaperLedgerSchemaReady) {
+    globalForPaperLedger.__meridianPaperLedgerSchemaReady = pool.query(`
+      create table if not exists terminal_paper_ledger (
+        id text primary key,
+        created_at timestamptz not null,
+        updated_at timestamptz not null,
+        mint text not null,
+        side text not null check (side in ('buy', 'sell')),
+        status text not null check (status in ('open', 'closed')),
+        amount_in numeric not null,
+        spend_asset text not null,
+        tokens numeric not null,
+        entry_price_usd numeric,
+        exit_price_usd numeric,
+        realized_pnl_usd numeric,
+        quote jsonb,
+        notes jsonb not null default '[]'::jsonb,
+        execution text not null default 'paper-only-no-sign-no-send'
+      );
+      create index if not exists terminal_paper_ledger_mint_created_idx
+        on terminal_paper_ledger (mint, created_at desc);
+      create index if not exists terminal_paper_ledger_status_idx
+        on terminal_paper_ledger (status);
+    `).then(() => undefined);
+  }
+  await globalForPaperLedger.__meridianPaperLedgerSchemaReady;
 }
 
-function fromDbRow(row: Record<string, unknown>): PaperLedgerEntry {
+function fromDbRow(row: DbPaperLedgerRow): PaperLedgerEntry {
   return {
     id: String(row.id),
-    createdAt: String(row.created_at ?? row.createdAt),
-    updatedAt: String(row.updated_at ?? row.updatedAt),
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
     mint: String(row.mint),
     side: String(row.side) === 'sell' ? 'sell' : 'buy',
     status: String(row.status) === 'closed' ? 'closed' : 'open',
-    amountIn: Number(row.amount_in ?? row.amountIn ?? 0),
-    spendAsset: String(row.spend_asset ?? row.spendAsset ?? 'SOL'),
+    amountIn: Number(row.amount_in ?? 0),
+    spendAsset: String(row.spend_asset ?? 'SOL'),
     tokens: Number(row.tokens ?? 0),
-    entryPriceUsd: numberOrNull(row.entry_price_usd ?? row.entryPriceUsd),
-    exitPriceUsd: numberOrNull(row.exit_price_usd ?? row.exitPriceUsd),
-    realizedPnlUsd: numberOrNull(row.realized_pnl_usd ?? row.realizedPnlUsd),
+    entryPriceUsd: numberOrNull(row.entry_price_usd),
+    exitPriceUsd: numberOrNull(row.exit_price_usd),
+    realizedPnlUsd: numberOrNull(row.realized_pnl_usd),
     quote: row.quote ?? null,
     notes: Array.isArray(row.notes) ? row.notes.map(String) : [],
     execution: 'paper-only-no-sign-no-send'
   };
 }
 
-function toDbRow(entry: PaperLedgerEntry) {
-  return {
-    id: entry.id,
-    created_at: entry.createdAt,
-    updated_at: entry.updatedAt,
-    mint: entry.mint,
-    side: entry.side,
-    status: entry.status,
-    amount_in: entry.amountIn,
-    spend_asset: entry.spendAsset,
-    tokens: entry.tokens,
-    entry_price_usd: entry.entryPriceUsd,
-    exit_price_usd: entry.exitPriceUsd,
-    realized_pnl_usd: entry.realizedPnlUsd,
-    quote: entry.quote,
-    notes: entry.notes,
-    execution: entry.execution
-  };
-}
-
 export function paperLedgerStorageMetadata() {
   return {
-    mode: neonConfigured() ? 'db-neon-data-api' : process.env.VERCEL ? 'serverless-tmp' : 'local-json',
-    dbConfigured: neonConfigured(),
-    productionDurable: neonConfigured(),
-    requiredEnv: ['NEON_DATA_API_URL', 'NEON_API_KEY'],
+    mode: databaseConfigured() ? 'db-neon-postgres' : process.env.VERCEL ? 'serverless-tmp' : 'local-json',
+    dbConfigured: databaseConfigured(),
+    productionDurable: databaseConfigured(),
+    requiredEnv: ['DATABASE_URL'],
     requiredTable: 'terminal_paper_ledger',
-    note: neonConfigured()
-      ? 'Paper ledger uses DB-backed Neon/PostgREST Data API.'
+    note: databaseConfigured()
+      ? 'Paper ledger uses Neon/Postgres DATABASE_URL with server-side SQL only.'
       : process.env.VERCEL
         ? 'Paper ledger is using serverless /tmp fallback; it is not durable across cold starts/deploys.'
         : 'Paper ledger is using local JSON for development.'
@@ -177,12 +200,16 @@ export function listPaperLedger(filter?: { mint?: string | null; status?: PaperL
 }
 
 export async function listPaperLedgerAsync(filter?: { mint?: string | null; status?: PaperLedgerStatus | 'all' | null }) {
-  if (!neonConfigured()) return listPaperLedger(filter);
-  const params = new URLSearchParams({ select: '*', order: 'created_at.desc', limit: '100' });
-  if (filter?.mint) params.set('mint', `eq.${filter.mint}`);
-  if (filter?.status && filter.status !== 'all') params.set('status', `eq.${filter.status}`);
-  const rows = await neonFetch(`?${params.toString()}`) as Record<string, unknown>[];
-  return rows.map(fromDbRow);
+  const pool = paperLedgerPool();
+  if (!pool) return listPaperLedger(filter);
+  await ensurePaperLedgerSchema();
+  const where: string[] = [];
+  const values: unknown[] = [];
+  if (filter?.mint) { values.push(filter.mint); where.push(`mint = $${values.length}`); }
+  if (filter?.status && filter.status !== 'all') { values.push(filter.status); where.push(`status = $${values.length}`); }
+  const query = `select * from terminal_paper_ledger${where.length ? ` where ${where.join(' and ')}` : ''} order by created_at desc limit 100`;
+  const result = await pool.query<DbPaperLedgerRow>(query, values);
+  return result.rows.map(fromDbRow);
 }
 
 export function summarizePaperLedger(mint?: string | null, currentPriceUsd?: number | null) {
@@ -223,9 +250,17 @@ export function createPaperEntry(input: { mint: string; side?: string; amountIn?
 
 export async function createPaperEntryAsync(input: { mint: string; side?: string; amountIn?: unknown; spendAsset?: string; quote?: unknown; priceUsd?: unknown }) {
   const entry = deriveEntry(input);
-  if (!neonConfigured()) return createPaperEntry(input);
-  const rows = await neonFetch('', { method: 'POST', body: JSON.stringify(toDbRow(entry)) }) as Record<string, unknown>[];
-  return rows[0] ? fromDbRow(rows[0]) : entry;
+  const pool = paperLedgerPool();
+  if (!pool) return createPaperEntry(input);
+  await ensurePaperLedgerSchema();
+  const result = await pool.query<DbPaperLedgerRow>(`
+    insert into terminal_paper_ledger
+      (id, created_at, updated_at, mint, side, status, amount_in, spend_asset, tokens, entry_price_usd, exit_price_usd, realized_pnl_usd, quote, notes, execution)
+    values
+      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15)
+    returning *
+  `, [entry.id, entry.createdAt, entry.updatedAt, entry.mint, entry.side, entry.status, entry.amountIn, entry.spendAsset, entry.tokens, entry.entryPriceUsd, entry.exitPriceUsd, entry.realizedPnlUsd, JSON.stringify(entry.quote), JSON.stringify(entry.notes), entry.execution]);
+  return result.rows[0] ? fromDbRow(result.rows[0]) : entry;
 }
 
 export function closePaperEntry(id: string, exitPriceUsd: unknown) {
@@ -244,15 +279,22 @@ export function closePaperEntry(id: string, exitPriceUsd: unknown) {
 }
 
 export async function closePaperEntryAsync(id: string, exitPriceUsd: unknown) {
-  if (!neonConfigured()) return closePaperEntry(id, exitPriceUsd);
+  const pool = paperLedgerPool();
+  if (!pool) return closePaperEntry(id, exitPriceUsd);
   const price = numberOrNull(exitPriceUsd);
   if (price === null) throw new Error('Exit requires numeric exitPriceUsd.');
-  const rows = await neonFetch(`?id=eq.${encodeURIComponent(id)}&limit=1`) as Record<string, unknown>[];
-  const current = rows[0] ? fromDbRow(rows[0]) : null;
+  await ensurePaperLedgerSchema();
+  const currentResult = await pool.query<DbPaperLedgerRow>('select * from terminal_paper_ledger where id = $1 limit 1', [id]);
+  const current = currentResult.rows[0] ? fromDbRow(currentResult.rows[0]) : null;
   if (!current) throw new Error('Paper entry not found.');
   if (current.status === 'closed') return current;
   const realizedPnlUsd = current.entryPriceUsd === null ? null : (price - current.entryPriceUsd) * current.tokens;
   const updated: PaperLedgerEntry = { ...current, status: 'closed', updatedAt: new Date().toISOString(), exitPriceUsd: price, realizedPnlUsd, notes: [...current.notes, 'Paper exit recorded. No transaction was built, signed, or broadcast.'] };
-  const patched = await neonFetch(`?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(toDbRow(updated)) }) as Record<string, unknown>[];
-  return patched[0] ? fromDbRow(patched[0]) : updated;
+  const patched = await pool.query<DbPaperLedgerRow>(`
+    update terminal_paper_ledger
+    set status = $2, updated_at = $3, exit_price_usd = $4, realized_pnl_usd = $5, notes = $6::jsonb
+    where id = $1
+    returning *
+  `, [updated.id, updated.status, updated.updatedAt, updated.exitPriceUsd, updated.realizedPnlUsd, JSON.stringify(updated.notes)]);
+  return patched.rows[0] ? fromDbRow(patched.rows[0]) : updated;
 }

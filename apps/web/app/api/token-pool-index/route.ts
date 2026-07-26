@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import { dexKind, sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
+
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const DEX_TIMEOUT_MS = 7_000;
 const BITQUERY_TIMEOUT_MS = 8_000;
@@ -48,26 +50,6 @@ async function fetchBitqueryPoolAge(mint: string): Promise<BitqueryPoolAge> {
   }
 }
 
-function sameMint(a?: string, b?: string) {
-  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
-}
-
-function dexKind(dexId?: string) {
-  const normalized = (dexId ?? '').toLowerCase();
-  if (normalized.includes('raydium')) return 'raydium';
-  if (normalized.includes('pump')) return 'pumpswap';
-  if (normalized.includes('orca')) return 'orca';
-  if (normalized.includes('meteora')) return 'meteora';
-  if (normalized.includes('openbook')) return 'openbook';
-  return normalized || 'unknown';
-}
-
-function pairScore(pair: DexPair, mint: string) {
-  const baseMatch = sameMint(pair.baseToken?.address, mint) ? 1_000_000_000 : 0;
-  const quoteMatch = sameMint(pair.quoteToken?.address, mint) ? 100_000_000 : 0;
-  return baseMatch + quoteMatch + (pair.liquidity?.usd ?? 0) + (pair.volume?.h24 ?? 0) / 100;
-}
-
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEX_TIMEOUT_MS);
@@ -87,9 +69,8 @@ export async function GET(request: Request) {
     const [response, bitqueryAge] = await Promise.all([fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${mint}`), fetchBitqueryPoolAge(mint)]);
     if (!response.ok) return Response.json({ error: `DexScreener ${response.status} ${response.statusText}` }, { status: 502 });
     const payload = await response.json() as { pairs?: DexPair[] };
-    const pairs = (payload.pairs ?? [])
-      .filter((pair) => pair.chainId === 'solana' && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)))
-      .sort((a, b) => pairScore(b, mint) - pairScore(a, mint));
+    const pairs = sortMainLiquidityPairs((payload.pairs ?? [])
+      .filter((pair) => pair.chainId === 'solana' && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint))), mint);
     const best = pairs[0] ?? null;
     const liquidityUsd = pairs.reduce((sum, pair) => sum + (pair.liquidity?.usd ?? 0), 0);
     const volume24h = pairs.reduce((sum, pair) => sum + (pair.volume?.h24 ?? 0), 0);
@@ -114,7 +95,7 @@ export async function GET(request: Request) {
         poolAgeSource: bitqueryAge.status === 'ok' ? 'bitquery' : 'dexscreener',
         firstSeenAt: bitqueryAge.firstSeenAt ?? (best?.pairCreatedAt ? new Date(best.pairCreatedAt).toISOString() : null)
       },
-      sources: { bitquery: bitqueryAge, dexscreener: { status: 'ok', note: 'Pairs/liquidity/volume from DexScreener.' } },
+      sources: { bitquery: bitqueryAge, dexscreener: { status: 'ok', note: 'Pairs/liquidity/volume from DexScreener. Main pool ranking prioritizes token/SOL or token/USDC Raydium/PumpSwap/Orca liquidity before Meteora/side pools.' } },
       pairs: pairs.slice(0, 20).map((pair) => ({
         dex: pair.dexId ?? null,
         kind: dexKind(pair.dexId),

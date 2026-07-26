@@ -1,5 +1,6 @@
 import { getHeliusApiKey } from '../../../lib/solana-rpc';
 import { normalizePumpTrade, pumpfunFetch } from '../../../lib/indexers/pumpfun';
+import { sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -156,16 +157,6 @@ async function fetchWithVercelCache(url: string, timeoutMs: number, init?: Reque
   }
 }
 
-function sameMint(a?: string, b?: string) {
-  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
-}
-
-function pairScore(pair: DexPair, mint: string) {
-  const baseMatch = sameMint(pair.baseToken?.address, mint) ? 1_000_000_000 : 0;
-  const quoteMatch = sameMint(pair.quoteToken?.address, mint) ? 100_000_000 : 0;
-  return baseMatch + quoteMatch + (pair.liquidity?.usd ?? 0);
-}
-
 function normalizeSide(kind?: string): 'buy' | 'sell' | 'unknown' {
   const normalized = (kind ?? '').toLowerCase();
   if (normalized.includes('buy')) return 'buy';
@@ -231,7 +222,7 @@ async function findBestDexPair(mint: string): Promise<DexPair | null> {
   if (!response.ok) return null;
   const payload = await response.json() as { pairs?: DexPair[] };
   const pairs = (payload.pairs ?? []).filter((pair) => pair.chainId === 'solana' && pair.pairAddress && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)));
-  return pairs.sort((a, b) => pairScore(b, mint) - pairScore(a, mint))[0] ?? null;
+  return sortMainLiquidityPairs(pairs, mint)[0] ?? null;
 }
 
 async function fetchGeckoTrades(pairAddress: string | null, limit: number): Promise<ProviderResult<IndexedTrade>> {

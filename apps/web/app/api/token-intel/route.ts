@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
+import { sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,16 +91,6 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-function sameMint(a?: string, b?: string) {
-  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
-}
-
-function pairScore(pair: DexPair, mint: string) {
-  const baseMatch = sameMint(pair.baseToken?.address, mint) ? 1_000_000_000 : 0;
-  const quoteMatch = sameMint(pair.quoteToken?.address, mint) ? 100_000_000 : 0;
-  return baseMatch + quoteMatch + (pair.liquidity?.usd ?? 0);
-}
-
 function displayToken(pair: DexPair, mint: string) {
   if (sameMint(pair.baseToken?.address, mint)) return pair.baseToken;
   if (sameMint(pair.quoteToken?.address, mint)) return pair.quoteToken;
@@ -128,7 +119,7 @@ export async function GET(request: Request) {
 
     const payload = await response.json() as { pairs?: DexPair[] };
     const pairs = (payload.pairs ?? []).filter((pair) => pair.chainId === 'solana' && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)));
-    const sortedPairs = [...pairs].sort((a, b) => pairScore(b, mint) - pairScore(a, mint));
+    const sortedPairs = sortMainLiquidityPairs(pairs, mint);
     const bestPair = sortedPairs[0];
     const warnings = [
       pairs.length === 0 ? 'No Solana pairs found.' : '',

@@ -1,8 +1,8 @@
--- Meridian paper ledger DB schema for Neon/Supabase/PostgREST-style Data API.
--- Required env for dependency-free HTTP adapter:
---   NEON_DATA_API_URL=https://<project>.neon.tech/rest/v1 or compatible PostgREST base URL
---   NEON_API_KEY=<server-side API key>
--- Do not expose these values to the browser.
+-- Meridian paper ledger DB schema for Neon/Postgres.
+-- Required server-only env for production durability:
+--   DATABASE_URL=postgresql://...
+-- Use Neon pooled connection string in Vercel Production.
+-- Do not expose this value to the browser.
 
 create table if not exists terminal_paper_ledger (
   id text primary key,
