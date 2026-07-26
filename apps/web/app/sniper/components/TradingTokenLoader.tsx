@@ -279,6 +279,9 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
   const holderSource = terminalSnapshot?.holders?.source ?? stats?.holders?.source ?? stats?.holders?.status ?? 'loading';
   const valuedHolderRows = holderRows.filter((row) => typeof row.valueUsd === 'number').length;
   const tradeMatchedHolderRows = holderRows.filter((row) => row.pnlStatus === 'trade-tape-estimate').length;
+  const marketSources = marketFeed?.sources ?? {};
+  const marketTransactions = marketFeed?.transactions ?? { m5: { buys: 0, sells: 0 }, h1: { buys: 0, sells: 0 }, h6: { buys: 0, sells: 0 }, h24: { buys: 0, sells: 0 } };
+  const jupiterRouteLabels = marketSources.jupiter?.routeLabels ?? [];
 
   async function copyMint() {
     if (!intel?.mint) return;
@@ -328,7 +331,7 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
 
           <div className="chartToolbar">
             {['1m', '5m', '15m', '1h', '4h', '1d'].map((frame) => <a className="chartFrameLink" href={`/api/token-chart?mint=${intel.mint}&frame=${frame}`} target="_blank" rel="noreferrer" key={frame}>{frame}</a>)}
-            <span>{marketFeed?.sources.jupiter?.status === 'ok' ? `Route · ${marketFeed.sources.jupiter.routeLabels.slice(0, 2).join(' / ') || 'route'}` : `${intel.bestPair?.dex ?? 'DEX'} route`}</span>
+            <span>{marketSources.jupiter?.status === 'ok' ? `Route · ${jupiterRouteLabels.slice(0, 2).join(' / ') || 'route'}` : `${intel.bestPair?.dex ?? 'DEX'} route`}</span>
           </div>
 
           <div className="chartAndTapeGrid">
@@ -338,19 +341,19 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
             <aside className="transactionTapePanel" aria-label="Transaction tape">
               <div className="transactionTapeHeader"><span>Transactions</span><strong>{liveTradeLabel}</strong></div>
               <div className="feedSourceGrid">
-                <div><span>Jupiter</span><strong>{marketFeed?.sources.jupiter?.status ?? 'loading'}</strong></div>
-                <div><span>Raydium</span><strong>{marketFeed?.sources.raydium?.status ?? 'loading'}</strong></div>
-                <div><span>PumpSwap</span><strong>{marketFeed?.sources.pumpswap?.status ?? 'loading'}</strong></div>
+                <div><span>Jupiter</span><strong>{marketSources.jupiter?.status ?? 'loading'}</strong></div>
+                <div><span>Raydium</span><strong>{marketSources.raydium?.status ?? 'loading'}</strong></div>
+                <div><span>PumpSwap</span><strong>{marketSources.pumpswap?.status ?? 'loading'}</strong></div>
               </div>
               <div className="transactionTapeStats">
-                <div><span>5m</span><strong>{(marketFeed?.transactions.m5.buys ?? intel.bestPair?.txns?.m5?.buys ?? 0).toLocaleString()} / {(marketFeed?.transactions.m5.sells ?? intel.bestPair?.txns?.m5?.sells ?? 0).toLocaleString()}</strong><small>buys / sells</small></div>
-                <div><span>1h</span><strong>{(marketFeed?.transactions.h1.buys ?? intel.bestPair?.txns?.h1?.buys ?? 0).toLocaleString()} / {(marketFeed?.transactions.h1.sells ?? intel.bestPair?.txns?.h1?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketFeed?.transactions.h1.buys ?? intel.bestPair?.txns?.h1?.buys, marketFeed?.transactions.h1.sells ?? intel.bestPair?.txns?.h1?.sells)}</small></div>
-                <div><span>24h</span><strong>{(marketFeed?.transactions.h24.buys ?? intel.bestPair?.txns?.h24?.buys ?? 0).toLocaleString()} / {(marketFeed?.transactions.h24.sells ?? intel.bestPair?.txns?.h24?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketFeed?.transactions.h24.buys ?? intel.bestPair?.txns?.h24?.buys, marketFeed?.transactions.h24.sells ?? intel.bestPair?.txns?.h24?.sells)}</small></div>
+                <div><span>5m</span><strong>{(marketTransactions.m5?.buys ?? intel.bestPair?.txns?.m5?.buys ?? 0).toLocaleString()} / {(marketTransactions.m5?.sells ?? intel.bestPair?.txns?.m5?.sells ?? 0).toLocaleString()}</strong><small>buys / sells</small></div>
+                <div><span>1h</span><strong>{(marketTransactions.h1?.buys ?? intel.bestPair?.txns?.h1?.buys ?? 0).toLocaleString()} / {(marketTransactions.h1?.sells ?? intel.bestPair?.txns?.h1?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketTransactions.h1?.buys ?? intel.bestPair?.txns?.h1?.buys, marketTransactions.h1?.sells ?? intel.bestPair?.txns?.h1?.sells)}</small></div>
+                <div><span>24h</span><strong>{(marketTransactions.h24?.buys ?? intel.bestPair?.txns?.h24?.buys ?? 0).toLocaleString()} / {(marketTransactions.h24?.sells ?? intel.bestPair?.txns?.h24?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketTransactions.h24?.buys ?? intel.bestPair?.txns?.h24?.buys, marketTransactions.h24?.sells ?? intel.bestPair?.txns?.h24?.sells)}</small></div>
               </div>
               <div className="transactionTapeList">
                 {trades.slice(0, 14).map((trade, index) => (
                   <a href={trade.txHash ? `https://solscan.io/tx/${trade.txHash}` : '#'} target="_blank" rel="noreferrer" className={`transactionTapeTrade ${trade.side === 'buy' ? 'buyTrade' : trade.side === 'sell' ? 'sellTrade' : ''}`} key={`${trade.txHash}-${index}`}>
-                    <strong>{trade.side.toUpperCase()}</strong>
+                    <strong>{(trade.side || 'unknown').toUpperCase()}</strong>
                     <span>{trade.volumeUsd ? `$${Number(trade.volumeUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'volume —'}</span>
                     <small>{trade.wallet ? `${trade.wallet.slice(0, 4)}…${trade.wallet.slice(-4)}` : 'wallet —'} · {trade.priceUsd ? `$${Number(trade.priceUsd).toPrecision(4)}` : 'price —'}</small>
                   </a>
