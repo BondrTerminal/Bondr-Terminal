@@ -376,7 +376,6 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
             ))}
           </div>
 
-          <HolderWalletTable rows={holderRows} source={holderSource} status={terminalSnapshot?.holders?.status ?? stats?.holders?.status} note={terminalSnapshot?.holders?.note ?? stats?.holders?.note} />
         </div>
       )}
     </section>

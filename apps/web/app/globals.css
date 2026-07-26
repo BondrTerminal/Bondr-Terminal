@@ -3609,8 +3609,8 @@ html, body { max-width: 100%; overflow-x: clip; }
   text-decoration: none;
 }
 .holderIntelTable .terminalDataRow {
-  grid-template-columns: 0.24fr 0.82fr 0.68fr 0.36fr 0.52fr 0.62fr 0.62fr 0.46fr 0.46fr 0.54fr 0.56fr 1.1fr;
-  min-width: 1480px;
+  grid-template-columns: 0.24fr 0.92fr 0.54fr 0.68fr 0.46fr 0.62fr 0.58fr 0.58fr 0.46fr 0.46fr 0.54fr 0.76fr 1fr;
+  min-width: 1640px;
 }
 .tokenLoaderHolderTable .terminalDataRow {
   grid-template-columns: 0.24fr 0.92fr 0.64fr 0.42fr 0.56fr 0.78fr 0.48fr 0.48fr 0.54fr 0.48fr;
@@ -5639,8 +5639,34 @@ html, body { max-width: 100%; overflow-x: clip; }
   border-color: rgba(125,199,255,0.22) !important;
   background: rgba(47,128,255,0.075) !important;
 }
-.holdersTabSurface .tabRowsTable {
-  display: none !important;
+.holderTabSingleSource .tabRowsTable {
+  display: grid !important;
+  margin-bottom: 8px;
+}
+.holderTabSingleSource {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.holderTabFullWidthTable {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(125,199,255,0.1);
+  border-radius: 13px;
+  background: rgba(2,8,18,0.18);
+}
+.holderTabFullWidthTable .terminalDataHead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.holderTabFullWidthTable .holderIntelRow span:nth-child(12) {
+  color: #8fd2ff;
+  font-weight: 900;
+}
+.holderEmptyState {
+  grid-template-columns: 0.8fr 0.7fr 1.4fr 1fr !important;
+  min-width: 760px !important;
 }
 .holderIntelTable .terminalDataRow strong small {
   color: rgba(150,174,205,0.65) !important;
