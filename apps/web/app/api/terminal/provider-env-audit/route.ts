@@ -1,4 +1,5 @@
 import { buildProviderReadiness } from '../../../../lib/provider-readiness';
+import { paperLedgerStorageMetadata } from '../../../../lib/paper-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +27,14 @@ export async function GET() {
       note: item.note ?? null
     }];
   }));
+  const paperLedger = paperLedgerStorageMetadata();
   return Response.json({
     status: 'ok',
     observedAt: new Date().toISOString(),
     source: 'terminal-provider-env-audit',
     allowedStatuses: ['configured', 'missing', 'degraded', 'rate-limited', 'provider-ready'],
     providers,
+    paperLedger,
     blockingForLive: readiness.blockingForLive,
     optionalProviderGaps: readiness.optionalProviderGaps,
     secretsExposed: false,

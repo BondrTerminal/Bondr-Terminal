@@ -9,6 +9,7 @@ const DEX_TIMEOUT_MS = 2_500;
 const GECKO_TIMEOUT_MS = 3_500;
 const HELIUS_TIMEOUT_MS = 3_500;
 const BIRDEYE_TIMEOUT_MS = 3_500;
+const BIRDEYE_CACHE_TTL_MS = 45_000;
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 type ProviderStatus = 'ok' | 'empty' | 'unavailable' | 'not-configured' | 'rate-limited';
@@ -99,26 +100,29 @@ type BirdeyeTx = {
   pricePair?: number | string;
 };
 
-type TradeTapeCache = { observedAt: string; mint: string; primary: string; trades: IndexedTrade[] };
+type TradeTapeCache = { observedAt: string; mint: string; primary: string; trades: IndexedTrade[]; provider?: string; ttlMs?: number };
 
-const TRADE_TAPE_CACHE_DIR = join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'trade-tape-cache');
+const TRADE_TAPE_CACHE_DIR = process.env.VERCEL ? join('/tmp', 'trade-tape-cache') : join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'trade-tape-cache');
 
-function cachePath(mint: string) { return join(TRADE_TAPE_CACHE_DIR, `${mint}.json`); }
+function cachePath(mint: string, provider = 'primary') { return join(TRADE_TAPE_CACHE_DIR, `${mint}-${provider}.json`); }
 
-function readTradeCache(mint: string): TradeTapeCache | null {
+function readTradeCache(mint: string, provider = 'primary', maxAgeMs?: number): TradeTapeCache | null {
   try {
-    const path = cachePath(mint);
+    const path = cachePath(mint, provider);
     if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, 'utf8')) as TradeTapeCache;
+    const cache = JSON.parse(readFileSync(path, 'utf8')) as TradeTapeCache;
+    const ageMs = Date.now() - Date.parse(cache.observedAt);
+    if (maxAgeMs !== undefined && (!Number.isFinite(ageMs) || ageMs > maxAgeMs)) return null;
+    return cache;
   } catch { return null; }
 }
 
-function writeTradeCache(mint: string, primary: string, trades: IndexedTrade[]) {
+function writeTradeCache(mint: string, primary: string, trades: IndexedTrade[], provider = 'primary', ttlMs?: number) {
   if (!trades.length) return;
   try {
-    const path = cachePath(mint);
+    const path = cachePath(mint, provider);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify({ observedAt: new Date().toISOString(), mint, primary, trades: trades.slice(0, 300) } satisfies TradeTapeCache, null, 2));
+    writeFileSync(path, JSON.stringify({ observedAt: new Date().toISOString(), mint, primary, provider, ttlMs, trades: trades.slice(0, 300) } satisfies TradeTapeCache, null, 2));
   } catch { /* cache is best effort */ }
 }
 
@@ -280,6 +284,10 @@ async function fetchHeliusTrades(mint: string, limit: number): Promise<ProviderR
 
 async function fetchBirdeyeTrades(mint: string, limit: number): Promise<ProviderResult<IndexedTrade>> {
   return timedProvider(async () => {
+    const cached = readTradeCache(mint, 'birdeye', BIRDEYE_CACHE_TTL_MS);
+    if (cached?.trades?.length) {
+      return { rows: cached.trades.slice(0, Math.min(Math.max(limit, 1), 100)), status: 'ok', note: `Using Birdeye short-lived cache (${Math.round((Date.now() - Date.parse(cached.observedAt)) / 1000)}s old).`, cached: true, cacheObservedAt: cached.observedAt, cacheTtlMs: BIRDEYE_CACHE_TTL_MS };
+    }
     const apiKey = process.env.BIRDEYE_API_KEY?.trim();
     if (!apiKey) return { rows: [], status: 'not-configured', note: 'BIRDEYE_API_KEY not configured.' };
     const url = `https://public-api.birdeye.so/defi/txs/token?address=${encodeURIComponent(mint)}&offset=0&limit=${Math.min(Math.max(limit, 1), 50)}`;
@@ -310,7 +318,8 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
       });
     }).filter((trade) => trade.wallet || trade.txHash);
     const payloadShape = Array.isArray(payload.data) ? 'data[]' : dataObject ? `data{${Object.keys(dataObject).slice(0, 8).join(',')}}` : `root{${Object.keys(payload).slice(0, 8).join(',')}}`;
-    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : `Birdeye returned no token tx rows. Payload shape: ${payloadShape}${payload.message ? `; message: ${payload.message}` : ''}`, payloadShape, sampleKeys: items[0] ? Object.keys(items[0]).sort() : [], samplePrimitiveShape: primitiveShape(items[0] as Record<string, unknown> | undefined) };
+    if (rows.length) writeTradeCache(mint, 'birdeye', rows, 'birdeye', BIRDEYE_CACHE_TTL_MS);
+    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? null : `Birdeye returned no token tx rows. Payload shape: ${payloadShape}${payload.message ? `; message: ${payload.message}` : ''}`, payloadShape, sampleKeys: items[0] ? Object.keys(items[0]).sort() : [], samplePrimitiveShape: primitiveShape(items[0] as Record<string, unknown> | undefined), cached: false, cacheTtlMs: BIRDEYE_CACHE_TTL_MS };
   }, 'Birdeye unavailable.');
 }
 
@@ -415,7 +424,7 @@ export async function GET(request: Request) {
       pumpfun: pumpfun.latencyMs,
       geckoterminal: gecko.latencyMs
     },
-    providers: Object.fromEntries(Object.entries(providers).map(([provider, result]) => [provider, { status: result.status, rows: result.rows.length, latencyMs: result.latencyMs, note: result.note ?? null, payloadShape: typeof result.payloadShape === 'string' ? result.payloadShape : null, sampleKeys: Array.isArray(result.sampleKeys) ? result.sampleKeys : null, samplePrimitiveShape: result.samplePrimitiveShape ?? null }])),
+    providers: Object.fromEntries(Object.entries(providers).map(([provider, result]) => [provider, { status: result.status, rows: result.rows.length, latencyMs: result.latencyMs, note: result.note ?? null, cached: result.cached === true, cacheObservedAt: typeof result.cacheObservedAt === 'string' ? result.cacheObservedAt : null, cacheTtlMs: typeof result.cacheTtlMs === 'number' ? result.cacheTtlMs : null, payloadShape: typeof result.payloadShape === 'string' ? result.payloadShape : null, sampleKeys: Array.isArray(result.sampleKeys) ? result.sampleKeys : null, samplePrimitiveShape: result.samplePrimitiveShape ?? null }])),
     recommendedFixes: [
       'Add Helius or Birdeye for wallet-attributed trade tape.',
       'Use /api/market-data/probe-token to pick an active memecoin mint instead of USDC for tape testing.'
