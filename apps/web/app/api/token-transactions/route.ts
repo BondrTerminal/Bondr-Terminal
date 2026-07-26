@@ -92,6 +92,11 @@ type BirdeyeTx = {
   base?: Record<string, unknown>;
   quote?: Record<string, unknown>;
   token?: Record<string, unknown>;
+  from?: Record<string, unknown>;
+  to?: Record<string, unknown>;
+  basePrice?: number | string;
+  quotePrice?: number | string;
+  pricePair?: number | string;
 };
 
 type TradeTapeCache = { observedAt: string; mint: string; primary: string; trades: IndexedTrade[] };
@@ -171,6 +176,20 @@ function primitiveShape(row: Record<string, unknown> | undefined) {
     const text = String(value);
     return [key, `${typeof value}:${text.length > 80 ? `${text.slice(0, 80)}…` : text}`];
   }));
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function birdeyeTokenLeg(item: BirdeyeTx, mint: string) {
+  const candidates = [objectRecord(item.base), objectRecord(item.quote), objectRecord(item.from), objectRecord(item.to), objectRecord(item.token)];
+  return candidates.find((candidate) => sameMint(String(candidate.address ?? ''), mint)) ?? candidates[0] ?? {};
+}
+
+function birdeyeQuoteLeg(item: BirdeyeTx, mint: string) {
+  const candidates = [objectRecord(item.quote), objectRecord(item.base), objectRecord(item.from), objectRecord(item.to)];
+  return candidates.find((candidate) => candidate.address && !sameMint(String(candidate.address), mint)) ?? candidates[0] ?? {};
 }
 
 function withTradeMeta<T extends Omit<IndexedTrade, 'provider' | 'confidence' | 'attributionStatus'>>(trade: T): IndexedTrade {
@@ -272,12 +291,13 @@ async function fetchBirdeyeTrades(mint: string, limit: number): Promise<Provider
     const dataObject = !Array.isArray(payload.data) && payload.data && typeof payload.data === 'object' ? payload.data : null;
     const items = Array.isArray(payload.data) ? payload.data : dataObject?.items ?? dataObject?.solana ?? dataObject?.transactions ?? dataObject?.txs ?? payload.items ?? [];
     const rows = items.map((item): IndexedTrade => {
-      const base = item.base ?? {};
-      const quote = item.quote ?? {};
-      const token = item.token ?? {};
-      const amount = numberFrom(item.amount, item.tokenAmount, item.token_amount, item.amountOut, item.amountIn, token.amount, base.amount, quote.amount);
-      const volumeUsd = numberFrom(item.volumeUsd, item.valueUsd, item.usdValue, item.volume_usd, item.value, item.volume, quote.valueUsd, quote.usdValue, base.valueUsd, base.usdValue);
-      const priceUsd = numberFrom(item.priceUsd, item.priceUSD, item.price, item.tokenPrice, item.token_price, token.priceUsd, token.price, base.priceUsd, base.price, volumeUsd !== null && amount ? volumeUsd / amount : null);
+      const token = birdeyeTokenLeg(item, mint);
+      const quote = birdeyeQuoteLeg(item, mint);
+      const amount = numberFrom(item.amount, item.tokenAmount, item.token_amount, item.amountOut, item.amountIn, token.uiAmount, token.uiChangeAmount, token.amount, quote.uiAmount);
+      const priceUsd = numberFrom(item.priceUsd, item.priceUSD, item.price, item.tokenPrice, item.token_price, token.price, token.nearestPrice, item.basePrice, item.pricePair);
+      const quoteUiAmount = numberFrom(quote.uiAmount, quote.uiChangeAmount);
+      const quotePrice = numberFrom(quote.price, quote.nearestPrice, item.quotePrice);
+      const volumeUsd = numberFrom(item.volumeUsd, item.valueUsd, item.usdValue, item.volume_usd, item.value, item.volume, quoteUiAmount !== null && quotePrice !== null ? Math.abs(quoteUiAmount * quotePrice) : null, amount !== null && priceUsd !== null ? Math.abs(amount * priceUsd) : null);
       return withTradeMeta({
       timestamp: item.blockUnixTime ? new Date(item.blockUnixTime * 1000).toISOString() : item.blockTime ?? null,
       side: normalizeSide(item.side ?? item.type),
