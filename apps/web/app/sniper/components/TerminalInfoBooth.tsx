@@ -127,10 +127,10 @@ type PaperTradeDecision = {
 type RiskVerdict = { status?: string; reasons?: string[]; note?: string | null; liveTradingAllowed?: boolean; checks?: Record<string, unknown> };
 type LiveReadiness = { status?: string; summary?: string; checks?: Array<{ id?: string; label?: string; status?: string; evidence?: string }>; failed?: string[]; partial?: string[]; liveTradingAllowed?: boolean; note?: string | null };
 type ProviderEnvAudit = { providers?: Record<string, { status?: string; providerStatus?: string; configured?: boolean | null; note?: string | null }>; blockingForLive?: string[]; optionalProviderGaps?: string[] };
-type PaperLedger = { entries?: Array<{ id: string; createdAt: string; mint: string; side: string; status: string; amountIn: number; spendAsset: string; tokens: number; entryPriceUsd: number | null; exitPriceUsd: number | null; realizedPnlUsd: number | null; execution: string }>; summary?: { entryCount?: number; openCount?: number; closedCount?: number; realizedPnlUsd?: number | null; unrealizedPnlUsd?: number | null; totalPnlUsd?: number | null; execution?: string } };
+type PaperLedger = { entries?: Array<{ id: string; createdAt: string; mint: string; side: string; status: string; amountIn: number; spendAsset: string; tokens: number; entryPriceUsd: number | null; exitPriceUsd: number | null; realizedPnlUsd: number | null; execution: string }>; summary?: { entryCount?: number; openCount?: number; closedCount?: number; realizedPnlUsd?: number | null; unrealizedPnlUsd?: number | null; totalPnlUsd?: number | null; execution?: string }; storage?: { mode?: string; productionDurable?: boolean; dbConfigured?: boolean; note?: string; requiredEnv?: string[]; requiredTable?: string } };
 
 type Tab = (typeof tabs)[number];
-const tabs = ['Transactions', 'Paper', 'Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Wallets', 'Bundle', 'Risk', 'Migration', 'Signals'] as const;
+const tabs = ['Transactions', 'Holders', 'Paper', 'Risk', 'Positions', 'Orders', 'Top Traders', 'Dev Tokens', 'Wallets', 'Bundle', 'Migration', 'Signals'] as const;
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function formatPct(value: number | null | undefined, fallback = 'API limited') {
@@ -382,6 +382,32 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
     ['Dev sold', sourceValue(snapshot, 'devSold'), 'Team wallet flow']
   ];
 
+  function tabBadge(tab: Tab) {
+    switch (tab) {
+      case 'Transactions': return trades.length ? String(trades.length) : snapshot ? '0' : '…';
+      case 'Holders': return holderRows.length ? String(holderRows.length) : snapshot ? '0' : '…';
+      case 'Paper': return paperLedger?.storage?.productionDurable ? 'DB' : 'TMP';
+      case 'Risk': return riskVerdict?.liveTradingAllowed ? 'LIVE' : 'GATED';
+      case 'Positions': return positionRows.length ? String(positionRows.length) : String(tokenInventory?.nonZeroWallets ?? 0);
+      case 'Orders': return openOrders.length ? `${openOrders.length} open` : String(orders.length);
+      case 'Top Traders': return topTraders.length ? String(topTraders.length) : '0';
+      case 'Dev Tokens': return devRows.length ? String(devRows.length) : String(pumpfunDevTokens.length);
+      case 'Wallets': return String(renderedWallets.length);
+      case 'Bundle': return bundleRows.length ? String(bundleRows.length) : String(bundleWallets.length);
+      case 'Migration': return pumpfunMigrations.length ? String(pumpfunMigrations.length) : (pumpfun?.token ? 'read' : '…');
+      case 'Signals': return `${freshRows.length + bundleRows.length}`;
+      default: return '';
+    }
+  }
+
+  function tabStatusClass(tab: Tab) {
+    if (!snapshot) return 'loadingTab';
+    if (tab === 'Paper' && !paperLedger?.storage?.productionDurable) return 'warnTab';
+    if (tab === 'Risk' && !riskVerdict?.liveTradingAllowed) return 'safeTab';
+    if ((tab === 'Transactions' && trades.length === 0) || (tab === 'Holders' && holderRows.length === 0)) return 'warnTab';
+    return 'readyTab';
+  }
+
   return (
     <section className="terminalInfoBooth" data-contract="terminal-snapshot-v1">
       <div className="terminalMarketViewer" data-hardwire="terminal-bottom-tabs" aria-label="Terminal market viewer">
@@ -401,10 +427,11 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
       {tabActionMessage && <div className="terminalActionMessage">{tabActionMessage}</div>}
 
       <div className="terminalTabBar marketViewerTabs" role="tablist" aria-label="Trading terminal information tabs">
-        {tabs.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? 'activeTerminalTab' : ''} onClick={() => setActiveTab(tab)} key={tab}>{tab}</button>)}
+        {tabs.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab} className={`${activeTab === tab ? 'activeTerminalTab' : ''} ${tabStatusClass(tab)}`} onClick={() => setActiveTab(tab)} key={tab}><span>{tab}</span><small>{tabBadge(tab)}</small></button>)}
       </div>
 
       <div className="terminalTabPanel">
+        {!snapshot && <TerminalTabLoading activeTab={activeTab} snapshotStatus={snapshotStatus} />}
         {activeTab === 'Transactions' && <TradeTable trades={trades} tradeTape={tradeTape} />}
         {activeTab === 'Paper' && <PaperDecisionPanel mint={activeMint} decision={paperDecision} risk={riskVerdict} liveReadiness={liveReadiness} ledger={paperLedger} onLedgerChange={() => void refreshTerminalTabs()} />}
         {activeTab === 'Positions' && <PositionsPanel wallets={renderedWallets} tokenRows={tokenRows} positionRows={positionRows} positionSummary={(snapshot as SnapshotWithPositions | null)?.positions?.summary ?? null} tokenInventory={tokenInventory} flow={backend?.accounting ?? flow} mint={activeMint} />}
@@ -420,6 +447,10 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
       </div>
     </section>
   );
+}
+
+function TerminalTabLoading({ activeTab, snapshotStatus }: { activeTab: Tab; snapshotStatus: string }) {
+  return <div className="terminalTabLoadingState" role="status"><strong>Loading {activeTab}</strong><span>{snapshotStatus}</span><small>Waiting for terminal snapshot data. Read-only panels can load; live execution stays disabled.</small></div>;
 }
 
 function PaperDecisionPanel({ mint, decision, risk, liveReadiness, ledger, onLedgerChange }: { mint: string; decision?: PaperTradeDecision | null; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null; ledger?: PaperLedger | null; onLedgerChange: () => void }) {
@@ -511,6 +542,11 @@ function PaperDecisionPanel({ mint, decision, risk, liveReadiness, ledger, onLed
       ['Closed positions', String(ledger?.summary?.closedCount ?? 0), 'paper ledger'],
       ['Realized PnL', formatUsd(ledger?.summary?.realizedPnlUsd ?? null), 'paper only'],
       ['Unrealized PnL', formatUsd(ledger?.summary?.unrealizedPnlUsd ?? null), 'paper only']
+    ]} />
+    <RowsTable head={['Ledger storage', 'Value', 'Durability']} rows={[
+      ['Mode', ledger?.storage?.mode ?? 'loading', ledger?.storage?.productionDurable ? 'durable DB' : 'not durable'],
+      ['DB configured', ledger?.storage?.dbConfigured ? 'yes' : 'no', ledger?.storage?.requiredEnv?.join(' + ') ?? 'NEON_DATA_API_URL + NEON_API_KEY'],
+      ['Required table', ledger?.storage?.requiredTable ?? 'terminal_paper_ledger', ledger?.storage?.note ?? 'Waiting for paper ledger storage metadata']
     ]} />
     <div className="terminalDataTable paperLedgerTable" role="table" aria-label="Paper trade ledger"><div className="terminalDataRow terminalDataHead" role="row"><span>Time</span><span>Side</span><span>Status</span><span>Amount</span><span>Tokens</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Actions</span></div>{(ledger?.entries ?? []).slice(0, 20).map((entry) => <div className="terminalDataRow" role="row" key={entry.id}><span>{formatDateTime(entry.createdAt)}</span><strong>{entry.side}</strong><span>{entry.status}</span><span>{entry.amountIn} {entry.spendAsset}</span><span>{formatTokenAmount(entry.tokens)}</span><span>{formatUsd(entry.entryPriceUsd)}</span><span>{formatUsd(entry.exitPriceUsd)}</span><span>{formatUsd(entry.realizedPnlUsd)}</span><span>{entry.status === 'open' ? <button type="button" onClick={() => void closePaperEntry(entry.id)}>Paper exit</button> : entry.execution}</span></div>)}{!(ledger?.entries ?? []).length && <div className="terminalDataRow" role="row"><strong>No paper entries</strong><span>Preview quote, then record paper entry.</span><span>No real transaction will be created.</span></div>}</div>
   </div>;
