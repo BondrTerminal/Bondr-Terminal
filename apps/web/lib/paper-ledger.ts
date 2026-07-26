@@ -26,7 +26,9 @@ export type PaperLedgerEntry = {
 
 type PaperLedgerStore = { version: 1; entries: PaperLedgerEntry[] };
 
-const PAPER_LEDGER_PATH = join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'terminal-paper-ledger.json');
+const PAPER_LEDGER_PATH = process.env.VERCEL
+  ? join('/tmp', 'terminal-paper-ledger.json')
+  : join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'terminal-paper-ledger.json');
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function emptyStore(): PaperLedgerStore { return { version: 1, entries: [] }; }
