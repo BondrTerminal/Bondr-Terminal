@@ -200,7 +200,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
     }
 
     const devWallets = wallets.map((wallet) => wallet.address).join(',');
-    const query = new URLSearchParams({ mint: activeMint, holderLimit: '100', limit: '100' });
+    const query = new URLSearchParams({ mint: activeMint, holderLimit: '25', limit: '30', profile: 'prototype' });
     if (projectId) query.set('project', projectId);
     if (devWallets) query.set('devWallets', devWallets);
 

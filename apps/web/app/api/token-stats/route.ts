@@ -311,9 +311,10 @@ function unavailableResponse(mint: string, reason: string, configured: boolean) 
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const prototype = searchParams.get('profile') === 'prototype' || searchParams.get('prototype') === '1';
   const mintParam = searchParams.get('mint')?.trim();
   const devWallets = parseDevWallets(searchParams.get('devWallets'));
-  const holderListLimit = Math.min(Math.max(Number(searchParams.get('holderListLimit') ?? '100'), 1), 250);
+  const holderListLimit = Math.min(Math.max(Number(searchParams.get('holderListLimit') ?? '100'), 1), prototype ? 20 : 250);
 
   if (!mintParam) return Response.json({ error: 'Missing mint query parameter.' }, { status: 400 });
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mintParam)) return Response.json({ error: 'Invalid Solana mint/address shape.' }, { status: 400 });
@@ -327,7 +328,7 @@ export async function GET(request: Request) {
     const mint = new PublicKey(mintParam);
     const warnings: string[] = [];
     const rugcheck = await fetchRugCheck(mintParam);
-    const supplyResult = await withTimeout(connection.getTokenSupply(mint, 'confirmed')).catch((error) => {
+    const supplyResult = prototype ? null : await withTimeout(connection.getTokenSupply(mint, 'confirmed')).catch((error) => {
       warnings.push(`Supply lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
       return null;
     });
@@ -336,7 +337,7 @@ export async function GET(request: Request) {
     const supply = supplyResult?.value.uiAmount ?? (typeof rugcheck?.token?.supply === 'number' ? rugcheck.token.supply : null);
     const supplyDecimals = supplyResult?.value.decimals ?? fallbackDecimals;
     const supplyRaw = supplyResult?.value.amount ?? (typeof rugcheck?.token?.supply === 'number' ? String(rugcheck.token.supply) : null);
-    const largestAccounts = await withTimeout(connection.getTokenLargestAccounts(mint, 'confirmed')).catch((error) => {
+    const largestAccounts = prototype ? null : await withTimeout(connection.getTokenLargestAccounts(mint, 'confirmed')).catch((error) => {
       warnings.push(`Largest holder lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
       return null;
     });
@@ -346,11 +347,14 @@ export async function GET(request: Request) {
         decimals: supplyDecimals
       }));
     const top10Amount = largest.slice(0, 10).reduce((sum, account) => sum + account.amount, 0);
-    const top20WithOwners = await Promise.all(largest.slice(0, 20).map(async (account) => ({
-      ...account,
-      owner: await getParsedOwner(connection, account.tokenAccount),
-      pct: pct(account.amount, supply)
-    })));
+    const top20WithOwners = prototype
+      ? largest.slice(0, 20).map((account) => ({ ...account, owner: null, pct: pct(account.amount, supply), ownerStatus: 'prototype-skip' }))
+      : await Promise.all(largest.slice(0, 20).map(async (account) => ({
+        ...account,
+        owner: await getParsedOwner(connection, account.tokenAccount),
+        pct: pct(account.amount, supply),
+        ownerStatus: 'solana-rpc-getParsedAccountInfo'
+      })));
 
     const devBalances = await Promise.all(devWallets.map(async (wallet) => {
       try {
@@ -363,8 +367,9 @@ export async function GET(request: Request) {
     const devAmount = devBalances.reduce((sum, row) => sum + row.amount, 0);
 
     let holderSource = 'unavailable';
-    let holderAccounts: (Omit<Awaited<ReturnType<typeof getHolderTokenAccounts>>, 'tokenAccountCount'> & { tokenAccountCount: number | null }) | null = await getSolscanHolderRows(mint.toBase58(), holderListLimit);
-    if (holderAccounts?.rows?.length) holderSource = 'solscan-pro-token-holders';
+    const prototypeRugRows = prototype ? rugHolderRows(rugcheck, holderListLimit, supply) : [];
+    let holderAccounts: (Omit<Awaited<ReturnType<typeof getHolderTokenAccounts>>, 'tokenAccountCount'> & { tokenAccountCount: number | null }) | null = prototypeRugRows.length ? { tokenAccountCount: null, nonZeroTokenAccounts: prototypeRugRows.length, uniqueOwnerCount: new Set(prototypeRugRows.map((row) => row.owner).filter(Boolean)).size, rows: prototypeRugRows } : await getSolscanHolderRows(mint.toBase58(), holderListLimit);
+    if (holderAccounts?.rows?.length) holderSource = prototypeRugRows.length ? 'rugcheck-top-holders' : 'solscan-pro-token-holders';
 
     if (!holderAccounts?.rows?.length) {
       holderAccounts = await getHeliusHolderTokenAccounts(mint.toBase58(), holderListLimit);
@@ -409,11 +414,14 @@ export async function GET(request: Request) {
     }
 
     const rawHolderRows = (holderAccounts?.rows ?? []) as HolderAccountRow[];
-    const holderRows = await enrichHolderOwnerBalances(connection, rawHolderRows.map((row, index) => ({
+    const rankedHolderRows = rawHolderRows.map((row, index) => ({
       ...row,
       rank: typeof row.rank === 'number' ? row.rank : index + 1,
       pct: typeof row.pct === 'number' ? row.pct : pct(row.uiAmount, supply)
-    })), warnings);
+    }));
+    const holderRows = prototype
+      ? rankedHolderRows.map((row) => ({ ...row, ownerSolBalance: null, ownerBalanceStatus: row.owner ? 'prototype-skip' : 'missing-owner' }))
+      : await enrichHolderOwnerBalances(connection, rankedHolderRows, warnings);
 
     return Response.json({
       mint: mint.toBase58(),
@@ -438,7 +446,7 @@ export async function GET(request: Request) {
         rows: holderRows,
         status: holderAccounts?.rows?.length ? 'ok' : typeof rugcheck?.totalHolders === 'number' ? 'summary-only' : 'limited',
         source: holderAccounts?.rows?.length ? (searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'solana-rpc-getParsedProgramAccounts' : holderSource) : 'rugcheck-summary',
-        note: holderAccounts?.rows?.length ? (searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'Token holder accounts loaded through full Solana RPC token program account scan; owner SOL balances enriched through RPC.' : `Top holder rows loaded from ${holderSource}; owner SOL balances enriched through RPC when owners are known.`)  : typeof rugcheck?.totalHolders === 'number' ? 'Total holders from RugCheck report; RPC holder account list unavailable.' : 'RPC/RugCheck did not return exact holders.'
+        note: holderAccounts?.rows?.length ? (prototype ? `Top holder rows loaded from ${holderSource}; owner SOL balance enrichment skipped in prototype mode.` : searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'Token holder accounts loaded through full Solana RPC token program account scan; owner SOL balances enriched through RPC.' : `Top holder rows loaded from ${holderSource}; owner SOL balances enriched through RPC when owners are known.`)  : typeof rugcheck?.totalHolders === 'number' ? 'Total holders from RugCheck report; RPC holder account list unavailable.' : 'RPC/RugCheck did not return exact holders.'
       },
       concentration: {
         top10Amount,

@@ -274,6 +274,9 @@ export async function GET(request: Request) {
   const holderLimit = Number(searchParams.get('holderLimit') ?? '100');
   const limit = Number(searchParams.get('limit') ?? '100');
   const smoke = searchParams.get('smoke') === '1';
+  const profile = searchParams.get('profile')?.trim() ?? '';
+  const prototype = profile === 'prototype' || searchParams.get('prototype') === '1';
+  const skipHeavy = smoke || prototype;
   if (!mint || !ADDRESS_RE.test(mint)) return Response.json({ error: 'Missing or invalid mint.' }, { status: 400 });
 
   const devWallets = searchParams.get('devWallets')?.trim() ?? '';
@@ -281,20 +284,20 @@ export async function GET(request: Request) {
   const projectParam = project ? `&project=${encodeURIComponent(project)}` : '';
   const devParam = devWallets ? `&devWallets=${encodeURIComponent(devWallets)}` : '';
 
-  const boundedLimit = Math.min(Math.max(limit, 1), smoke ? 10 : 100);
-  const boundedHolderLimit = Math.min(Math.max(holderLimit, 1), smoke ? 1 : 250);
+  const boundedLimit = Math.min(Math.max(limit, 1), smoke ? 10 : prototype ? 30 : 100);
+  const boundedHolderLimit = Math.min(Math.max(holderLimit, 1), smoke ? 1 : prototype ? 25 : 250);
   const [health, pool, marketFeed, pumpToken, stats, transactions, fresh, bundles, devSold, pumpMigrations, backend] = await Promise.all([
-    readJson(origin, '/api/indexer-health'),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', note: 'Skipped provider health probe during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, '/api/indexer-health'),
     readJson(origin, `/api/token-pool-index?mint=${qMint}`),
     readJson(origin, `/api/token-market-feed?mint=${qMint}`),
     readJson(origin, `/api/pumpfun/token?mint=${qMint}`),
-    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', holders: { rows: [], tokenAccountCount: null, nonZeroTokenAccounts: null, uniqueOwnerCount: null, totalHolders: null, status: 'smoke', source: 'contract-smoke', note: 'Smoke mode skips heavy RPC holder scan.' } }) : readJson(origin, `/api/token-stats?mint=${qMint}&holderListLimit=${boundedHolderLimit}${devParam}`),
-    readJson<{ trades?: TradeRow[]; sources?: Json; summary?: Json; fallbackSource?: string | null; status?: string }>(origin, `/api/token-transactions?mint=${qMint}&limit=${boundedLimit}`),
-    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', rows: [], summary: { tradeRows: 0, walletsClassified: 0, freshCount: 0, freshPct: null } }) : readJson(origin, `/api/fresh-wallet-classifier?mint=${qMint}&limit=${boundedLimit}`),
-    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', clusters: [], summary: { sampledTransactions: 0, suspectedClusters: 0 } }) : readJson(origin, `/api/bundle-clustering-index?mint=${qMint}&limit=${boundedLimit}`),
-    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', wallets: [], summary: { walletsWithOutgoingTransfers: 0, totalOutgoingAmount: 0, totalIncomingAmount: 0 } }) : readJson<{ wallets?: DevWalletRow[]; summary?: Json; source?: string }>(origin, `/api/dev-sold-classifier?mint=${qMint}${devParam}&limit=${boundedLimit}`),
-    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', migrations: [] }) : readJson(origin, `/api/pumpfun/migrations?limit=50`),
-    smoke ? Promise.resolve({ status: 'smoke', execution: { terminalOrders: { orders: [], execution: 'contract-smoke' }, bundleSequencer: { execution: 'contract-smoke' }, orderEngine: {} }, wallets: { rows: [], tokenBalances: { rows: [] } } }) : readJson(origin, `/api/terminal-backend?mint=${qMint}${projectParam}`)
+    smoke ? Promise.resolve({ status: 'smoke', source: 'contract-smoke', holders: { rows: [], tokenAccountCount: null, nonZeroTokenAccounts: null, uniqueOwnerCount: null, totalHolders: null, status: 'smoke', source: 'contract-smoke', note: 'Smoke mode skips heavy RPC holder scan.' } }) : readJson(origin, `/api/token-stats?mint=${qMint}&holderListLimit=${boundedHolderLimit}${prototype ? '&profile=prototype' : ''}${devParam}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', trades: [], sources: { trades: { primary: 'prototype-skip' } }, summary: { tradeRows: 0 }, fallbackSource: null, tradeTape: { status: prototype ? 'prototype' : 'smoke', primary: 'prototype-skip', rows: 0, blockers: [], optionalProviderGaps: [], latencyMs: null, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' } }) : readJson<{ trades?: TradeRow[]; sources?: Json; summary?: Json; fallbackSource?: string | null; status?: string; tradeTape?: Json }>(origin, `/api/token-transactions?mint=${qMint}&limit=${boundedLimit}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', rows: [], summary: { tradeRows: 0, walletsClassified: 0, freshCount: 0, freshPct: null }, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, `/api/fresh-wallet-classifier?mint=${qMint}&limit=${boundedLimit}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', clusters: [], summary: { sampledTransactions: 0, suspectedClusters: 0 }, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, `/api/bundle-clustering-index?mint=${qMint}&limit=${boundedLimit}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', wallets: [], summary: { walletsWithOutgoingTransfers: 0, totalOutgoingAmount: 0, totalIncomingAmount: 0 }, note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson<{ wallets?: DevWalletRow[]; summary?: Json; source?: string }>(origin, `/api/dev-sold-classifier?mint=${qMint}${devParam}&limit=${boundedLimit}`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', source: 'prototype-skip', migrations: [], note: 'Skipped during prototype scan to avoid upstream 429 pressure.' }) : readJson(origin, `/api/pumpfun/migrations?limit=50`),
+    skipHeavy ? Promise.resolve({ status: prototype ? 'prototype' : 'smoke', execution: { terminalOrders: { orders: [], execution: 'prototype-skip' }, bundleSequencer: { execution: 'prototype-skip' }, orderEngine: {} }, wallets: { rows: [], tokenBalances: { rows: [] } }, note: 'Skipped during prototype scan to keep scanner responsive.' }) : readJson(origin, `/api/terminal-backend?mint=${qMint}${projectParam}`)
   ]);
 
   const trades = transactions?.trades ?? [];
@@ -304,11 +307,11 @@ export async function GET(request: Request) {
   const snapshotPriceUsd = numberOrNull(((pool as Json | null)?.summary as Json | undefined)?.priceUsd);
   const traderRows = topTraders(trades, snapshotPriceUsd);
   const statsHolderRows = (((stats as Json | null)?.holders as Json | undefined)?.rows ?? []) as HolderRow[];
-  const holderLifecycle = await holderWalletLifecycles(statsHolderRows, mint, !smoke);
+  const holderLifecycle = await holderWalletLifecycles(statsHolderRows, mint, !skipHeavy);
   const holderRows = holderSummary(stats as Json | null, trades, pool as Json | null, holderLifecycle);
   const positionRows = positionSummary(backend as Json | null, traderRows, snapshotPriceUsd);
   const pumpCreator = (pumpToken as { creator?: string | null } | null)?.creator ?? null;
-  const pumpDevTokens = pumpCreator && !smoke ? await readJson(origin, `/api/pumpfun/dev-tokens?creator=${encodeURIComponent(pumpCreator)}&limit=50`) : { status: pumpCreator ? 'smoke' : 'missing-creator', source: 'pumpfun', tokens: [] };
+  const pumpDevTokens = pumpCreator && !skipHeavy ? await readJson(origin, `/api/pumpfun/dev-tokens?creator=${encodeURIComponent(pumpCreator)}&limit=50`) : { status: pumpCreator ? (prototype ? 'prototype' : 'smoke') : 'missing-creator', source: skipHeavy ? 'prototype-skip' : 'pumpfun', tokens: [], note: skipHeavy ? 'Skipped during prototype scan to avoid upstream 429 pressure.' : undefined };
   const devRows = (devSold?.wallets ?? []).map((row) => ({ ...row, source: devSold?.source ?? 'helius-required' }));
 
   return Response.json({
