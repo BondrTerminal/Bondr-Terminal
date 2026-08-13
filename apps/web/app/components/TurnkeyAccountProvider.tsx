@@ -22,6 +22,18 @@ export type BondrTurnkeyAccount = {
   firstAccountAddress: string | null;
   sessionExpiresAt: string | null;
   sessionJwt: string | null;
+  debug: {
+    lastEvent: string;
+    callbackFired: boolean;
+    callbackMethod: string | null;
+    callbackAction: string | null;
+    callbackHadSession: boolean;
+    callbackHadUserOrg: boolean;
+    lastErrorCode: string | null;
+    lastErrorMessage: string | null;
+    hasTurnkeySession: boolean;
+    hasSessionUserOrg: boolean;
+  };
   login: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -44,6 +56,18 @@ const defaultAccount: BondrTurnkeyAccount = {
   firstAccountAddress: null,
   sessionExpiresAt: null,
   sessionJwt: null,
+  debug: {
+    lastEvent: 'not-started',
+    callbackFired: false,
+    callbackMethod: null,
+    callbackAction: null,
+    callbackHadSession: false,
+    callbackHadUserOrg: false,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    hasTurnkeySession: false,
+    hasSessionUserOrg: false
+  },
   login: noop,
   logout: noop,
   refresh: noop
@@ -61,6 +85,21 @@ type TurnkeyAuthSessionLike = {
 
 type VerifiedTurnkeySession = Required<Pick<TurnkeyAuthSessionLike, 'userId' | 'organizationId'>> & Pick<TurnkeyAuthSessionLike, 'expiry' | 'token' | 'publicKey'>;
 
+type AuthDebugState = BondrTurnkeyAccount['debug'];
+
+const defaultDebugState: AuthDebugState = {
+  lastEvent: 'not-started',
+  callbackFired: false,
+  callbackMethod: null,
+  callbackAction: null,
+  callbackHadSession: false,
+  callbackHadUserOrg: false,
+  lastErrorCode: null,
+  lastErrorMessage: null,
+  hasTurnkeySession: false,
+  hasSessionUserOrg: false
+};
+
 function normalizeVerifiedSession(session: TurnkeyAuthSessionLike | undefined): VerifiedTurnkeySession | null {
   if (!session?.userId || !session.organizationId) return null;
   if (typeof session.expiry === 'number' && session.expiry > 0 && session.expiry * 1000 <= Date.now()) return null;
@@ -76,6 +115,18 @@ function normalizeVerifiedSession(session: TurnkeyAuthSessionLike | undefined): 
 function sessionExpiryIso(expiry: unknown) {
   if (typeof expiry === 'number' && Number.isFinite(expiry)) return new Date(expiry * 1000).toISOString();
   return maybeString(expiry);
+}
+
+function safeErrorMessage(value: unknown) {
+  return value instanceof Error ? value.message.slice(0, 240) : 'Turnkey auth error';
+}
+
+function safeErrorCode(value: unknown) {
+  if (typeof value === 'object' && value && 'code' in value) {
+    const code = (value as { code?: unknown }).code;
+    return typeof code === 'string' ? code.slice(0, 80) : null;
+  }
+  return null;
 }
 
 
@@ -105,7 +156,7 @@ function configuredTurnkeyConfig(): TurnkeyProviderConfig {
   };
 }
 
-function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, clearVerifiedSession }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; setVerifiedSession: (session: VerifiedTurnkeySession) => void; clearVerifiedSession: () => void }) {
+function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, clearVerifiedSession, debug, setDebug }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; setVerifiedSession: (session: VerifiedTurnkeySession) => void; clearVerifiedSession: () => void; debug: AuthDebugState; setDebug: (updater: (current: AuthDebugState) => AuthDebugState) => void }) {
   const turnkey = useTurnkey();
   const clientReady = turnkey.clientState === ClientState.Ready;
   const session = turnkey.session as Record<string, unknown> | undefined;
@@ -121,9 +172,10 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     if (!verified) return;
     if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
     setVerifiedSession(verified);
+    setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true }));
     sessionStorage.setItem('bondr_verified_auth', 'true');
     window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
-  }, [setVerifiedSession, turnkey.session, verifiedSession?.organizationId, verifiedSession?.userId]);
+  }, [setDebug, setVerifiedSession, turnkey.session, verifiedSession?.organizationId, verifiedSession?.userId]);
 
   const value = useMemo<BondrTurnkeyAccount>(() => ({
     configured: true,
@@ -140,25 +192,33 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     firstAccountAddress: firstAccount?.address ?? null,
     sessionExpiresAt: sessionExpiryIso(session?.expiry) ?? maybeString(session?.expiresAt) ?? sessionExpiryIso(verifiedSession?.expiry),
     sessionJwt: maybeString(session?.token) ?? maybeString(session?.jwt) ?? maybeString(session?.sessionJwt) ?? verifiedSession?.token ?? null,
+    debug: {
+      ...debug,
+      hasTurnkeySession: Boolean(turnkey.session),
+      hasSessionUserOrg: Boolean(sessionUserId && sessionOrganizationId)
+    },
     login: async () => {
+      setDebug((current) => ({ ...current, lastEvent: 'login-modal-opened', lastErrorCode: null, lastErrorMessage: null }));
       await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
     logout: async () => {
       clearVerifiedSession();
+      setDebug(() => ({ ...defaultDebugState, lastEvent: 'logout' }));
       sessionStorage.removeItem('bondr_verified_auth');
       await turnkey.logout();
     },
     refresh: async () => {
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     }
-  }), [authenticated, clearVerifiedSession, clientReady, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, turnkey, user, verifiedSession]);
+  }), [authenticated, clearVerifiedSession, clientReady, debug, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedSession]);
 
   return <TurnkeyAccountContext.Provider value={value}>{children}</TurnkeyAccountContext.Provider>;
 }
 
 export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
   const [verifiedSession, setVerifiedSession] = useState<VerifiedTurnkeySession | null>(null);
+  const [debug, setDebug] = useState<AuthDebugState>(defaultDebugState);
 
   if (!configured) {
     return <TurnkeyAccountContext.Provider value={defaultAccount}>{children}</TurnkeyAccountContext.Provider>;
@@ -168,8 +228,19 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
     <TurnkeyProvider
       config={configuredTurnkeyConfig()}
       callbacks={{
-        onAuthenticationSuccess: ({ session }) => {
+        onAuthenticationSuccess: ({ session, method, action }) => {
           const verified = normalizeVerifiedSession(session);
+          setDebug((current) => ({
+            ...current,
+            lastEvent: verified ? 'authentication-success' : 'authentication-success-without-session',
+            callbackFired: true,
+            callbackMethod: String(method),
+            callbackAction: String(action),
+            callbackHadSession: Boolean(session),
+            callbackHadUserOrg: Boolean(verified),
+            lastErrorCode: null,
+            lastErrorMessage: null
+          }));
           if (!verified) return;
           setVerifiedSession(verified);
           sessionStorage.setItem('bondr_verified_auth', 'true');
@@ -177,10 +248,18 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
             window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
           }, 0);
         },
-        onError: (error) => console.error('Turnkey account error:', error)
+        onError: (error) => {
+          setDebug((current) => ({
+            ...current,
+            lastEvent: 'turnkey-error',
+            lastErrorCode: safeErrorCode(error),
+            lastErrorMessage: safeErrorMessage(error)
+          }));
+          console.error('Turnkey account error:', error);
+        }
       }}
     >
-      <TurnkeyAccountBridge verifiedSession={verifiedSession} setVerifiedSession={setVerifiedSession} clearVerifiedSession={() => setVerifiedSession(null)}>{children}</TurnkeyAccountBridge>
+      <TurnkeyAccountBridge verifiedSession={verifiedSession} setVerifiedSession={setVerifiedSession} clearVerifiedSession={() => setVerifiedSession(null)} debug={debug} setDebug={setDebug}>{children}</TurnkeyAccountBridge>
     </TurnkeyProvider>
   );
 }
