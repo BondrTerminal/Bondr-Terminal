@@ -62,7 +62,7 @@ function TurnkeyConfiguredPanel() {
           <div className="eyebrow">Turnkey profile</div>
           <h1>{authenticated ? 'Turnkey identity connected' : 'Log in with Turnkey'}</h1>
           <p>
-            Turnkey provides the operator identity layer for Bond.Terminal. Transaction signing still happens through explicit wallet prompts and protected execution gates.
+            Turnkey provides the operator identity layer for Bond.Terminal. Use it with the protected operator session before any gated transaction-building workflow.
           </p>
         </div>
         <div className="profileActions">
@@ -93,7 +93,7 @@ function TurnkeyConfiguredPanel() {
       <div className="documentCard">
         <h2>Access model</h2>
         <ol className="roadmapList">
-          <li>Turnkey authenticates the operator profile.</li>
+          <li>Turnkey authenticates the operator profile through Auth Proxy.</li>
           <li>The operator session protects server-side gated workflows.</li>
           <li>Browser wallets remain the signing authority for transactions.</li>
           <li>Execution policies still enforce simulation, signer matching, and route limits.</li>

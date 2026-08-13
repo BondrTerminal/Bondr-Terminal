@@ -16,7 +16,8 @@ const navItems = [
   { href: '/wallets', label: 'Wallets' },
   { href: '/projects', label: 'Projects' },
   { href: '/portfolio', label: 'Portfolio' },
-  { href: '/token-analyzer', label: 'Analyzer' }
+  { href: '/token-analyzer', label: 'Analyzer' },
+  { href: '/github', label: 'GitHub' }
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -40,6 +41,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <a className="bondrProfileOrb" href="/profile" aria-label="Open profile and account">B</a>
             </div>
           </header>
+          <div className="preBetaGlobalStrip" role="status" aria-label="BONDR pre-beta execution status">
+            <strong>Live beta A-profile active</strong>
+            <span>Signing + simulation are enabled behind operator auth and browser-wallet confirmation. Broadcast, deployment, wallet funding, claims, and payouts remain disabled.</span>
+          </div>
           <div className="bondrAppContent">
             {children}
           </div>

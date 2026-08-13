@@ -29,7 +29,7 @@ export function OperatorSessionLogin() {
       const response = await fetch('/api/meridian-session', { cache: 'no-store' });
       const payload = await response.json() as SessionPayload;
       setSession(payload);
-      setMessage(payload.auth?.authenticated ? 'Operator session active.' : payload.auth?.configured ? 'Operator session required.' : 'Operator auth is not configured.');
+      setMessage(payload.auth?.authenticated ? 'Operator session active.' : payload.auth?.configured ? 'Operator session required for build/simulate/sign QA.' : 'Operator auth is not configured.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Session status failed.');
     } finally {
@@ -50,7 +50,7 @@ export function OperatorSessionLogin() {
       setSession(payload);
       if (!response.ok) { setMessage(payload.error ?? 'Operator login failed.'); return; }
       setSessionKey('');
-      setMessage('Operator session active. You can now use gated Bond.Terminal workflows in this browser.');
+      setMessage('Operator session active. Return to Live Beta Test and refresh capabilities.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Operator login failed.');
     } finally {
@@ -82,7 +82,7 @@ export function OperatorSessionLogin() {
     <section className="documentCard operatorSessionPanel" aria-label="Operator session login">
       <div className="sectionIntro compactIntro">
         <span>Operator session</span>
-        <h2>{authenticated ? 'Session active' : 'Login required'}</h2>
+        <h2>{authenticated ? 'Session active' : 'Login required for live-beta build/sign QA'}</h2>
         <p>{message}</p>
       </div>
       <div className="infoGrid">
@@ -105,7 +105,7 @@ export function OperatorSessionLogin() {
         <button className="button secondary" type="button" onClick={() => void refresh()} disabled={loading}>Refresh status</button>
         <button className="button secondary" type="button" onClick={() => void logout()} disabled={loading || !authenticated}>Clear session</button>
       </div>
-      <p className="qaMuted">This creates the protected operator session cookie only. It does not request private keys, sign transactions, fund wallets, deploy tokens, or broadcast.</p>
+      <p className="qaMuted">This only creates the protected operator session cookie. It does not request private keys, sign transactions, fund wallets, deploy tokens, or enable broadcast.</p>
     </section>
   );
 }

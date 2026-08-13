@@ -47,8 +47,8 @@ export default async function SniperPage({ searchParams }: SniperPageProps) {
     <main className="terminalMainSurface">
       <div className="axiomTerminalShell premiumTerminalShell cleanProductShell">
         <section className="terminalCompactProjectStrip" aria-label="Terminal context">
-          <div><span>{selectedProject ? 'Project terminal' : 'Terminal'}</span><strong>{selectedProject?.name ?? 'Token trading terminal'}</strong><small>{terminalWarning ?? 'Quote, build an unsigned transaction, simulate, then sign locally in your browser wallet.'}</small></div>
-          <nav aria-label="Terminal links"><a href={selectedProject ? `/deployment?project=${encodeURIComponent(selectedProject.id)}` : '/deployment'}>Deployment</a><a href={selectedProject ? `/wallets?project=${encodeURIComponent(selectedProject.id)}` : '/wallets'}>Wallets</a></nav>
+          <div><span>{selectedProject ? 'Project terminal' : 'Terminal'}</span><strong>{selectedProject?.name ?? 'Token trading terminal'}</strong><small>{terminalWarning ?? 'Quote, build unsigned transaction, simulate, then sign locally in browser wallet. Broadcast remains disabled.'}</small></div>
+          <nav aria-label="Terminal links"><a href={selectedProject ? `/deployment?project=${encodeURIComponent(selectedProject.id)}` : '/deployment'}>Deployment</a><a href={selectedProject ? `/wallets?project=${encodeURIComponent(selectedProject.id)}` : '/wallets'}>Wallets</a><a href="/live-beta-test">Live Beta Test</a></nav>
         </section>
 
         <WalletRailStatus surface="terminal" selectedWalletAddress={selectedWallet?.address ?? null} activeMint={defaultMint || null} />

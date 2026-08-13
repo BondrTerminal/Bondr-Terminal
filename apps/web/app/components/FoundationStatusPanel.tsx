@@ -3,7 +3,7 @@ import { meridianAuthConfig, meridianSessionStatus } from '../../lib/meridian-au
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
 
 type FoundationStatusPanelProps = {
-  surface?: 'profile' | 'wallets' | 'terminal' | 'portfolio' | 'deployment' | 'liquidity' | 'projects';
+  surface?: 'profile' | 'wallets' | 'terminal' | 'live-beta-test' | 'portfolio' | 'deployment' | 'liquidity' | 'projects';
   compact?: boolean;
 };
 
@@ -14,22 +14,22 @@ export async function FoundationStatusPanel({ surface = 'profile', compact = fal
   const auth = meridianAuthConfig();
   const live = getLiveActivationStatus({ rpcHealth, auth, authenticated: session.authenticated, authReason: session.authenticated ? null : session.reason });
   const providerLimited = rpcHealth.status !== 'live' || rpcHealth.quotaLimited;
-  const title = surface === 'terminal' ? 'Terminal foundation status' : surface === 'deployment' ? 'Deployment foundation status' : surface === 'portfolio' ? 'Portfolio data foundation' : surface === 'wallets' ? 'Wallet Ops foundation status' : 'Foundation status';
+  const title = surface === 'terminal' ? 'Terminal foundation status' : surface === 'live-beta-test' ? 'Live Beta foundation status' : surface === 'deployment' ? 'Deployment foundation status' : surface === 'portfolio' ? 'Portfolio data foundation' : surface === 'wallets' ? 'Wallet Ops foundation status' : 'Foundation status';
   const rows = [
     ['wallet identity', 'canonical /api/wallet-rail', 'Connected signer + selected wallet + Wallet Ops inventory are the wallet truth.'],
     ['SOL balance', providerLimited ? 'provider-limited' : 'live/provider checked', providerLimited ? 'Balance provider-limited; wallet may still have funds.' : 'Live RPC/provider status available.'],
     ['token balance', 'active mint via wallet rail', 'Token balance is read only when a mint is supplied.'],
-    ['auth', auth.configured ? session.authenticated ? 'authenticated' : 'required' : 'not-configured', auth.configured ? session.authenticated ? 'Operator session active.' : 'Operator login required.' : 'Operator auth not configured in this environment.'],
+    ['auth', auth.configured ? session.authenticated ? 'authenticated' : 'required' : 'not-configured', auth.configured ? session.authenticated ? 'Operator session active.' : 'Operator login required before live signing test.' : 'Operator auth not configured in this environment.'],
     ['execution capability', live.readinessLevel, `Signing ${stateLabel(live.signingEnabled, 'enabled', 'disabled')} · broadcast ${stateLabel(live.broadcastEnabled, 'enabled', 'disabled')}.`],
-    ['browser-wallet signing path', live.signingEnabled ? 'available after simulation' : 'blocked', 'Browser wallet signs; server custody and private keys are not used.'],
-    ['broadcast', live.broadcastEnabled ? 'enabled' : 'disabled', 'Broadcast is controlled by execution policy.'],
+    ['A-profile signing path', live.signingEnabled ? 'available after simulation' : 'blocked', 'Browser wallet still signs; server custody and private keys are not used.'],
+    ['broadcast', live.broadcastEnabled ? 'enabled' : 'disabled', 'Broadcast disabled in A-profile.'],
     ['deployment', live.deploymentEnabled ? 'enabled' : 'disabled', 'Deployment disabled until separate approval.']
   ];
 
   return (
     <section className={`foundationStatusPanel ${compact ? 'compactFoundationStatus' : ''}`} aria-label={`${title} foundation`}>
       <div className="foundationStatusHead">
-        <div><span>Foundation truth</span><strong>{title}</strong><small>Wallet identity, balances, auth, and execution capability in one place.</small></div>
+        <div><span>Foundation truth</span><strong>{title}</strong><small>Wallet identity, balances, auth, execution capability, and A-profile gates in one place.</small></div>
         <em>{live.readinessLevel}</em>
       </div>
       <div className="foundationStatusGrid">

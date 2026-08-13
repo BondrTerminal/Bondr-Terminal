@@ -17,7 +17,7 @@ export default function Home() {
           <div className="heroCopy">
             <div className="eyebrow">BONDR</div>
             <h1>Solana launch operating system.</h1>
-            <p>One active-wallet model across Projects, Wallet Ops, Terminal, Deployment, Portfolio, and Liquidity. Browser-wallet signing is gated by simulation, signer matching, and execution policy.</p>
+            <p>One active-wallet model across Projects, Wallet Ops, Terminal, Deployment, Portfolio, and Liquidity. A-profile supports simulation-gated browser-wallet signing only; broadcast, deployment execution, funding, claims, and payouts stay disabled.</p>
             <div className="heroActions">
               <a className="button" href="/wallets">Connect Wallet</a>
               <a className="button secondary" href="/sniper">Open Terminal</a>
@@ -25,7 +25,7 @@ export default function Home() {
             </div>
           </div>
           <div className="heroSignalCard" aria-label="BONDR current product status">
-            <span>Execution policy</span>
+            <span>A-profile</span>
             <strong>Simulation-gated signing</strong>
             <p>Browser wallet signs only after quote, unsigned build, and simulation. Broadcast and deployment execution are separate gates and are off.</p>
             <div className="signalRows">
@@ -54,7 +54,7 @@ export default function Home() {
             <p>Empty project and wallet states are intentional. If a provider is limited, BONDR says provider-limited instead of showing invented balances or seeded rows.</p>
           </div>
           <div className="disclosureList">
-            {['No server custody or private-key requests.', 'No hidden custody, surprise broadcasts, or unsigned execution paths.', 'Signing eligibility requires a connected browser signer that matches the selected wallet and a successful simulation first.'].map((item) => <p key={item}>{item}</p>)}
+            {['No server custody or private-key requests.', 'No live swaps, sends, funding, deployment execution, LP actions, claims, payouts, or broadcast in A-profile.', 'Signing eligibility requires a connected browser signer that matches the selected wallet and a successful simulation first.'].map((item) => <p key={item}>{item}</p>)}
           </div>
         </section>
       </div>

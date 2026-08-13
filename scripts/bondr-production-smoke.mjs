@@ -6,7 +6,7 @@ const base = (process.env.BONDR_BASE_URL ?? process.env.TERMINAL_BASE_URL ?? 'ht
 const timeoutMs = Number(process.env.BONDR_SMOKE_TIMEOUT_MS ?? 15_000);
 const startedAt = new Date().toISOString();
 
-const pageRoutes = ['/', '/sniper', '/wallets', '/deployment', '/projects', '/portfolio'];
+const pageRoutes = ['/', '/sniper', '/wallets', '/deployment', '/projects', '/portfolio', '/live-beta-test'];
 const apiRoutes = [
   '/api/execution-capabilities',
   '/api/wallets',

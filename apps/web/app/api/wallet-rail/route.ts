@@ -116,7 +116,7 @@ export async function GET(request: Request) {
     connectedSigner && !connectedInventory ? 'Connected signer is not in Wallet Ops.' : null,
     connectedSigner && selectedWallet && connectedSigner !== selectedWallet ? 'Wallet mismatch: selected wallet and connected signer differ.' : null,
     !rpc.configured || balanceStatus === 'provider-limited' ? 'Balance provider-limited.' : null,
-    'Vault custody unavailable; Bond.Terminal uses browser-wallet signing.'
+    'Vault custody unavailable, but A-profile uses browser-wallet signing.'
   ].filter(Boolean);
   const blockers = [
     !connectedSigner ? 'Connect a Solana browser wallet.' : null

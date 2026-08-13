@@ -17,7 +17,7 @@ function activity(walletId: string, type: string, message: string, status: Walle
 function passphrase(body: Body) { const value = clean(body.vaultPassphrase, '', 1000); if (value.length < 8) throw new Error('Vault passphrase must be at least 8 characters.'); return value; }
 function noStore(json: unknown, status = 200) { return Response.json(json, { status, headers: { 'cache-control': 'no-store, no-cache, must-revalidate, private' } }); }
 function walletVaultBetaEnabled() { return process.env.WALLET_VAULT_BETA_ENABLED === 'true'; }
-function betaVaultBlocked(action: unknown) { return noStore({ status: 'blocked', action, error: 'Managed local wallet vault is disabled for this browser-wallet product profile.', execution: 'wallet-vault-disabled-no-private-key-custody' }, 403); }
+function betaVaultBlocked(action: unknown) { return noStore({ status: 'blocked', action, error: 'Managed local wallet vault is disabled for browser-wallet beta.', execution: 'wallet-vault-beta-disabled-no-private-key-custody' }, 403); }
 function managedWalletRecord(store: MeridianStore, role: string, publicKey: string, groupId: string, purpose: string): Wallet {
   const group = store.walletGroups.find((item) => item.id === groupId);
   if (!group) throw new Error('Wallet group does not exist.');
