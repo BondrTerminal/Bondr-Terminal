@@ -84,7 +84,8 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   const [slippage, setSlippage] = useState('100');
   const [priorityFeePreset, setPriorityFeePreset] = useState<(typeof PRIORITY_FEE_PRESETS)[number]>('auto');
   const [sellPercentPreset, setSellPercentPreset] = useState<number | null>(null);
-  const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? 'browser-wallet');
+  const [selectedWalletId, setSelectedWalletId] = useState('browser-wallet');
+  const [clientWallets, setClientWallets] = useState<DockWallet[]>([]);
   const [walletPublicKey, setWalletPublicKey] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<ExecutionCapabilities | null>(null);
   const [tokenBalances, setTokenBalances] = useState<WalletTokenBalances | null>(null);
@@ -117,7 +118,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     const onActiveWalletChanged = (event: Event) => {
       const custom = event as CustomEvent<{ address?: string }>;
       const next = custom.detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? null;
-      if (next) setSelectedWalletId((current) => wallets.find((wallet) => wallet.address === next)?.id ?? current);
+      if (next) setSelectedWalletId(wallets.find((wallet) => wallet.address === next)?.id ?? 'browser-wallet');
     };
     provider?.on?.('accountChanged', onAccount);
     window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
@@ -131,10 +132,24 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     window.addEventListener('meridian-token-loaded', onTokenLoaded);
     return () => window.removeEventListener('meridian-token-loaded', onTokenLoaded);
   }, []);
+  const renderedWallets = useMemo(() => {
+    const seen = new Set<string>();
+    return [...wallets, ...clientWallets].filter((wallet) => {
+      const key = wallet.address.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [clientWallets, wallets]);
   useEffect(() => {
-    if (!wallets.length) return;
-    setSelectedWalletId((current) => wallets.some((wallet) => wallet.id === current) ? current : wallets[0].id);
-  }, [wallets]);
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('bondr.activeWallet') ?? '' : '';
+    setSelectedWalletId((current) => {
+      if (current === 'browser-wallet') return current;
+      if (renderedWallets.some((wallet) => wallet.id === current)) return current;
+      const storedWallet = renderedWallets.find((wallet) => wallet.address === stored);
+      return storedWallet?.id ?? (stored ? 'browser-wallet' : renderedWallets[0]?.id ?? 'browser-wallet');
+    });
+  }, [renderedWallets]);
   useEffect(() => {
     if (!activeMint) { setTokenBalances(null); return; }
     const controller = new AbortController();
@@ -144,12 +159,14 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   useEffect(() => { setSwapBuild(null); setSimulation(null); setSignedSwap(null); }, [activeMint, side, amount, spendAsset, slippage, selectedWalletId]);
   useEffect(() => { if (side === 'Buy') setSellPercentPreset(null); }, [side]);
 
-  const selectedDockWallet = wallets.find((wallet) => wallet.id === selectedWalletId) ?? wallets[0] ?? null;
+  const selectedDockWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? (selectedWalletId === 'browser-wallet' ? null : renderedWallets[0] ?? null);
+  const connectedInventoryWallet = walletPublicKey ? renderedWallets.find((wallet) => wallet.address === walletPublicKey) ?? null : null;
   const tokenBalanceByAddress = useMemo(() => new Map((tokenBalances?.wallets ?? []).map((row) => [String(row.address ?? row.wallet ?? '').toLowerCase(), row])), [tokenBalances]);
   const selectedTokenBalance = selectedDockWallet ? tokenBalanceByAddress.get(selectedDockWallet.address.toLowerCase()) ?? null : null;
   const selectedExecutionAddress = selectedDockWallet?.address ?? walletPublicKey;
-  const selectedSignerMatched = Boolean(walletPublicKey && selectedDockWallet && walletPublicKey === selectedDockWallet.address);
+  const selectedSignerMatched = Boolean(walletPublicKey && selectedExecutionAddress && walletPublicKey === selectedExecutionAddress);
   const signerMismatch = Boolean(walletPublicKey && selectedDockWallet && walletPublicKey !== selectedDockWallet.address);
+  const signerMissingFromWalletOps = Boolean(walletPublicKey && !connectedInventoryWallet);
   const operatorAuthRequired = Boolean(capabilities?.auth?.configured && !capabilities.auth.authenticated);
   const simulationPassed = simulation?.status === 'ok';
   const canPreview = Boolean(activeMint && amount && !quoteLoading);
@@ -187,15 +204,46 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     }
   }
 
+  function useConnectedWalletAsActive(address = walletPublicKey) {
+    if (!address) { setLiveMessage('Connect a Solana browser wallet first.'); return; }
+    const saved = renderedWallets.find((wallet) => wallet.address === address);
+    setSelectedWalletId(saved?.id ?? 'browser-wallet');
+    window.localStorage.setItem('bondr.activeWallet', address);
+    window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address } }));
+    setLiveMessage(saved ? `Connected signer ${compact(address)} is now the active wallet.` : `Connected signer ${compact(address)} is active for this browser. Add it as watch-only to save the public record in Wallet Ops.`);
+  }
+
   async function connectBrowserWallet(): Promise<string | null> {
     const provider = (window as BrowserWindowWithSolana).solana;
     if (!provider) { setLiveMessage('No Solana browser wallet detected. Install Phantom or Solflare.'); return null; }
     const connected = await provider.connect();
-    const key = connected.publicKey.toString();
+    const key = connected.publicKey.toBase58?.() ?? connected.publicKey.toString();
     setWalletPublicKey(key);
-    window.localStorage.setItem('bondr.activeWallet', key);
-    window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: key } }));
+    useConnectedWalletAsActive(key);
     return key;
+  }
+
+  async function addConnectedSignerAsWatchOnly() {
+    const publicKey = walletPublicKey ?? await connectBrowserWallet();
+    if (!publicKey) return;
+    if (renderedWallets.some((wallet) => wallet.address === publicKey)) { useConnectedWalletAsActive(publicKey); return; }
+    setLiveLoading(true);
+    setLiveMessage('Adding connected signer as a watch-only public address.');
+    try {
+      const railResponse = await fetch(`/api/wallet-rail?connectedSigner=${encodeURIComponent(publicKey)}&selectedWallet=${encodeURIComponent(publicKey)}`, { cache: 'no-store' });
+      const rail = await railResponse.json().catch(() => null) as { defaultWatchOnlyGroup?: { id?: string } } | null;
+      const groupId = rail?.defaultWatchOnlyGroup?.id;
+      if (!groupId) throw new Error('No Wallet Ops group is available for watch-only add.');
+      const response = await fetch('/api/wallets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: publicKey, role: 'browser signer watch-only', groupId, purpose: 'Watch-only public address for Bond.Terminal browser-wallet matching and balance display.', status: 'active' }) });
+      const payload = await response.json().catch(() => null) as { error?: string; wallet?: DockWallet; alreadyExisted?: boolean; mutationMode?: string; persisted?: boolean } | null;
+      if (!response.ok) throw new Error(payload?.error ?? `Watch-only wallet add failed with HTTP ${response.status}.`);
+      const saved = payload?.wallet;
+      if (saved?.address) setClientWallets((current) => current.some((wallet) => wallet.address === saved.address) ? current : [...current, { id: saved.id, address: saved.address, role: saved.role, balanceSol: saved.balanceSol ?? 0, purpose: saved.purpose, scope: saved.scope }]);
+      useConnectedWalletAsActive(publicKey);
+      window.dispatchEvent(new CustomEvent('bondr-watch-only-wallet-added', { detail: { address: publicKey } }));
+      setLiveMessage(`${payload?.alreadyExisted ? 'Connected signer already existed in Wallet Ops' : 'Connected signer added as watch-only'} and selected. Storage=${payload?.mutationMode ?? 'unknown'} persisted=${Boolean(payload?.persisted)}. Public address only; browser wallet still signs.`);
+    } catch (error) { setLiveMessage(error instanceof Error ? error.message : 'Watch-only wallet add failed.'); }
+    finally { setLiveLoading(false); }
   }
 
   async function previewQuote() {
@@ -273,7 +321,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
       <section className="dockCard orderTicketCard premiumOrderCard">
         <div className="dockHeader tradingPanelHeader proPaperHeader"><span>Terminal</span><strong>Quote → build → simulate → sign</strong><small>Broadcast disabled in A-profile</small></div>
         <div className="axiomOrderTicket terminalTradeOnlyPanel redesignedTradePanel">
-          <div className="tradePanelSection tradeWalletSection"><div className="tradePanelSectionHead"><span>01</span><strong>Active wallet</strong><small>Browser signer must match selected wallet</small></div><div className="terminalWalletRoutingList cleanWalletList" role="radiogroup" aria-label="Select active wallet">{wallets.length ? wallets.map((wallet) => <button type="button" className={`terminalWalletRoutingItem ${selectedWalletId === wallet.id ? 'selectedPrimaryWallet' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}><strong>{wallet.role}</strong><code>{compact(wallet.address)}</code><small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenBalanceByAddress.get(wallet.address.toLowerCase()))} · {tokenBalanceByAddress.get(wallet.address.toLowerCase())?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small></button>) : <div className="ticketWalletEmpty"><strong>No saved wallets</strong><span>{selectedWalletLabel}. Connect a browser wallet or add a watch-only record in Wallet Ops.</span></div>}</div><div className="ticketSignerRow"><span>Connected signer</span><strong>{walletPublicKey ? compact(walletPublicKey) : 'Not connected'}</strong><button className="button secondary smallButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Reconnect' : 'Connect wallet'}</button></div><div className={`ticketSignerMatchStatus ${selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'}`}><strong>{selectedSignerMatched ? 'Signer matches selected wallet' : signerMismatch ? 'Signer mismatch blocks signing' : 'Signer match pending'}</strong><small>{selectedDockWallet ? `Selected ${compact(selectedDockWallet.address)} · Connected ${walletPublicKey ? compact(walletPublicKey) : '—'}` : 'No Wallet Ops record selected; browser wallet rail still gates signing.'}</small></div></div>
+          <div className="tradePanelSection tradeWalletSection"><div className="tradePanelSectionHead"><span>01</span><strong>Active wallet</strong><small>Browser signer must match selected wallet</small></div><div className="terminalWalletRoutingList cleanWalletList" role="radiogroup" aria-label="Select active wallet">{renderedWallets.length ? renderedWallets.map((wallet) => <button type="button" className={`terminalWalletRoutingItem ${selectedWalletId === wallet.id ? 'selectedPrimaryWallet' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}><strong>{wallet.role}</strong><code>{compact(wallet.address)}</code><small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenBalanceByAddress.get(wallet.address.toLowerCase()))} · {tokenBalanceByAddress.get(wallet.address.toLowerCase())?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small></button>) : <div className="ticketWalletEmpty"><strong>No saved wallets</strong><span>{selectedWalletLabel}. Connect a browser wallet or add a watch-only record in Wallet Ops.</span></div>}</div><div className="ticketSignerRow"><span>Connected signer</span><strong>{walletPublicKey ? compact(walletPublicKey ?? '') : 'Not connected'}</strong><button className="button secondary smallButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Reconnect' : 'Connect wallet'}</button><button className="button secondary smallButton" type="button" onClick={() => useConnectedWalletAsActive()} disabled={!walletPublicKey}>Use connected</button><button className="button secondary smallButton" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={!walletPublicKey || liveLoading || !signerMissingFromWalletOps}>{signerMissingFromWalletOps ? 'Add watch-only' : 'Saved in Wallet Ops'}</button></div><div className={`ticketSignerMatchStatus ${selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'}`}><strong>{selectedSignerMatched ? 'Signer matches selected wallet' : signerMismatch ? 'Signer mismatch blocks signing' : 'Signer match pending'}</strong><small>{selectedDockWallet ? `Selected ${compact(selectedDockWallet.address)} · Connected ${walletPublicKey ? compact(walletPublicKey) : '—'}` : 'No Wallet Ops record selected; browser wallet rail still gates signing.'}</small></div></div>
 
           <div className="tradePanelSection tradeSideSection">
             <div className="tradePanelSectionHead"><span>02</span><strong>Route request</strong><small>Quote preview only until build/simulate</small></div>
@@ -300,7 +348,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
             </div>
           </div>
 
-          <div className="tradePanelSection tradeActionSection"><div className="tradePanelSectionHead"><span>03</span><strong>Execution ladder</strong><small>Simulation required before signing</small></div>{operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}{signerMismatch && <div className="walletMismatchNotice"><strong>Selected wallet and connected signer do not match.</strong><p>Selected: <code>{selectedDockWallet?.address}</code></p><p>Connected: <code>{walletPublicKey}</code></p></div>}<ul className="liveBetaStepLadder" aria-label="A-profile signing steps"><li className={`walletReadinessRow ${walletPublicKey ? 'pass' : 'warn'}`}><strong>1. Connect browser wallet</strong><span>{walletPublicKey ? compact(walletPublicKey) : 'Phantom/Solflare required'}</span></li><li className={`walletReadinessRow ${quote?.status === 'ok' ? 'pass' : 'warn'}`}><strong>2. Preview quote</strong><span>{quote?.status === 'ok' ? 'Quote ready' : 'Run quote preview'}</span></li><li className={`walletReadinessRow ${swapBuild?.swap?.swapTransaction ? 'pass' : 'warn'}`}><strong>3. Build unsigned transaction</strong><span>{swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : 'Run build + simulate'}</span></li><li className={`walletReadinessRow ${simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'}`}><strong>4. Simulate</strong><span>{simulationPassed ? 'Simulation passed' : simulation?.error ?? 'Required before signing'}</span></li><li className={`walletReadinessRow ${signedSwap?.signedTransaction ? 'pass' : canSign ? 'warn' : 'fail'}`}><strong>5. Sign in wallet</strong><span>{signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : (blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Blocked until simulation passes')}</span></li><li className="walletReadinessRow fail"><strong>6. Broadcast</strong><span>{capabilities?.broadcastEnabled ? 'Separate submit step required' : 'Broadcast OFF: A-profile signs locally only'}</span></li></ul><div className="terminalBlockReasonCard"><strong>Exact block reasons</strong><p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons after simulation/signing gates pass.'}</p><small>Broadcast is intentionally off for this profile. Signing creates a local signed payload only; nothing is submitted on-chain here.</small></div><div className="axiomActionRow"><button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Quoting…' : 'Preview quote'}</button><button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working…' : 'Build + simulate'}</button><button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign in wallet</button><button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Submit transaction' : 'Broadcast OFF — A-profile'}</button></div><div className="axiomTicketFooter"><button type="button" disabled>{capabilities?.readinessLevel ?? 'checking'}</button><span>{liveMessage ?? quote?.error ?? 'Ready for quote preview.'}</span></div></div>
+          <div className="tradePanelSection tradeActionSection"><div className="tradePanelSectionHead"><span>03</span><strong>Execution ladder</strong><small>Simulation required before signing</small></div>{operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}{signerMismatch && <div className="walletMismatchNotice"><strong>Selected wallet and connected signer do not match.</strong><p>Selected: <code>{selectedDockWallet?.address}</code></p><p>Connected: <code>{walletPublicKey}</code></p></div>}<ul className="liveBetaStepLadder" aria-label="A-profile signing steps"><li className={`walletReadinessRow ${walletPublicKey ? 'pass' : 'warn'}`}><strong>1. Wallet connected</strong><span>{walletPublicKey ? compact(walletPublicKey ?? '') : 'Phantom/Solflare required'}</span></li><li className={`walletReadinessRow ${selectedExecutionAddress ? signerMismatch ? 'fail' : 'pass' : 'warn'}`}><strong>2. Active wallet selected</strong><span>{selectedExecutionAddress ? signerMismatch ? `Selected ${compact(selectedExecutionAddress)} ≠ signer ${compact(walletPublicKey ?? '')}` : compact(selectedExecutionAddress) : 'Use connected wallet'}</span></li><li className={`walletReadinessRow ${quote?.status === 'ok' ? 'pass' : 'warn'}`}><strong>3. Quote</strong><span>{quote?.status === 'ok' ? 'Quote ready' : 'Run quote preview'}</span></li><li className={`walletReadinessRow ${swapBuild?.swap?.swapTransaction ? 'pass' : 'warn'}`}><strong>4. Unsigned build</strong><span>{swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : 'Run build + simulate'}</span></li><li className={`walletReadinessRow ${simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'}`}><strong>5. Simulation</strong><span>{simulationPassed ? 'Simulation passed' : simulation?.error ?? 'Required before signing'}</span></li><li className={`walletReadinessRow ${signedSwap?.signedTransaction ? 'pass' : canSign ? 'pass' : 'fail'}`}><strong>6. Browser signing eligible</strong><span>{signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : (blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Blocked until simulation passes')}</span></li><li className="walletReadinessRow fail"><strong>7. Broadcast disabled</strong><span>{capabilities?.broadcastEnabled ? 'Separate submit step required' : 'Broadcast OFF: A-profile signs locally only'}</span></li></ul><div className="terminalBlockReasonCard"><strong>Exact block reasons</strong><p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons after simulation/signing gates pass.'}</p><small>Broadcast is intentionally off for this profile. Signing creates a local signed payload only; nothing is submitted on-chain here.</small></div><div className="axiomActionRow"><button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Quoting…' : 'Preview quote'}</button><button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working…' : 'Build + simulate'}</button><button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign in wallet</button><button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Submit transaction' : 'Broadcast OFF — A-profile'}</button></div><div className="axiomTicketFooter"><button type="button" disabled>{capabilities?.readinessLevel ?? 'checking'}</button><span>{liveMessage ?? quote?.error ?? 'Ready for quote preview.'}</span></div></div>
           <TransactionPreviewCard preview={simulation?.transactionPreview ?? swapBuild?.transactionPreview ?? quote?.transactionPreview ?? null} />
         </div>
       </section>

@@ -212,13 +212,13 @@ export function AProfileManualQaPanel() {
 
   const checklist = [
     ['Open Profile / operator auth', authBlocked ? 'blocked' : caps ? 'pass' : 'pending', authBlocked ? 'Operator login required before live signing test.' : caps ? 'Auth state loaded.' : 'Load capabilities.'],
-    ['Connect browser wallet', connectedWallet ? 'pass' : 'pending', connectedWallet ? short(connectedWallet) : 'Connect a Solana browser wallet.'],
-    ['Match selected wallet', walletMismatch ? 'blocked' : connectedWallet && selectedWalletAddress ? 'pass' : 'pending', walletMismatch ? `Signing blocked: selected wallet ${short(selectedWalletAddress)} does not match connected signer ${short(connectedWallet)}.` : 'Selected signer is aligned or pending.'],
-    ['Quote', quote?.status === 'ok' ? 'pass' : quote?.error ? 'blocked' : 'pending', quote?.status === 'ok' ? 'Quote preview complete.' : quote?.error ?? 'Run Quote preview only.'],
-    ['Build unsigned tx', build?.swap?.swapTransaction ? 'pass' : build?.error ? 'blocked' : 'pending', build?.swap?.swapTransaction ? 'Unsigned transaction built.' : build?.error ?? 'Run Build unsigned tx only.'],
-    ['Simulate', simulationPassed ? 'pass' : simulationFailureText ? 'blocked' : 'pending', simulationPassed ? 'Simulation passed.' : simulationFailureText ?? 'Run Simulate unsigned tx only.'],
-    ['Sign locally', signer.status === 'signed' ? 'pass' : signer.status === 'error' || signer.status === 'blocked' ? 'blocked' : canSign ? 'pending' : 'pending', signer.status === 'signed' ? 'Signed locally; bytes omitted from reports.' : signer.message],
-    ['Confirm broadcast disabled', caps?.broadcastEnabled === false ? 'pass' : 'blocked', caps?.broadcastEnabled === false ? 'Broadcast disabled in A-profile.' : 'Unexpected broadcast gate state.']
+    ['1. Wallet connected', connectedWallet ? 'pass' : 'pending', connectedWallet ? short(connectedWallet) : 'Connect a Solana browser wallet.'],
+    ['2. Active selected', walletMismatch ? 'blocked' : connectedWallet && selectedWalletAddress ? 'pass' : 'pending', walletMismatch ? `Signing blocked: selected wallet ${short(selectedWalletAddress)} does not match connected signer ${short(connectedWallet)}.` : 'Connected signer is selected/active or pending.'],
+    ['3. Quote', quote?.status === 'ok' ? 'pass' : quote?.error ? 'blocked' : 'pending', quote?.status === 'ok' ? 'Quote preview complete.' : quote?.error ?? 'Run Quote preview only.'],
+    ['4. Unsigned build', build?.swap?.swapTransaction ? 'pass' : build?.error ? 'blocked' : 'pending', build?.swap?.swapTransaction ? 'Unsigned transaction built.' : build?.error ?? 'Run Build unsigned tx only.'],
+    ['5. Simulation', simulationPassed ? 'pass' : simulationFailureText ? 'blocked' : 'pending', simulationPassed ? 'Simulation passed.' : simulationFailureText ?? 'Run Simulate unsigned tx only.'],
+    ['6. Browser signing eligible', signer.status === 'signed' ? 'pass' : signer.status === 'error' || signer.status === 'blocked' ? 'blocked' : canSign ? 'pass' : 'pending', signer.status === 'signed' ? 'Signed locally; bytes omitted from reports.' : canSign ? 'Ready for wallet prompt.' : signer.message],
+    ['7. Broadcast disabled', caps?.broadcastEnabled === false ? 'pass' : 'blocked', caps?.broadcastEnabled === false ? 'Broadcast disabled in A-profile.' : 'Unexpected broadcast gate state.']
   ] as const;
 
   function applyPreset(nextPreset: QaPreset) {
@@ -246,8 +246,11 @@ export function AProfileManualQaPanel() {
       const connected = await provider.connect();
       const key = connected.publicKey.toBase58?.() ?? connected.publicKey.toString();
       setConnectedWallet(key);
-      await refreshRail(key, selectedWalletAddress);
-      setMessage('Browser wallet connected for local signing test.');
+      setSelectedWalletAddress(key);
+      window.localStorage.setItem('bondr.activeWallet', key);
+      window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: key } }));
+      await refreshRail(key, key);
+      setMessage('Browser wallet connected and set as selected/active signer for local signing test. Add it as watch-only if Wallet Ops inventory is missing.');
       logEvent('wallet connected', 'pass', `connected signer ${short(key)}`);
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Wallet connection rejected.';

@@ -121,8 +121,11 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
       const result = await (window as WindowWithSolana).solana!.connect!();
       const next = result.publicKey.toBase58?.() ?? result.publicKey.toString();
       setConnectedSigner(next);
-      await refresh(next);
-      setMessage('Browser wallet connected.');
+      window.localStorage.setItem('bondr.activeWallet', next);
+      setActiveWallet(next);
+      window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: next } }));
+      await refresh(next, next);
+      setMessage('Browser wallet connected and set as active wallet for this browser.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Wallet connection rejected.');
     }
@@ -201,7 +204,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
   const selectedInventoryDetail = rail?.selectedInventoryMatch
     ? 'Selected wallet is saved in Wallet Ops.'
     : effectiveSelectedWallet
-      ? railLoaded ? 'Selected wallet not matched to inventory.' : 'Checking selected wallet against Wallet Ops.'
+      ? railLoaded ? 'Selected wallet not matched to inventory. If this is your connected signer, add it as watch-only to save the public record.' : 'Checking selected wallet against Wallet Ops.'
       : 'No selected wallet for this browser/page.';
   const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'live-beta-test' ? 'Live Beta wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
   const badge = connectedSigner ? 'Browser wallet connected' : providerReady ? 'Provider ready' : 'Connect browser wallet';
@@ -235,14 +238,14 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
       </div>
       <div className="walletRailHelperCopy">
         <strong>Add connected signer as watch-only wallet</strong>
-        <p>Watch-only adds the public address for matching and balance display. Browser wallet still signs; no private key, funding, deployment, or broadcast is created.</p>
+        <p>Watch-only adds the public address for matching and balance display. Browser wallet still signs; no private key, funding, fund movement, deployment, claims, or broadcast is created.</p>
       </div>
       <div className="walletRailGrid">
         {rows.map(([label, value, detail]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}
       </div>
       {connectedSigner && !rail?.inventoryMatch && <div className="walletRailWatchOnlyCta">
         <strong>Add connected signer as watch-only wallet</strong>
-        <p>Watch-only adds the public address for matching and balance display. Browser wallet still signs; no private key, funding, deployment, or broadcast is created.</p>
+        <p>Watch-only adds the public address for matching and balance display. Browser wallet still signs; no private key, funding, fund movement, deployment, claims, or broadcast is created.</p>
         <button className="button secondary" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={mutationLoading}>{mutationLoading ? 'Adding…' : 'Add connected signer as watch-only wallet'}</button>
       </div>}
       {(warnings.length > 0 || blockers.length > 0) && <div className="walletRailNotice">

@@ -42,6 +42,23 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
     ? backend.wallets.rows.map((wallet) => ({ id: wallet.id, address: wallet.address, role: wallet.role, scope: 'global', balanceSol: wallet.solBalance, purpose: wallet.purpose, balanceStatus: wallet.balanceStatus })) as TerminalWallet[]
     : wallets;
   const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0];
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('bondr.activeWallet') ?? '';
+    const saved = renderedWallets.find((wallet) => wallet.address === stored);
+    if (saved) setSelectedWalletId(saved.id);
+    const onActiveWalletChanged = (event: Event) => {
+      const address = (event as CustomEvent<{ address?: string }>).detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? '';
+      const wallet = renderedWallets.find((item) => item.address === address);
+      if (wallet) setSelectedWalletId(wallet.id);
+    };
+    window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+    window.addEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+    return () => {
+      window.removeEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+      window.removeEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+    };
+  }, [renderedWallets]);
   const bundleWallets = useMemo(() => renderedWallets.filter((wallet) => bundleWalletIds.includes(wallet.id)), [renderedWallets, bundleWalletIds]);
   const bundleSolAvailable = backend?.bundle?.solAvailable ?? bundleWallets.reduce((sum, wallet) => sum + wallet.balanceSol, 0);
   const bundleEngineStatus = backend?.execution?.orderEngine?.multiWalletBundle ?? backend?.bundle?.engineStatus ?? 'checking';
@@ -53,7 +70,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
   return (
     <>
       <section className="premiumControlStrip walletSelectionStrip interactiveWalletStrip">
-        <div><span>Selected wallet</span><strong>{selectedWallet ? selectedWallet.role : 'Not selected'}</strong><small>{selectedWallet ? `${selectedWallet.address.slice(0, 8)}…${selectedWallet.address.slice(-6)} · ${walletSolDisplay(selectedWallet)}` : 'Pick a wallet from the desk.'}</small></div>
+        <div><span>Active wallet</span><strong>{selectedWallet ? selectedWallet.role : 'Not selected'}</strong><small>{selectedWallet ? `${selectedWallet.address.slice(0, 8)}…${selectedWallet.address.slice(-6)} · ${walletSolDisplay(selectedWallet)}` : 'Use connected wallet or pick a saved Wallet Ops public record.'}</small></div>
         <div><span>Multi-select bundle</span><strong>{backend?.bundle?.selectedWalletCount ?? bundleWallets.length} wallet{(backend?.bundle?.selectedWalletCount ?? bundleWallets.length) === 1 ? '' : 's'}</strong><small>{bundleSolAvailable.toFixed(4)} SOL available across selected wallets.</small></div>
         <div><span>Bundle mode</span><strong>{bundleEngineStatus}</strong><small>Multi-wallet readiness.</small></div>
         <div><span>Execution guard</span><strong>{backend?.execution?.liveTradingEnabled ? 'Live enabled' : 'Live gated'}</strong><small>Route builder + browser-wallet signer required.</small></div>
@@ -90,7 +107,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
                 <span>{walletSolDisplay({ ...wallet, balanceStatus: backendRow?.balanceStatus ?? wallet.balanceStatus })}</span>
                 <span>{(backendRow?.balanceStatus ?? wallet.balanceStatus ?? 'checking').replace('unavailable', 'provider-limited')}</span>
                 <span>{wallet.purpose}</span>
-                <div className="terminalRowActions"><button type="button" onClick={() => setSelectedWalletId(wallet.id)}>{isSelected ? 'Selected' : 'Select'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><a href="/wallets">Wallet ops</a><a href="/sniper">Trade</a></div>
+                <div className="terminalRowActions"><button type="button" onClick={() => { setSelectedWalletId(wallet.id); window.localStorage.setItem('bondr.activeWallet', wallet.address); window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } })); }}>{isSelected ? 'Active' : 'Use active'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><a href="/wallets">Wallet ops</a><a href="/sniper">Trade</a></div>
               </div>
             );
           })}
