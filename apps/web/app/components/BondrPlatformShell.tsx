@@ -10,6 +10,7 @@ import { HeaderWalletChip } from './HeaderWalletChip';
 import { AccountNavButton } from './AccountNavButton';
 
 const NEXT_KEY = 'bondr_next_path';
+const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
 const PUBLIC_PATHS = new Set(['/whitepaper']);
 
 const primaryNavItems = [
@@ -42,6 +43,14 @@ function safeNextPath(value: string | null | undefined) {
   } catch {
     return '/';
   }
+}
+
+
+function resolveStoredNextPath() {
+  if (typeof window === 'undefined') return '/';
+  const next = safeNextPath(sessionStorage.getItem(NEXT_KEY));
+  sessionStorage.removeItem(NEXT_KEY);
+  return next;
 }
 
 function AppHeader() {
@@ -77,6 +86,27 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const redirectedRef = useRef(false);
 
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    function completeTurnkeyAuthRedirect() {
+      const next = resolveStoredNextPath();
+      redirectedRef.current = true;
+      router.replace(next);
+      router.refresh();
+
+      window.setTimeout(() => {
+        if (!document.querySelector('.bondrTopHeader')) {
+          window.location.assign(next);
+        }
+      }, 700);
+    }
+
+    window.addEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);
+    return () => window.removeEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);
+  }, [router]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const path = currentPath(pathname, window.location.search.replace(/^\?/, ''));
@@ -88,8 +118,7 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     }
 
     if (redirectedRef.current) return;
-    const next = safeNextPath(sessionStorage.getItem(NEXT_KEY));
-    sessionStorage.removeItem(NEXT_KEY);
+    const next = resolveStoredNextPath();
     redirectedRef.current = true;
 
     if (next !== path) {

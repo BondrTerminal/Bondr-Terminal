@@ -125,6 +125,9 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
     <TurnkeyProvider
       config={configuredTurnkeyConfig()}
       callbacks={{
+        onAuthenticationSuccess: () => {
+          window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
+        },
         onError: (error) => console.error('Turnkey account error:', error)
       }}
     >
