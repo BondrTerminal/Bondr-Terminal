@@ -1,16 +1,10 @@
 import { z } from 'zod';
+import { defaultBondrProfile, sanitizeProfileText, type BondrStoredProfile } from '../../../../lib/bondr-profile';
 import { TurnkeySessionAuthError, verifyTurnkeyRequest } from '../../../../lib/turnkey-session-auth';
 
 export const dynamic = 'force-dynamic';
 
-type StoredProfile = {
-  userId: string;
-  userName?: string;
-  email?: string;
-  organizationId: string;
-  firstAccountAddress?: string;
-  updatedAt: string;
-};
+type StoredProfile = BondrStoredProfile;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -19,10 +13,15 @@ declare global {
 
 const profileSchema = z.object({
   userId: z.string().min(1).max(160).optional(),
-  userName: z.string().min(1).max(120).optional(),
+  userName: z.string().min(3).max(48).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/, 'Use letters, numbers, underscore, or dash.').optional(),
+  displayName: z.string().min(1).max(80).optional(),
   email: z.string().email().optional(),
   organizationId: z.string().min(1).max(160).optional(),
-  firstAccountAddress: z.string().min(20).max(120).optional()
+  firstAccountAddress: z.string().min(20).max(120).optional(),
+  avatarSeed: z.string().min(1).max(40).optional(),
+  avatarGradient: z.string().min(8).max(220).optional(),
+  bio: z.string().max(160).optional(),
+  preferredWalletLabel: z.string().max(80).optional()
 }).strict();
 
 function profileStore() {
@@ -37,6 +36,57 @@ function authError(error: unknown) {
   return Response.json({ status: 'error', error: 'turnkey-auth-failed' }, { status: 401, headers: { 'cache-control': 'no-store' } });
 }
 
+function subjectPayload(session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>) {
+  return {
+    userId: session.userId,
+    organizationId: session.organizationId,
+    sessionType: session.sessionType,
+    publicKey: session.publicKey,
+    expiry: session.expiry
+  };
+}
+
+function responsePayload(profile: StoredProfile, session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>, extra: Record<string, unknown> = {}) {
+  return Response.json({
+    status: 'ok',
+    verified: true,
+    profile,
+    subject: subjectPayload(session),
+    storage: 'memory',
+    storageDurability: 'ephemeral-server-instance',
+    durableProfileDatabase: false,
+    note: 'Turnkey JWT is verified. Profile persistence is process memory only until a durable database is connected.',
+    ...extra
+  }, { headers: { 'cache-control': 'no-store' } });
+}
+
+function getOrCreateProfile(session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>, seed: Partial<StoredProfile> = {}) {
+  const store = profileStore();
+  const existing = store.get(session.userId);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const updated: StoredProfile = {
+      ...existing,
+      ...(seed.email ? { email: seed.email } : {}),
+      ...(seed.firstAccountAddress ? { firstAccountAddress: seed.firstAccountAddress } : {}),
+      lastSeenAt: now
+    };
+    store.set(session.userId, updated);
+    return { profile: updated, created: false };
+  }
+
+  const created = defaultBondrProfile({
+    userId: session.userId,
+    organizationId: session.organizationId,
+    email: seed.email,
+    firstAccountAddress: seed.firstAccountAddress,
+    now
+  });
+  store.set(session.userId, created);
+  return { profile: created, created: true };
+}
+
 export async function GET(request: Request) {
   let session;
   try {
@@ -45,22 +95,8 @@ export async function GET(request: Request) {
     return authError(error);
   }
 
-  const profile = profileStore().get(session.userId) ?? null;
-  return Response.json({
-    status: 'ok',
-    verified: true,
-    profile,
-    subject: {
-      userId: session.userId,
-      organizationId: session.organizationId,
-      sessionType: session.sessionType,
-      publicKey: session.publicKey,
-      expiry: session.expiry
-    },
-    storage: 'memory',
-    storageDurability: 'ephemeral-server-instance',
-    note: 'Turnkey JWT is verified. Profile persistence is process memory only until a durable database is connected.'
-  }, { headers: { 'cache-control': 'no-store' } });
+  const { profile, created } = getOrCreateProfile(session);
+  return responsePayload(profile, session, { created });
 }
 
 export async function POST(request: Request) {
@@ -90,23 +126,25 @@ export async function POST(request: Request) {
     return Response.json({ status: 'forbidden', error: 'organization-id-mismatch' }, { status: 403, headers: { 'cache-control': 'no-store' } });
   }
 
+  const { profile: base, created } = getOrCreateProfile(session, {
+    ...(parsed.data.email ? { email: parsed.data.email } : {}),
+    ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {})
+  });
+  const now = new Date().toISOString();
   const profile: StoredProfile = {
-    userId: session.userId,
-    organizationId: session.organizationId,
-    ...(parsed.data.userName ? { userName: parsed.data.userName } : {}),
+    ...base,
+    ...(parsed.data.userName ? { userName: sanitizeProfileText(parsed.data.userName, base.userName) } : {}),
+    ...(parsed.data.displayName ? { displayName: sanitizeProfileText(parsed.data.displayName, base.displayName) } : {}),
     ...(parsed.data.email ? { email: parsed.data.email } : {}),
     ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {}),
-    updatedAt: new Date().toISOString()
+    ...(parsed.data.avatarSeed ? { avatarSeed: sanitizeProfileText(parsed.data.avatarSeed, base.avatarSeed) } : {}),
+    ...(parsed.data.avatarGradient ? { avatarGradient: sanitizeProfileText(parsed.data.avatarGradient, base.avatarGradient) } : {}),
+    ...(typeof parsed.data.bio === 'string' ? { bio: sanitizeProfileText(parsed.data.bio) } : {}),
+    ...(typeof parsed.data.preferredWalletLabel === 'string' ? { preferredWalletLabel: sanitizeProfileText(parsed.data.preferredWalletLabel) } : {}),
+    updatedAt: now,
+    lastSeenAt: now
   };
   profileStore().set(session.userId, profile);
 
-  return Response.json({
-    status: 'ok',
-    verified: true,
-    stored: true,
-    profile,
-    storage: 'memory',
-    storageDurability: 'ephemeral-server-instance',
-    note: 'Profile write accepted only after Turnkey JWT verification. Move this store to Postgres or another durable DB before relying on cross-deploy persistence.'
-  }, { headers: { 'cache-control': 'no-store' } });
+  return responsePayload(profile, session, { created, stored: true });
 }

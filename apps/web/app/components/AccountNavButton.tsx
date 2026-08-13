@@ -46,7 +46,7 @@ export function AccountNavButton() {
           <div><span>Embedded wallets</span><strong>{account.walletCount}</strong></div>
           <div><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
         </div>
-        <p>{account.authenticated ? 'Identity is active. Execution still requires browser-wallet signing, simulation, and policy checks.' : 'Log in when you hit an account-gated workflow. Public browsing remains open.'}</p>
+        <p>{account.authenticated ? 'Identity is active. Execution still requires browser-wallet signing, simulation, and policy checks.' : 'BONDR is gated. Log in with Turnkey to unlock the operator terminal.'}</p>
         <div className="accountNavActions">
           <button type="button" onClick={() => void login()} disabled={!account.configured || !account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Logged in' : 'Log in with Turnkey'}</button>
           <a href="/profile">Profile</a>

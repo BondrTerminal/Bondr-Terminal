@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { avatarInitials, type BondrStoredProfile } from '../../../lib/bondr-profile';
 import { useBondrTurnkeyAccount } from '../../components/TurnkeyAccountProvider';
 
 function shortValue(value: string | null | undefined): string {
@@ -15,58 +16,110 @@ function detectBrowserWallet(): string {
   return solana.isPhantom ? 'Phantom detected' : 'Solana wallet detected';
 }
 
+type ProfileForm = {
+  userName: string;
+  displayName: string;
+  bio: string;
+  preferredWalletLabel: string;
+};
+
 export function TurnkeyProfileLogin() {
   const account = useBondrTurnkeyAccount();
   const [busy, setBusy] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
+  const [profile, setProfile] = useState<BondrStoredProfile | null>(null);
+  const [form, setForm] = useState<ProfileForm>({ userName: '', displayName: '', bio: '', preferredWalletLabel: '' });
   const browserWallet = detectBrowserWallet();
 
-  async function login() {
-    setBusy(true);
-    try { await account.login(); } finally { setBusy(false); }
+  const initials = useMemo(() => profile ? avatarInitials(profile) : 'B', [profile]);
+
+  async function requestProfile(method: 'GET' | 'POST', payload?: Record<string, unknown>) {
+    if (!account.sessionJwt) throw new Error('Turnkey session JWT not exposed by the client SDK yet. Login identity is active, but profile sync needs the JWT bearer token.');
+    const response = await fetch('/api/account/profile', {
+      method,
+      headers: {
+        authorization: `Bearer ${account.sessionJwt}`,
+        ...(payload ? { 'content-type': 'application/json' } : {})
+      },
+      ...(payload ? { body: JSON.stringify(payload) } : {})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message ?? body.error ?? `Profile request failed: HTTP ${response.status}`);
+    return body.profile as BondrStoredProfile;
   }
 
-  async function refresh() {
-    setBusy(true);
-    try { await account.refresh(); } finally { setBusy(false); }
+  function applyProfile(next: BondrStoredProfile) {
+    setProfile(next);
+    setForm({
+      userName: next.userName ?? '',
+      displayName: next.displayName ?? '',
+      bio: next.bio ?? '',
+      preferredWalletLabel: next.preferredWalletLabel ?? ''
+    });
   }
 
-  async function logout() {
+  async function loadProfile() {
+    if (!account.authenticated) return;
     setBusy(true);
-    try { await account.logout(); setSyncStatus(''); } finally { setBusy(false); }
-  }
-
-  async function syncProfile() {
-    if (!account.sessionJwt) {
-      setSyncStatus('Turnkey session JWT not exposed by the client SDK yet. Login identity is active, but server profile sync needs the JWT bearer token.');
-      return;
-    }
-    setBusy(true);
-    setSyncStatus('Verifying Turnkey JWT and syncing profile…');
+    setSyncStatus('Loading verified BONDR profile…');
     try {
-      const response = await fetch('/api/account/profile', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${account.sessionJwt}`
-        },
-        body: JSON.stringify({
-          userId: account.userId ?? undefined,
-          userName: account.userName ?? undefined,
-          email: account.email ?? undefined,
-          organizationId: account.organizationId ?? undefined,
-          firstAccountAddress: account.firstAccountAddress ?? undefined
-        })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message ?? payload.error ?? `Profile sync failed: HTTP ${response.status}`);
-      setSyncStatus('Verified Turnkey JWT and synced ephemeral server profile.');
+      const next = await requestProfile('GET');
+      applyProfile(next);
+      setSyncStatus('Verified Turnkey identity and loaded BONDR profile.');
     } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : 'Profile sync failed.');
+      setSyncStatus(error instanceof Error ? error.message : 'Profile load failed.');
     } finally {
       setBusy(false);
     }
   }
+
+  async function saveProfile() {
+    setBusy(true);
+    setSyncStatus('Saving verified BONDR profile…');
+    try {
+      const next = await requestProfile('POST', {
+        userId: account.userId ?? undefined,
+        organizationId: account.organizationId ?? undefined,
+        email: account.email ?? undefined,
+        firstAccountAddress: account.firstAccountAddress ?? undefined,
+        userName: form.userName,
+        displayName: form.displayName,
+        bio: form.bio,
+        preferredWalletLabel: form.preferredWalletLabel
+      });
+      applyProfile(next);
+      setSyncStatus('Profile saved after Turnkey JWT verification.');
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Profile save failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refresh() {
+    setBusy(true);
+    try {
+      await account.refresh();
+      setSyncStatus('Turnkey client refreshed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    setBusy(true);
+    try {
+      await account.logout();
+      setProfile(null);
+      setSyncStatus('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (account.authenticated && account.sessionJwt && !profile && !busy) void loadProfile();
+  }, [account.authenticated, account.sessionJwt]);
 
   if (!account.configured) {
     return (
@@ -78,27 +131,7 @@ export function TurnkeyProfileLogin() {
             <h1>Turnkey login needs configuration</h1>
             <p>Add the public Turnkey organization ID and Auth Proxy config ID in production to enable operator login.</p>
           </div>
-          <div className="profileActions">
-            <button className="button" type="button" disabled>Turnkey unavailable</button>
-          </div>
-        </div>
-
-        <div className="documentCard accountGlassCard">
-          <h2>Required public env</h2>
-          <div className="infoGrid">
-            <div className="sideRow"><span>NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID</span><strong>missing</strong></div>
-            <div className="sideRow"><span>NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID</span><strong>missing</strong></div>
-            <div className="sideRow"><span>Secrets required here</span><strong>none</strong></div>
-          </div>
-        </div>
-
-        <div className="documentCard accountGlassCard">
-          <h2>Configuration rules</h2>
-          <ol className="roadmapList">
-            <li>Only public Turnkey IDs belong in NEXT_PUBLIC vars.</li>
-            <li>No sensitive credentials, provider credentials, or Turnkey secret material should be committed.</li>
-            <li>Wallet signing and execution remain gated outside this identity panel.</li>
-          </ol>
+          <div className="profileActions"><button className="button" type="button" disabled>Turnkey unavailable</button></div>
         </div>
       </section>
     );
@@ -106,52 +139,48 @@ export function TurnkeyProfileLogin() {
 
   return (
     <section className="profileGrid accountProfileGrid">
-      <div className="documentCard profileCard accountHeroCard">
+      <div className="documentCard profileCard accountHeroCard bondrProfileHero">
         <div className="accountHeroTopline">
-          <div className="profileAvatar">{account.authenticated ? 'TK' : 'B'}</div>
-          <span className={account.authenticated ? 'statusChip good' : 'statusChip warn'}>{account.authenticated ? 'connected' : 'identity required'}</span>
+          <div className="profileAvatar bondrGeneratedAvatar" style={{ background: profile?.avatarGradient ?? undefined }}>{initials}</div>
+          <span className="statusChip good">secured profile</span>
         </div>
         <div>
-          <div className="eyebrow">Turnkey profile</div>
-          <h1>{account.authenticated ? 'Turnkey identity connected' : 'Log in with Turnkey'}</h1>
-          <p>Turnkey gives Bond.Terminal a polished operator identity layer. It does not custody server keys, enable managed wallet export, or bypass browser-wallet signing gates.</p>
+          <div className="eyebrow">BONDR operator profile</div>
+          <h1>{profile?.displayName ?? account.userName ?? 'Operator profile'}</h1>
+          <p>Your Turnkey identity unlocks the terminal. Your profile organizes the operator account. Browser-wallet signing remains separate from login.</p>
         </div>
         <div className="profileActions">
-          <button className="button" type="button" onClick={() => void login()} disabled={!account.clientReady || account.authenticated || busy}>
-            {account.authenticated ? 'Logged in' : account.clientReady ? 'Log in with Turnkey' : 'Loading Turnkey'}
-          </button>
-          <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!account.clientReady || !account.authenticated || busy}>Refresh profile</button>
-          <button className="button secondary" type="button" onClick={() => void syncProfile()} disabled={!account.authenticated || busy}>Verify server profile</button>
+          <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!account.clientReady || busy}>Refresh Turnkey</button>
+          <button className="button secondary" type="button" onClick={() => void loadProfile()} disabled={!account.authenticated || busy}>Reload profile</button>
           <button className="button secondary" type="button" onClick={() => void logout()} disabled={!account.authenticated || busy}>Log out</button>
         </div>
         {syncStatus && <p className="qaMuted">{syncStatus}</p>}
       </div>
 
-      <div className="documentCard accountGlassCard">
-        <h2>Account state</h2>
-        <div className="infoGrid">
-          <div className="sideRow"><span>Status</span><strong>{account.authenticated ? 'authenticated' : 'not authenticated'}</strong></div>
-          <div className="sideRow"><span>Turnkey client</span><strong>{account.clientState}</strong></div>
-          <div className="sideRow"><span>User</span><strong>{account.userName ?? shortValue(account.userId)}</strong></div>
-          <div className="sideRow"><span>Organization</span><strong>{shortValue(account.organizationId)}</strong></div>
-          <div className="sideRow"><span>Embedded wallets</span><strong>{account.walletCount}</strong></div>
-          <div className="sideRow"><span>First wallet</span><strong>{shortValue(account.firstWalletId)}</strong></div>
-          <div className="sideRow"><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
-          <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
-          <div className="sideRow"><span>Session JWT</span><strong>{account.sessionJwt ? 'available' : 'not exposed'}</strong></div>
-          <div className="sideRow"><span>Execution</span><strong>simulation + policy gated</strong></div>
-        </div>
-        {syncStatus && <p className="qaMuted">{syncStatus}</p>}
+      <div className="documentCard accountGlassCard bondrProfileEditor">
+        <h2>Edit profile</h2>
+        <label>Username<input value={form.userName} onChange={(event) => setForm((current) => ({ ...current, userName: event.target.value }))} placeholder="scope-runner-1937" /></label>
+        <label>Display name<input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="BONDR Operator" /></label>
+        <label>Bio<textarea value={form.bio} onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))} placeholder="Liquidity operator, launch strategist, terminal builder…" /></label>
+        <label>Preferred wallet label<input value={form.preferredWalletLabel} onChange={(event) => setForm((current) => ({ ...current, preferredWalletLabel: event.target.value }))} placeholder="Primary browser signer" /></label>
+        <button className="button" type="button" onClick={() => void saveProfile()} disabled={!account.authenticated || busy}>Save verified profile</button>
+        <p className="qaMuted">Storage is currently ephemeral process memory until a durable database is connected.</p>
       </div>
 
       <div className="documentCard accountGlassCard">
-        <h2>Access model</h2>
-        <ol className="roadmapList accountFlowList">
-          <li>Turnkey authenticates account identity through Auth Proxy.</li>
-          <li>Global nav exposes Axiom-style login without forcing a page-load popup.</li>
-          <li>Browser wallets remain the only transaction signing authority.</li>
-          <li>Broadcast, funding, deployment, claim, and payout actions remain disabled until a separate approval phase.</li>
-        </ol>
+        <h2>Identity state</h2>
+        <div className="infoGrid">
+          <div className="sideRow"><span>Status</span><strong>{account.authenticated ? 'authenticated' : 'not authenticated'}</strong></div>
+          <div className="sideRow"><span>Turnkey client</span><strong>{account.clientState}</strong></div>
+          <div className="sideRow"><span>User</span><strong>{profile?.userName ?? account.userName ?? shortValue(account.userId)}</strong></div>
+          <div className="sideRow"><span>Organization</span><strong>{shortValue(account.organizationId)}</strong></div>
+          <div className="sideRow"><span>Embedded wallets</span><strong>{account.walletCount}</strong></div>
+          <div className="sideRow"><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
+          <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
+          <div className="sideRow"><span>Session JWT</span><strong>{account.sessionJwt ? 'available' : 'not exposed'}</strong></div>
+          <div className="sideRow"><span>Profile storage</span><strong>verified / ephemeral</strong></div>
+          <div className="sideRow"><span>Execution</span><strong>simulation + policy gated</strong></div>
+        </div>
       </div>
     </section>
   );
