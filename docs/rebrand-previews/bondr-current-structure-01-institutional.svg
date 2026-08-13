@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1050" viewBox="0 0 1680 1050">
+<defs></defs>
+<rect width="1680" height="1050" fill="#000000"/>
+<text x="48" y="56" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" text-anchor="start" letter-spacing="1.8">Bond.Terminal / BONDR rebrand preview — current product structure, not a redesign</text>
+<text x="48" y="110" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="850" text-anchor="start" letter-spacing="0">Preview 1 — Institutional Terminal</text>
+<text x="50" y="145" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start" letter-spacing="0">Closest to the current product. Same page anatomy, stricter grid, thin tangerine frame lines.</text>
+<rect x="48" y="182" width="1584" height="800" rx="18" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.58"/>
+<rect x="66" y="200" width="1548" height="92" rx="16" fill="rgba(255,127,17,0.025)" stroke="#FF7F11" stroke-width="1.2" opacity="0.34"/>
+<text x="90" y="238" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="900" text-anchor="start" letter-spacing="3">BONDR</text>
+<text x="92" y="264" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="2">Bond.Terminal · Solana command hub</text>
+<rect x="438" y="224" width="95" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="485.5" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Hub</text>
+<rect x="542" y="224" width="142" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="613.0" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Liquidity Engine</text>
+<rect x="693" y="224" width="142" height="36" rx="10" fill="rgba(255,127,17,0.10)" stroke="#FF7F11" stroke-width="1" opacity="0.95"/>
+<text x="764.0" y="247" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Trading Terminal</text>
+<rect x="844" y="224" width="142" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="915.0" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Portfolio</text>
+<rect x="995" y="224" width="142" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="1066.0" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Token Analyzer</text>
+<rect x="1146" y="224" width="142" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="1217.0" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Deployment</text>
+<rect x="1297" y="224" width="95" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="1344.5" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Projects</text>
+<rect x="1401" y="224" width="142" height="36" rx="10" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="1472.0" y="247" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing=".8">Wallet Ops</text>
+<rect x="1396" y="224" width="240" height="42" rx="12" fill="rgba(35,206,107,0.08)" stroke="#23CE6B" stroke-width="1.1" opacity="1"/>
+<text x="1516" y="251" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="900" text-anchor="middle" letter-spacing="1.4">READ-ONLY / GATED</text>
+<rect x="66" y="308" width="1548" height="56" rx="14" fill="rgba(249,235,224,0.018)" stroke="#FF7F11" stroke-width="1" opacity="0.34"/>
+<text x="86" y="332" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="900" text-anchor="start" letter-spacing="1.4">Project terminal</text>
+<text x="86" y="351" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" text-anchor="start" letter-spacing="0">No project selected</text>
+<text x="496" y="343" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" text-anchor="start" letter-spacing="0">Read-only/paper terminal. Live signing, swaps, funding, and broadcast remain disabled.</text>
+<rect x="1146" y="322" width="102" height="30" rx="8" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.26"/>
+<text x="1197" y="342" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" text-anchor="middle" letter-spacing=".8">Deployment</text>
+<rect x="1258" y="322" width="102" height="30" rx="8" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.26"/>
+<text x="1309" y="342" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" text-anchor="middle" letter-spacing=".8">Wallets</text>
+<rect x="1370" y="322" width="102" height="30" rx="8" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.26"/>
+<text x="1421" y="342" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" text-anchor="middle" letter-spacing=".8">Portfolio</text>
+<rect x="1482" y="322" width="102" height="30" rx="8" fill="none" stroke="#FF7F11" stroke-width="1" opacity="0.26"/>
+<text x="1533" y="342" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" text-anchor="middle" letter-spacing=".8">Checklist API</text>
+<rect x="66" y="382" width="1032" height="422" rx="16" fill="rgba(249,235,224,0.035)" stroke="#FF7F11" stroke-width="1.2" opacity="0.34"/>
+<text x="84" y="412" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" text-anchor="start" letter-spacing="1.6">TradingTokenLoader / chart + live feed</text>
+<text x="1080" y="412" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" text-anchor="end" letter-spacing="1.2">same component area</text>
+<rect x="84" y="432" width="996" height="54" rx="12" fill="rgba(0,0,0,0.62)" stroke="#FF7F11" stroke-width="1" opacity="0.72"/>
+<text x="102" y="465" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Paste token mint, contract URL, or DexScreener/Solscan link</text>
+<rect x="928" y="442" width="132" height="34" rx="9" fill="rgba(255,127,17,0.11)" stroke="#FF7F11" stroke-width="1.2" opacity="1"/>
+<text x="994" y="464" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="900" text-anchor="middle" letter-spacing="1.4">LOAD</text>
+<rect x="84.0" y="502" width="240.5" height="66" rx="12" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.1"/>
+<text x="98.0" y="528" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="900" text-anchor="start" letter-spacing="1.5">PRICE</text>
+<text x="98.0" y="554" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" text-anchor="start" letter-spacing="0">canonical</text>
+<rect x="334.0" y="502" width="240.5" height="66" rx="12" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.1"/>
+<text x="348.0" y="528" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="900" text-anchor="start" letter-spacing="1.5">LIQUIDITY</text>
+<text x="348.0" y="554" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" text-anchor="start" letter-spacing="0">snapshot</text>
+<rect x="584.0" y="502" width="240.5" height="66" rx="12" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.1"/>
+<text x="598.0" y="528" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="900" text-anchor="start" letter-spacing="1.5">ROUTE</text>
+<text x="598.0" y="554" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" text-anchor="start" letter-spacing="0">read-only</text>
+<rect x="834.0" y="502" width="240.5" height="66" rx="12" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.1"/>
+<text x="848.0" y="528" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="900" text-anchor="start" letter-spacing="1.5">SOURCE</text>
+<text x="848.0" y="554" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" text-anchor="start" letter-spacing="0">provider</text>
+<rect x="84" y="586" width="722" height="190" rx="12" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.12"/>
+<text x="106" y="614" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" text-anchor="start" letter-spacing="0">Dex chart frame / pre-scan chart shell</text>
+<polyline points="108,736 224,708 326,722 442,660 576,674 706,628 772,642" fill="none" stroke="#FF7F11" stroke-width="2"/>
+<polyline points="108,752 246,742 366,746 496,716 636,724 772,696" fill="none" stroke="#23CE6B" stroke-width="2" opacity=".75"/>
+<rect x="822" y="586" width="258" height="190" rx="12" fill="rgba(255,127,17,0.025)" stroke="#FF7F11" stroke-width="1" opacity="0.34"/>
+<text x="842" y="614" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="900" text-anchor="start" letter-spacing="1.4">FastTradeFeed</text>
+<text x="842" y="648" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">Buy  · placeholder row</text>
+<text x="842" y="678" fill="#BA1200" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">Sell · placeholder row</text>
+<text x="842" y="708" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">Swap · placeholder row</text>
+<text x="842" y="738" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="0">Buy  · placeholder row</text>
+<rect x="1112" y="382" width="502" height="422" rx="16" fill="rgba(249,235,224,0.035)" stroke="#FF7F11" stroke-width="1.2" opacity="0.34"/>
+<text x="1130" y="412" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" text-anchor="start" letter-spacing="1.6">ExecutionDock</text>
+<text x="1596" y="412" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" text-anchor="end" letter-spacing="1.2">browser wallet gated</text>
+<rect x="1130" y="434" width="466" height="50" rx="12" fill="rgba(255,127,17,0.04)" stroke="#FF7F11" stroke-width="1" opacity="0.34"/>
+<text x="1148" y="465" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="800" text-anchor="start" letter-spacing="0">Paper / route preview</text>
+<rect x="1130" y="504" width="227.0" height="48" rx="12" fill="rgba(35,206,107,0.10)" stroke="#23CE6B" stroke-width="1.5" opacity="1"/>
+<text x="1243.5" y="535" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" text-anchor="middle" letter-spacing="2">BUY</text>
+<rect x="1369.0" y="504" width="227.0" height="48" rx="12" fill="rgba(186,18,0,0.10)" stroke="#BA1200" stroke-width="1.5" opacity="1"/>
+<text x="1482.5" y="535" fill="#BA1200" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" text-anchor="middle" letter-spacing="2">SELL</text>
+<rect x="1130" y="580" width="466" height="31" rx="8" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.09"/>
+<text x="1146" y="601" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="start" letter-spacing="0">Spend asset</text>
+<text x="1580" y="601" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="end" letter-spacing="0">SOL</text>
+<rect x="1130" y="622" width="466" height="31" rx="8" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.09"/>
+<text x="1146" y="643" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="start" letter-spacing="0">Amount</text>
+<text x="1580" y="643" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="end" letter-spacing="0">0.05</text>
+<rect x="1130" y="664" width="466" height="31" rx="8" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.09"/>
+<text x="1146" y="685" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="start" letter-spacing="0">Slippage</text>
+<text x="1580" y="685" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="end" letter-spacing="0">150 bps</text>
+<rect x="1130" y="706" width="466" height="31" rx="8" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.09"/>
+<text x="1146" y="727" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="start" letter-spacing="0">Live execution</text>
+<text x="1580" y="727" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="850" text-anchor="end" letter-spacing="0">Disabled</text>
+<rect x="1130" y="756" width="466" height="34" rx="10" fill="rgba(255,127,17,0.08)" stroke="#FF7F11" stroke-width="1" opacity="0.8"/>
+<text x="1363.0" y="779" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="900" text-anchor="middle" letter-spacing="1.6">PREVIEW ROUTE · NO BROADCAST</text>
+<rect x="66" y="820" width="1548" height="210" rx="16" fill="rgba(249,235,224,0.035)" stroke="#FF7F11" stroke-width="1.2" opacity="0.34"/>
+<text x="84" y="850" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" text-anchor="start" letter-spacing="1.6">TerminalInfoBooth / intelligence tabs</text>
+<text x="1596" y="850" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" text-anchor="end" letter-spacing="1.2">same bottom section</text>
+<rect x="84.0" y="872" width="367.5" height="118" rx="12" fill="rgba(0,0,0,0.32)" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="100.0" y="902" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="850" text-anchor="start" letter-spacing="0">Backend</text>
+<text x="100.0" y="932" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" text-anchor="start" letter-spacing="0">partial/ok sourceStatus</text>
+<text x="100.0" y="964" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.2">Uses current component region</text>
+<rect x="463.5" y="872" width="367.5" height="118" rx="12" fill="rgba(0,0,0,0.32)" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="479.5" y="902" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="850" text-anchor="start" letter-spacing="0">Liquidity</text>
+<text x="479.5" y="932" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" text-anchor="start" letter-spacing="0">canonical snapshot</text>
+<text x="479.5" y="964" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.2">Uses current component region</text>
+<rect x="843.0" y="872" width="367.5" height="118" rx="12" fill="rgba(0,0,0,0.32)" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="859.0" y="902" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="850" text-anchor="start" letter-spacing="0">Wallets</text>
+<text x="859.0" y="932" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" text-anchor="start" letter-spacing="0">balances + PnL</text>
+<text x="859.0" y="964" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.2">Uses current component region</text>
+<rect x="1222.5" y="872" width="367.5" height="118" rx="12" fill="rgba(0,0,0,0.32)" stroke="#FF7F11" stroke-width="1" opacity="0.22"/>
+<text x="1238.5" y="902" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="850" text-anchor="start" letter-spacing="0">Risk</text>
+<text x="1238.5" y="932" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" text-anchor="start" letter-spacing="0">pre-live checklist</text>
+<text x="1238.5" y="964" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.2">Uses current component region</text>
+<rect x="66" y="918" width="1548" height="40" rx="12" fill="rgba(255,127,17,0.025)" stroke="#FF7F11" stroke-width="1" opacity="0.34"/>
+<text x="86" y="943" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" text-anchor="start" letter-spacing="0">Liquidity page remains hero → capability cards → LiquidityEngineProbe → workflow → backend status. Only colors/name/top nav change.</text>
+<text x="48" y="1020" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" text-anchor="start" letter-spacing="0">Correction: these previews preserve current product sections and layout; they are brand/top-nav/color treatments, not a full reformat.</text>
+</svg>

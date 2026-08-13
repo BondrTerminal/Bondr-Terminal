@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs></defs>
+<rect width="1600" height="1000" fill="#000000"/>
+<text x="56" y="70" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" text-anchor="start" letter-spacing="4">Bond.Terminal / BONDR</text>
+<text x="56" y="122" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="62" font-weight="800" text-anchor="start" letter-spacing="0">Premium Minimal Operator</text>
+<text x="58" y="160" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" text-anchor="start" letter-spacing="0">Luxury terminal spacing with restrained tangerine accents.</text>
+<rect x="56" y="205" width="1488" height="690" rx="0" fill="none" stroke="#FF7F11" stroke-width="1.2" opacity="0.82"/>
+<rect x="56" y="205" width="1488" height="88" rx="0" fill="rgba(255,127,17,0.04)" stroke="#FF7F11" stroke-width="1" opacity="0.7"/>
+<text x="82" y="250" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" text-anchor="start" letter-spacing="-1">Bond.Terminal</text>
+<text x="82" y="267" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" text-anchor="start" letter-spacing="2">NO SERVER CUSTODY · LIVE SIGNING GATED</text>
+<text x="461" y="253" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">TERMINAL</text>
+<line x1="455" y1="267" x2="577" y2="267" stroke="#FF7F11" opacity="0.9"/>
+<text x="593" y="253" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">LIQUIDITY</text>
+<line x1="587" y1="267" x2="721" y2="267" stroke="#FF7F11" opacity="0.22"/>
+<text x="737" y="253" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">SCANNER</text>
+<line x1="731" y1="267" x2="853" y2="267" stroke="#FF7F11" opacity="0.22"/>
+<text x="869" y="253" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">WALLETS</text>
+<line x1="863" y1="267" x2="985" y2="267" stroke="#FF7F11" opacity="0.22"/>
+<text x="1001" y="253" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">PORTFOLIO</text>
+<line x1="995" y1="267" x2="1129" y2="267" stroke="#FF7F11" opacity="0.22"/>
+<text x="1145" y="253" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="start" letter-spacing="1.2">READINESS</text>
+<line x1="1139" y1="267" x2="1273" y2="267" stroke="#FF7F11" opacity="0.22"/>
+<rect x="1354" y="225" width="158" height="34" rx="0" fill="rgba(35,206,107,0.08)" stroke="#23CE6B" stroke-width="1.3" opacity="1"/>
+<text x="1433" y="248" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="middle" letter-spacing="2">READ-ONLY</text>
+<rect x="82" y="315" width="940" height="472" rx="0" fill="none" stroke="#FF7F11" stroke-width="1.2" opacity="0.35"/>
+<text x="110" y="353" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" text-anchor="start" letter-spacing="2">TERMINAL INTELLIGENCE</text>
+<rect x="110" y="377" width="720" height="48" rx="0" fill="rgba(0,0,0,1)" stroke="#FF7F11" stroke-width="1" opacity="0.85"/>
+<text x="130" y="407" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" text-anchor="start" letter-spacing="0">Paste Solana token contract or verified link</text>
+<rect x="848" y="377" width="174" height="48" rx="0" fill="rgba(255,127,17,0.10)" stroke="#FF7F11" stroke-width="1.3" opacity="1"/>
+<text x="935" y="407" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="900" text-anchor="middle" letter-spacing="2">SCAN</text>
+<rect x="110" y="447" width="285.3333333333333" height="82" rx="0" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.13"/>
+<text x="128" y="475" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.8">TRUTH LAYER</text>
+<text x="128" y="509" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" text-anchor="start" letter-spacing="0">CANONICAL</text>
+<rect x="409.3333333333333" y="447" width="285.3333333333333" height="82" rx="0" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.13"/>
+<text x="427.3333333333333" y="475" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.8">PROVIDER HEALTH</text>
+<text x="427.3333333333333" y="509" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" text-anchor="start" letter-spacing="0">READY</text>
+<rect x="708.6666666666666" y="447" width="285.3333333333333" height="82" rx="0" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.13"/>
+<text x="726.6666666666666" y="475" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" text-anchor="start" letter-spacing="1.8">EXECUTION</text>
+<text x="726.6666666666666" y="509" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" text-anchor="start" letter-spacing="0">GATED</text>
+<rect x="110" y="553" width="884" height="188" rx="0" fill="none" stroke="#F9EBE0" stroke-width="1" opacity="0.12"/>
+<line x1="220.5" y1="553" x2="220.5" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="331.0" y1="553" x2="331.0" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="441.5" y1="553" x2="441.5" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="552.0" y1="553" x2="552.0" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="662.5" y1="553" x2="662.5" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="773.0" y1="553" x2="773.0" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="883.5" y1="553" x2="883.5" y2="741" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="110" y1="600.0" x2="994" y2="600.0" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="110" y1="647.0" x2="994" y2="647.0" stroke="#F9EBE0" opacity="0.055"/>
+<line x1="110" y1="694.0" x2="994" y2="694.0" stroke="#F9EBE0" opacity="0.055"/>
+<polyline points="110,701 206,675 300,689 410,623 520,649 650,595 760,615 870,581 994,601" fill="none" stroke="#FF7F11" stroke-width="2.5"/>
+<polyline points="110,719 220,705 335,713 470,685 590,699 720,659 840,671 994,647" fill="none" stroke="#23CE6B" stroke-width="2.4" opacity="0.72"/>
+<text x="990" y="729" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" text-anchor="end" letter-spacing="1.8">MOCK CHART · NOT REAL MARKET DATA</text>
+<rect x="1030" y="315" width="514" height="220" rx="0" fill="none" stroke="#FF7F11" stroke-width="1.2" opacity="0.35"/>
+<text x="1056" y="353" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" text-anchor="start" letter-spacing="2">ACTION DOCK</text>
+<rect x="1058" y="379" width="458" height="54" rx="0" fill="rgba(35,206,107,0.08)" stroke="#23CE6B" stroke-width="1.8" opacity="1"/>
+<text x="1287.0" y="414" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" text-anchor="middle" letter-spacing="4">BUY</text>
+<rect x="1058" y="447" width="458" height="54" rx="0" fill="rgba(186,18,0,0.10)" stroke="#BA1200" stroke-width="1.8" opacity="1"/>
+<text x="1287.0" y="482" fill="#BA1200" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" text-anchor="middle" letter-spacing="4">SELL</text>
+<rect x="1030" y="567" width="514" height="220" rx="0" fill="none" stroke="#FF7F11" stroke-width="1.2" opacity="0.35"/>
+<text x="1056" y="605" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" text-anchor="start" letter-spacing="2">READINESS INDICATORS</text>
+<circle cx="1066" cy="637" r="6" fill="#23CE6B"/>
+<text x="1084" y="642" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">RPC</text>
+<text x="1516" y="642" fill="#23CE6B" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="800" text-anchor="end" letter-spacing="1.5">OK</text>
+<line x1="1058" y1="660" x2="1516" y2="660" stroke="#F9EBE0" opacity="0.10"/>
+<circle cx="1066" cy="685" r="6" fill="#FF7F11"/>
+<text x="1084" y="690" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">SIGNER</text>
+<text x="1516" y="690" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="800" text-anchor="end" letter-spacing="1.5">MANUAL</text>
+<line x1="1058" y1="708" x2="1516" y2="708" stroke="#F9EBE0" opacity="0.10"/>
+<circle cx="1066" cy="733" r="6" fill="#BA1200"/>
+<text x="1084" y="738" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" text-anchor="start" letter-spacing="0">LIVE SWAPS</text>
+<text x="1516" y="738" fill="#BA1200" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="800" text-anchor="end" letter-spacing="1.5">DISABLED</text>
+<line x1="1058" y1="756" x2="1516" y2="756" stroke="#F9EBE0" opacity="0.10"/>
+<rect x="82" y="815" width="1434" height="158" rx="0" fill="none" stroke="#FF7F11" stroke-width="1.2" opacity="0.35"/>
+<text x="110" y="853" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" text-anchor="start" letter-spacing="2">LIQUIDITY ENGINE</text>
+<text x="110" y="887" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="1.7">SOURCE</text>
+<text x="380" y="887" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="1.7">PAIR</text>
+<text x="650" y="887" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="1.7">LIQUIDITY</text>
+<text x="910" y="887" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="1.7">LP MODEL</text>
+<text x="1180" y="887" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" text-anchor="start" letter-spacing="1.7">STATUS</text>
+<text x="110" y="919" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Canonical snapshot</text>
+<text x="380" y="919" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Preview pair</text>
+<text x="650" y="919" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Placeholder</text>
+<text x="910" y="919" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">CPMM</text>
+<text x="1180" y="919" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Scan-ready</text>
+<line x1="110" y1="931" x2="1488" y2="931" stroke="#F9EBE0" opacity="0.08"/>
+<text x="110" y="953" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Meteora/DLMM</text>
+<text x="380" y="953" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Preview pair</text>
+<text x="650" y="953" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Placeholder</text>
+<text x="910" y="953" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Position model</text>
+<text x="1180" y="953" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="500" text-anchor="start" letter-spacing="0">Lock% n/a</text>
+<line x1="110" y1="965" x2="1488" y2="965" stroke="#F9EBE0" opacity="0.08"/>
+<text x="56" y="944" fill="#F9EBE0" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="500" text-anchor="start" letter-spacing="0">Navigation: side panel removed; major areas become overhead buttons/titles.</text>
+<text x="56" y="974" fill="#FF7F11" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" text-anchor="start" letter-spacing="0">Palette: black base, linen text, vivid tangerine borders/active states, emerald buy, brick ember sell.  Most premium and calm. Best spacing, lowest noise.</text>
+</svg>

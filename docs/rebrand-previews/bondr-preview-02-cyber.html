@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bond.Terminal / BONDR — Rebrand Preview Concepts</title>
+  <style>
+    :root {
+      --black: #000000;
+      --tangerine: #FF7F11;
+      --linen: #F9EBE0;
+      --ember: #BA1200;
+      --emerald: #23CE6B;
+      --muted: rgba(249, 235, 224, 0.64);
+      --faint: rgba(249, 235, 224, 0.12);
+      --line: rgba(255, 127, 17, 0.72);
+      --soft-line: rgba(255, 127, 17, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--black);
+      color: var(--linen);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: -0.02em;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .previewIndex {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 14px 22px;
+      background: rgba(0, 0, 0, 0.94);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .previewIndex strong { color: var(--tangerine); text-transform: uppercase; letter-spacing: 0.16em; font-size: 12px; }
+    .previewIndex nav { display: flex; flex-wrap: wrap; gap: 10px; }
+    .previewIndex a {
+      border: 1px solid var(--soft-line);
+      color: var(--linen);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .concept {
+      min-height: 100vh;
+      padding: 34px;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .conceptHeader {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.85fr) minmax(480px, 1.7fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .conceptHeader .tag {
+      color: var(--tangerine);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 12px;
+    }
+
+    .conceptHeader h1 {
+      margin: 8px 0 12px;
+      font-size: clamp(34px, 5vw, 72px);
+      line-height: 0.9;
+      text-transform: uppercase;
+    }
+
+    .conceptHeader p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 900px;
+    }
+
+    .rationale {
+      border: 1px solid var(--soft-line);
+      padding: 16px;
+      background: rgba(255, 127, 17, 0.04);
+      color: var(--muted);
+    }
+
+    .mockup {
+      border: 1px solid var(--line);
+      background: var(--black);
+      min-height: 720px;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand { display: flex; flex-direction: column; gap: 2px; }
+    .brand b { font-size: 22px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .brand span { color: var(--tangerine); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; }
+
+    .navTabs { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1; }
+    .navTabs button {
+      border: 1px solid var(--soft-line);
+      background: transparent;
+      color: var(--linen);
+      padding: 10px 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 11px;
+      cursor: default;
+    }
+    .navTabs .active { border-color: var(--tangerine); color: var(--tangerine); background: rgba(255, 127, 17, 0.08); }
+
+    .safetyChip {
+      border: 1px solid var(--emerald);
+      color: var(--emerald);
+      padding: 10px 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .terminalGrid {
+      display: grid;
+      grid-template-columns: minmax(520px, 1.55fr) minmax(340px, 0.8fr);
+      grid-template-rows: auto auto;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--soft-line);
+      background: rgba(249, 235, 224, 0.025);
+      padding: 16px;
+      min-height: 140px;
+    }
+
+    .panelTitle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      color: var(--tangerine);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+    }
+
+    .panelTitle small { color: var(--muted); letter-spacing: 0.08em; }
+
+    .chart {
+      height: 330px;
+      border: 1px solid var(--faint);
+      position: relative;
+      background:
+        linear-gradient(90deg, transparent 0 10%, rgba(249,235,224,0.04) 10% 10.5%, transparent 10.5% 20%, rgba(249,235,224,0.04) 20% 20.5%, transparent 20.5% 30%, rgba(249,235,224,0.04) 30% 30.5%, transparent 30.5% 40%, rgba(249,235,224,0.04) 40% 40.5%, transparent 40.5% 50%, rgba(249,235,224,0.04) 50% 50.5%, transparent 50.5%),
+        linear-gradient(0deg, transparent 0 19%, rgba(249,235,224,0.04) 19% 19.5%, transparent 19.5% 39%, rgba(249,235,224,0.04) 39% 39.5%, transparent 39.5% 59%, rgba(249,235,224,0.04) 59% 59.5%, transparent 59.5% 79%, rgba(249,235,224,0.04) 79% 79.5%, transparent 79.5%);
+    }
+
+    .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .placeholderStamp {
+      position: absolute;
+      right: 12px;
+      bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .scannerRow { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .scannerRow input {
+      background: var(--black);
+      border: 1px solid var(--line);
+      color: var(--linen);
+      padding: 14px;
+      font: inherit;
+      outline: none;
+    }
+    .scannerRow button {
+      border: 1px solid var(--tangerine);
+      background: rgba(255, 127, 17, 0.12);
+      color: var(--tangerine);
+      padding: 0 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .metricGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+    .metric {
+      border: 1px solid var(--faint);
+      padding: 12px;
+      min-height: 74px;
+    }
+    .metric span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .metric b { display: block; margin-top: 8px; color: var(--linen); font-size: 20px; }
+    .metric em { display: block; margin-top: 6px; color: var(--muted); font-style: normal; font-size: 11px; }
+
+    .actionStack { display: grid; gap: 10px; }
+    .tradeButton {
+      width: 100%;
+      border: 1px solid currentColor;
+      padding: 15px;
+      background: transparent;
+      color: var(--linen);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-weight: 900;
+    }
+    .buy { color: var(--emerald); background: rgba(35, 206, 107, 0.08); }
+    .sell { color: var(--ember); background: rgba(186, 18, 0, 0.10); }
+
+    .statusList { display: grid; gap: 9px; }
+    .statusItem { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--faint); padding-bottom: 8px; color: var(--muted); }
+    .statusItem b { color: var(--linen); }
+    .dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: var(--tangerine); margin-right: 8px; }
+    .dot.ok { background: var(--emerald); }
+    .dot.warn { background: var(--tangerine); }
+    .dot.bad { background: var(--ember); }
+
+    .liquidityRows { display: grid; gap: 8px; }
+    .liquidityRows div { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--faint); color: var(--muted); font-size: 13px; }
+    .liquidityRows .head { color: var(--tangerine); text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .note {
+      border: 1px solid var(--soft-line);
+      padding: 14px;
+      color: var(--muted);
+      line-height: 1.45;
+      background: rgba(255, 127, 17, 0.03);
+    }
+    .note b { color: var(--linen); display: block; margin-bottom: 6px; }
+
+    /* Concept 1 — Institutional */
+    #institutional .mockup { border-width: 1px; }
+    #institutional .panel { border-color: rgba(255,127,17,0.34); }
+    #institutional .topbar { padding: 14px 18px; }
+    #institutional .brand b { font-size: 18px; }
+    #institutional .terminalGrid { gap: 10px; padding: 12px; }
+    #institutional .panel { padding: 14px; }
+    #institutional .chart { height: 310px; }
+
+    /* Concept 2 — Cyber */
+    #cyber .mockup {
+      border: 2px solid var(--tangerine);
+      box-shadow: 0 0 0 1px rgba(255,127,17,0.25), 0 0 34px rgba(255,127,17,0.14);
+    }
+    #cyber .topbar { border-bottom-width: 2px; }
+    #cyber .brand b { font-size: 30px; color: var(--tangerine); text-shadow: 0 0 18px rgba(255,127,17,0.45); }
+    #cyber .navTabs button { clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+    #cyber .panel { box-shadow: inset 0 0 24px rgba(255,127,17,0.05); }
+    #cyber .active, #cyber .scannerRow button { box-shadow: 0 0 18px rgba(255,127,17,0.22); }
+    #cyber .chart { background-color: rgba(255,127,17,0.025); }
+
+    /* Concept 3 — Minimal */
+    #minimal .conceptHeader h1 { font-weight: 500; letter-spacing: -0.06em; text-transform: none; }
+    #minimal .mockup { border-color: rgba(255,127,17,0.42); }
+    #minimal .topbar { padding: 24px 28px; }
+    #minimal .brand b { font-size: 24px; letter-spacing: -0.04em; text-transform: none; }
+    #minimal .brand span { color: var(--muted); letter-spacing: 0.12em; }
+    #minimal .navTabs { justify-content: flex-start; flex: 0 1 auto; }
+    #minimal .navTabs button { border-color: transparent; border-bottom-color: rgba(255,127,17,0.2); padding: 10px 8px; }
+    #minimal .navTabs .active { border-bottom-color: var(--tangerine); background: transparent; }
+    #minimal .terminalGrid { grid-template-columns: minmax(560px, 1.6fr) minmax(320px, 0.7fr); gap: 22px; padding: 28px; }
+    #minimal .panel { border-color: rgba(255,127,17,0.2); background: transparent; padding: 20px; }
+    #minimal .metric { border-color: rgba(249,235,224,0.08); }
+
+    .recommendation {
+      padding: 34px;
+      border-top: 1px solid var(--line);
+      background: rgba(255,127,17,0.04);
+    }
+    .recommendation h2 { margin: 0 0 10px; color: var(--tangerine); }
+    .recommendation p { margin: 0; max-width: 980px; color: var(--muted); line-height: 1.6; }
+
+    @media (max-width: 1000px) {
+      .conceptHeader, .terminalGrid, .notes { grid-template-columns: 1fr; }
+      .navTabs { justify-content: flex-start; overflow-x: auto; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .metricGrid { grid-template-columns: 1fr; }
+      .liquidityRows div { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header class="previewIndex">
+    <strong>Bond.Terminal / BONDR · cyber preview · visual only</strong>
+    <nav>
+      <a href="#institutional">01 Institutional</a>
+      <a href="#cyber">02 Cyber</a>
+      <a href="#minimal">03 Minimal</a>
+      <a href="#recommendation">Recommendation</a>
+    </nav>
+  </header>
+<section class="concept" id="cyber">
+    <div class="conceptHeader">
+      <div>
+        <div class="tag">Preview 02</div>
+        <h1>Cyber Command Console</h1>
+      </div>
+      <div class="rationale">
+        More aggressive, memorable, and trader-native. Tangerine becomes a visible energy source through stronger outlines, selected states, and controlled glow. Best when BONDR should feel like a command weapon.
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="topbar">
+        <div class="brand"><b>BONDR</b><span>Bond.Terminal Command Layer</span></div>
+        <nav class="navTabs">
+          <button class="active">Command</button><button>Intel</button><button>Liquidity</button><button>Sniper</button><button>Vaults</button><button>Risk</button>
+        </nav>
+        <div class="safetyChip">Armed: false</div>
+      </div>
+      <main class="terminalGrid">
+        <section class="panel" style="grid-row: span 2;">
+          <div class="panelTitle"><span>Command Intelligence</span><small>preview-only layout</small></div>
+          <div class="scannerRow"><input value="Contract / DexScreener / Solscan link" readonly><button>Lock Target</button></div>
+          <div class="metricGrid">
+            <div class="metric"><span>Signal stack</span><b>Online</b><em>Placeholder label</em></div>
+            <div class="metric"><span>Liquidity scan</span><b>Primed</b><em>Preview-only value</em></div>
+            <div class="metric"><span>Wallet state</span><b>Safe</b><em>No custody</em></div>
+          </div>
+          <div class="chart">
+            <svg viewBox="0 0 900 330" preserveAspectRatio="none"><polygon points="0,290 80,250 160,270 240,145 340,180 450,80 560,138 650,58 760,95 900,26 900,330 0,330" fill="rgba(255,127,17,.10)"/><polyline points="0,290 80,250 160,270 240,145 340,180 450,80 560,138 650,58 760,95 900,26" fill="none" stroke="#FF7F11" stroke-width="4"/><polyline points="0,260 120,276 240,230 360,248 500,190 620,212 740,156 900,172" fill="none" stroke="#23CE6B" stroke-width="3" opacity=".86"/></svg>
+            <div class="placeholderStamp">Mock chart · not real market data</div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panelTitle"><span>Execution Controls</span><small>manual sign required</small></div>
+          <div class="actionStack"><button class="tradeButton buy">Execute Buy</button><button class="tradeButton sell">Execute Sell</button></div>
+        </section>
+        <section class="panel">
+          <div class="panelTitle"><span>System Gates</span><small>always visible</small></div>
+          <div class="statusList"><div class="statusItem"><span><i class="dot ok"></i>Providers</span><b>Live</b></div><div class="statusItem"><span><i class="dot warn"></i>Route</span><b>Review</b></div><div class="statusItem"><span><i class="dot bad"></i>Broadcast</span><b>Blocked</b></div></div>
+        </section>
+        <section class="panel" style="grid-column: 1 / -1;">
+          <div class="panelTitle"><span>Liquidity Threat Board</span><small>model-aware LP semantics</small></div>
+          <div class="liquidityRows"><div class="head"><span>Venue</span><span>Pool</span><span>Depth</span><span>Risk gate</span></div><div><span>Raydium</span><span>Preview pair</span><span>Placeholder</span><span>LP token scan</span></div><div><span>Meteora</span><span>Preview pair</span><span>Placeholder</span><span>Position model</span></div></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="notes"><div class="note"><b>Navigation</b>Top nav becomes command-mode switching. Active tab is louder and more branded.</div><div class="note"><b>Palette</b>Tangerine has stronger glow/outlines. Buy/sell are high contrast and impossible to miss.</div><div class="note"><b>Best use</b>Most memorable and energetic, but needs restraint so it does not become gamer UI.</div></div>
+  </section>
+
+  
+<section class="recommendation" id="recommendation">
+    <h2>Recommendation</h2>
+    <p><strong>Start from Preview 1: Institutional Terminal</strong>, then selectively borrow the stronger BONDR brand treatment from Preview 2 and the spacing discipline from Preview 3. For this product stage, credibility beats flash. The rebrand should say: “serious execution terminal with visible safety,” not “generic crypto dashboard.” Preview 1 gives the best foundation for professional trust, while still letting vivid tangerine become the signature BONDR edge.</p>
+  </section>
+</body>
+</html>
