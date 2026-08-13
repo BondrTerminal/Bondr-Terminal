@@ -18,7 +18,7 @@ const primaryNavItems = [
   { href: '/', label: 'Hub' },
   { href: '/sniper', label: 'Terminal' },
   { href: '/liquidity', label: 'Liquidity' },
-  { href: '/deployment', label: 'Launch Prep' },
+  { href: '/deployment', label: 'Bond' },
   { href: '/wallets', label: 'Wallet Ops' },
   { href: '/projects', label: 'Projects' },
   { href: '/portfolio', label: 'Portfolio' }
@@ -74,7 +74,7 @@ function AppHeader() {
       <div className="bondrHeaderActions" aria-label="Account and watch controls">
         <HeaderWalletChip />
         <GlobalCreateProjectAction />
-        <a className="bondrHeaderAction" href="/deployment">Launch Prep</a>
+        <a className="bondrHeaderAction" href="/deployment">Bond</a>
         <AccountNavButton />
       </div>
     </header>
