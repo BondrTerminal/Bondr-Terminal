@@ -1,7 +1,11 @@
 import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
-import { getIntent, updateIntent } from '../../../lib/live-store';
+import { getIntentAsync, updateIntentAsync } from '../../../lib/live-store';
 import { decodeTransactionPolicy, policyCheck } from '../../../lib/transaction-policy';
+import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
+import { liveDisabledPreview } from '../../../lib/transaction-preview';
+import { getLiveActivationStatus } from '../../../lib/live-activation';
+import { getSolanaRpcHealth } from '../../../lib/rpc-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,15 +26,20 @@ type SendRequest = {
 };
 
 function rejectIfLiveDisabled() {
-  if (liveTradingEnabled()) return null;
+  const liveActivation = getLiveActivationStatus();
+  if (liveActivation.broadcastEnabled) return null;
   return Response.json({
     status: 'blocked-by-live-gate',
     observedAt: new Date().toISOString(),
-    error: 'Live transaction broadcast is disabled. Set LIVE_TRADING_ENABLED=true only after explicit approval.',
+    error: 'Live transaction broadcast is disabled. Set LIVE_TRADING_ENABLED=true, LIVE_BETA_SIGNING_ENABLED=true, and LIVE_BETA_BROADCAST_ENABLED=true only after explicit approval.',
     execution: 'live-disabled',
-    liveTradingEnabled: false,
+    liveTradingEnabled: liveActivation.liveTradingEnabled,
     signer: 'browser-wallet-required',
-    serverSigning: false
+    serverSigning: false,
+    signingEnabled: liveActivation.signingEnabled,
+    broadcastEnabled: false,
+    liveActivation,
+    transactionPreview: liveDisabledPreview('swap', '/api/send-signed-transaction', ['LIVE_TRADING_ENABLED, LIVE_BETA_SIGNING_ENABLED, or LIVE_BETA_BROADCAST_ENABLED is false.', 'Broadcast requires explicit final activation.'])
   }, { status: 403 });
 }
 
@@ -52,14 +61,14 @@ function legacyDecodeSignedTransaction(raw: Buffer) {
   }
 }
 
-function validateIntent(body: SendRequest, decoded: { signerKeys: string[]; accountKeys: string[] }) {
-  if (!body.intentId) return 'Broadcast requires intentId so a signed transaction is bound to a stored terminal intent.';
-  if (!body.expectedSigner || !ADDRESS_RE.test(body.expectedSigner)) return 'Broadcast requires expectedSigner.';
-  try { new PublicKey(body.expectedSigner); } catch { return 'expectedSigner is not a valid Solana public key.'; }
-  if (!decoded.signerKeys.includes(body.expectedSigner)) return 'Signed transaction does not include expectedSigner as a signer.';
-  if (body.expectedMint) {
-    if (!ADDRESS_RE.test(body.expectedMint)) return 'expectedMint is not a valid Solana mint shape.';
-    if (!decoded.accountKeys.includes(body.expectedMint)) return 'Signed transaction does not reference expectedMint.';
+function validateIntent(intentId: string | null, expectedSigner: string | null, expectedMint: string | null, decoded: { signerKeys: string[]; accountKeys: string[] }) {
+  if (!intentId) return 'Broadcast requires intentId so a signed transaction is bound to a stored terminal intent.';
+  if (!expectedSigner || !ADDRESS_RE.test(expectedSigner)) return 'Broadcast requires expectedSigner.';
+  try { new PublicKey(expectedSigner); } catch { return 'expectedSigner is not a valid Solana public key.'; }
+  if (!decoded.signerKeys.includes(expectedSigner)) return 'Signed transaction does not include expectedSigner as a signer.';
+  if (expectedMint) {
+    if (!ADDRESS_RE.test(expectedMint)) return 'expectedMint is not a valid Solana mint shape.';
+    if (!decoded.accountKeys.includes(expectedMint)) return 'Signed transaction does not reference expectedMint.';
   }
   return null;
 }
@@ -67,6 +76,8 @@ function validateIntent(body: SendRequest, decoded: { signerKeys: string[]; acco
 export async function POST(request: Request) {
   const disabled = rejectIfLiveDisabled();
   if (disabled) return disabled;
+  const authBlocked = await meridianAuthRequiredResponse(request);
+  if (authBlocked) return authBlocked;
 
   let body: SendRequest;
   try {
@@ -97,14 +108,16 @@ export async function POST(request: Request) {
     return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: error instanceof Error ? error.message : 'Unable to decode signed transaction.', execution: 'broadcast-rejected' }, { status: 400 });
   }
 
-  const intent = body.intentId ? getIntent(body.intentId) : null;
-  const policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: body.expectedSigner ?? null, expectedMint: body.expectedMint ?? null });
-  const intentError = validateIntent(body, decoded);
+  const intent = body.intentId ? await getIntentAsync(body.intentId) : null;
+  const expectedSigner = body.expectedSigner ?? intent?.expectedSigner ?? null;
+  const expectedMint = body.expectedMint ?? intent?.expectedMint ?? null;
+  const policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null });
+  const intentError = validateIntent(body.intentId ?? null, expectedSigner, expectedMint, decoded);
   if (intentError || !policy.safeToBroadcastIfLiveEnabled) {
-    if (body.intentId && intent) updateIntent(body.intentId, { status: 'broadcast_blocked', note: intentError ?? policy.blockers.join(' | ') });
+    if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_blocked', note: intentError ?? policy.blockers.join(' | ') });
     return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error: intentError ?? 'Signed transaction failed intent policy.', execution: 'broadcast-rejected', blockers: policy.blockers, decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt } : null, serverSigning: false }, { status: 400 });
   }
-  if (body.intentId && intent) updateIntent(body.intentId, { status: 'broadcast_requested' });
+  if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_requested' });
 
   try {
     const rpc = configuredSolanaRpc();
@@ -114,6 +127,7 @@ export async function POST(request: Request) {
       maxRetries: 3,
       preflightCommitment: 'confirmed'
     });
+    if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_sent', note: `Broadcast submitted: ${signature}` });
 
     return Response.json({
       status: 'sent',
@@ -124,8 +138,8 @@ export async function POST(request: Request) {
       serverSigning: false,
       intentId: body.intentId ?? null,
       orderId: body.orderId ?? null,
-      expectedSigner: body.expectedSigner,
-      expectedMint: body.expectedMint ?? null,
+      expectedSigner,
+      expectedMint: expectedMint ?? null,
       expectedSide: body.expectedSide ?? null,
       rpcProvider: rpc.provider,
       signature,
@@ -133,6 +147,7 @@ export async function POST(request: Request) {
       explorerUrl: `https://solscan.io/tx/${signature}`
     });
   } catch (error) {
+    if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'failed', note: error instanceof Error ? error.message.slice(0, 240) : 'Broadcast failed.' });
     return Response.json({
       status: 'error',
       observedAt: new Date().toISOString(),

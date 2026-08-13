@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from 'react';
 
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SOLANA_ADDRESS_IN_TEXT_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+
+function extractMint(input: string) {
+  const trimmed = input.trim();
+  if (SOLANA_ADDRESS_RE.test(trimmed)) return trimmed;
+  const matches = trimmed.match(SOLANA_ADDRESS_IN_TEXT_RE) ?? [];
+  return matches.find((candidate) => SOLANA_ADDRESS_RE.test(candidate)) ?? '';
+}
+
 type TokenIntel = {
   mint: string;
   source: string;
@@ -100,11 +110,18 @@ export function TokenIntelLookup({ defaultMint = '', embedded = false, compact =
   const [loading, setLoading] = useState(false);
 
   async function analyze() {
+    const normalizedMint = extractMint(mint);
+    if (!normalizedMint) {
+      setError('Paste a valid Solana token mint/contract address. DexScreener, Solscan, and pump.fun links are okay if they contain the mint.');
+      setIntel(null);
+      return;
+    }
+    setMint(normalizedMint);
     setLoading(true);
     setError('');
     setIntel(null);
     try {
-      const response = await fetch(`/api/token-intel?mint=${encodeURIComponent(mint)}`);
+      const response = await fetch(`/api/token-intel?mint=${encodeURIComponent(normalizedMint)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Token lookup failed.');
       setIntel(data as TokenIntel);
@@ -127,7 +144,7 @@ export function TokenIntelLookup({ defaultMint = '', embedded = false, compact =
     <Wrapper className={embedded ? 'sniperConsole embeddedTokenScanner' : 'sniperConsole documentCard'}>
       <label htmlFor="contract-input">Token contract</label>
       <div className="contractInputRow">
-        <input id="contract-input" placeholder="Paste token mint / contract address" value={mint} onChange={(event) => setMint(event.target.value)} />
+        <input id="contract-input" placeholder="Paste token mint, contract URL, or DexScreener/Solscan link" value={mint} onChange={(event) => setMint(event.target.value)} />
         <button className="button" type="button" onClick={analyze} disabled={!mint || loading}>{loading ? 'Analyzing…' : 'Analyze token'}</button>
       </div>
       <p className="disabledNote">DexScreener + RPC/Helius-aware lookup. Send reviewed mints to the Trading Terminal for Jupiter route preview and gated browser-wallet execution.</p>
@@ -148,7 +165,7 @@ export function TokenIntelLookup({ defaultMint = '', embedded = false, compact =
             {!compact && <div className="sideRow"><span>Market cap</span><strong>{intel.bestPair?.marketCap ? `$${intel.bestPair.marketCap.toLocaleString()}` : 'Unavailable'}</strong></div>}
             {!compact && <div className="sideRow"><span>Risk flags</span><strong>{intel.riskFlags.length ? intel.riskFlags.join(' · ') : 'No basic flags from route lookup'}</strong></div>}
           </div>
-          {compact && <a className="button secondary compactAnalyzerLink" href={`/token-analyzer?mint=${intel.mint}`}>Open full Token Analyzer</a>}
+          {compact && <a className="button secondary compactAnalyzerLink" href={`/token-analyzer?mint=${encodeURIComponent(intel.mint)}`}>Open full Token Analyzer</a>}
           {!compact && <div className="projectTable tokenPairTable" role="table" aria-label="Token pairs">
             <div className="projectRow tokenPairRow projectHead"><span>DEX</span><span>Pair</span><span>Liquidity</span><span>Volume 24h</span><span>Review</span></div>
             {intel.pairs.map((pair, index) => (

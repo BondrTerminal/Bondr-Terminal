@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { eventsForProject, formatSol, getMeridianStore, getProject, launchPreflight, projectFlow, readinessScore, walletsForGroup } from '../../../lib/meridian-store';
+import { eventsForProject, formatSol, getProject, launchPreflight, projectFlow, readinessScore, walletsForGroup } from '../../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,7 @@ type ProjectPageProps = {
 
 export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
   const { id } = await params;
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const project = getProject(id, store);
   if (!project) notFound();
 
@@ -22,7 +23,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
     ['01', 'Project', 'Create the workspace, define identity, and own all module links.'],
     ['02', 'Wallets', 'Attach wallet group, inspect balances, archive retired wallets, and prepare funding.'],
     ['03', 'Deployment', 'Complete metadata, launch path, funding plan, and guarded launch preflight.'],
-    ['04', 'Sniper', 'Analyze token/pool context once a mint exists or a contract is pasted.'],
+    ['04', 'Terminal', 'Analyze token/pool context once a mint exists or a contract is pasted.'],
     ['05', 'Dashboard', 'Track net SOL flow from realized buys/sells only.'],
     ['06', 'Liquidity', 'Handoff deployed projects to the backend-wired liquidity engine.']
   ];
@@ -59,7 +60,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
             <div className="projectModuleLinks">
               <a href={project.moduleLinks.deployment}><strong>Deployment</strong><span>metadata, launch path, preflight</span></a>
               <a href={project.moduleLinks.wallets}><strong>Wallet Ops</strong><span>wallet group, balance board, archive</span></a>
-              <a href={project.moduleLinks.sniper}><strong>Sniper</strong><span>token intelligence and route context</span></a>
+              <a href={project.moduleLinks.sniper}><strong>Terminal</strong><span>token intelligence and route context</span></a>
               <a href={project.moduleLinks.dashboard}><strong>Dashboard</strong><span>net SOL accounting</span></a>
               <a href={project.moduleLinks.liquidity}><strong>Liquidity</strong><span>liquidity engine handoff</span></a>
             </div>
@@ -80,7 +81,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
           <div className="sectionIntro compactIntro">
             <span>Structure</span>
             <h2>Project operating sequence</h2>
-            <p>This is how every project should move through Meridian. Each step has a module owner and a clear job.</p>
+            <p>This is how every project should move through Bond.Terminal. Each step has a module owner and a clear job.</p>
           </div>
           <div className="workflowGrid projectSequenceGrid">
             {operatingSequence.map(([index, title, body]) => (
@@ -120,7 +121,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
               <div className="walletRow walletHead"><span>Role</span><span>Wallet</span><span>Balance</span><span>Status</span></div>
               {wallets.map((wallet) => (
                 <div className="walletRow" key={wallet.id}>
-                  <span>{wallet.role}</span><strong>{wallet.address.slice(0, 6)}…{wallet.address.slice(-5)}</strong><span>{wallet.balanceSol.toFixed(2)} SOL</span><em>{wallet.status}</em>
+                  <span>{wallet.role}</span><strong>{wallet.address.slice(0, 6)}…{wallet.address.slice(-5)}</strong><span>{`modeled ${wallet.balanceSol.toFixed(2)} SOL`}</span><em>{wallet.status}</em>
                 </div>
               ))}
             </div>

@@ -1,79 +1,196 @@
-import { decodeTransactionPolicy, policyCheck } from '../../../../lib/transaction-policy';
+import { Connection, VersionedTransaction } from '@solana/web3.js';
+import { configuredSolanaRpc } from '../../../../lib/solana-rpc';
+import { getSolanaRpcHealth } from '../../../../lib/rpc-health';
+import { buildTransactionPreview } from '../../../../lib/transaction-preview';
+import { getLiveActivationStatus } from '../../../../lib/live-activation';
+import { isProviderLimitedError, providerLimitedNote } from '../../../../lib/provider-truth';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_SIGNED_TX_BYTES = 32_000;
+function base64ToBytes(value: string) {
+  return Uint8Array.from(Buffer.from(value, 'base64'));
+}
 
-type DryRunRequest = {
-  signedTransaction?: string;
-  expectedSigner?: string;
-  expectedMint?: string;
-  intentId?: string;
-};
+function decodeTransaction(raw: string) {
+  return VersionedTransaction.deserialize(base64ToBytes(raw));
+}
+
+function summarizeSimulationFailure(err: unknown, logs: string[] | null | undefined) {
+  const errText = typeof err === 'string' ? err : JSON.stringify(err ?? 'unknown');
+  const joinedLogs = (logs ?? []).join(' | ');
+  const text = `${errText} ${joinedLogs}`.toLowerCase();
+  if (text.includes('insufficient funds') || text.includes('insufficient lamports') || text.includes('accountnotfound') || text.includes('custom program error: 0x1')) {
+    return 'Simulation failed: connected signer appears to have insufficient SOL/token balance for this unsigned swap and network fees.';
+  }
+  if (text.includes('blockhash not found') || text.includes('blockhashnotfound')) return 'Simulation failed: transaction blockhash expired before simulation. Rebuild the unsigned transaction and simulate again.';
+  if (text.includes('slippage') || text.includes('price impact')) return 'Simulation failed: route/slippage constraints no longer hold. Refresh quote and rebuild.';
+  return `Simulation failed: ${errText}`;
+}
 
 export async function POST(request: Request) {
   const observedAt = new Date().toISOString();
-  const body = await request.json().catch(() => null) as DryRunRequest | null;
-  if (!body?.signedTransaction) {
+  let body: { unsignedTransaction?: string; signedTransaction?: string; action?: string; mint?: string; wallet?: string };
+  try {
+    body = await request.json();
+  } catch {
     return Response.json({
       status: 'error',
       observedAt,
-      error: 'signedTransaction base64 is required.',
-      execution: 'signer-dry-run-no-broadcast',
-      safeToBroadcastIfLiveEnabled: false,
-      blockers: ['Missing signed transaction.']
+      error: 'Invalid JSON body.',
+      transactionPreview: buildTransactionPreview({
+        status: 'error',
+        mode: 'preview-only',
+        action: 'swap',
+        route: '/api/terminal/signer-dry-run',
+        blockers: ['Invalid JSON body.'],
+        warnings: ['Dry-run only. Signing and broadcast disabled.']
+      })
     }, { status: 400 });
   }
 
-  let raw: Buffer;
-  try { raw = Buffer.from(body.signedTransaction, 'base64'); }
-  catch { raw = Buffer.alloc(0); }
-  if (raw.length <= 0 || raw.length > MAX_SIGNED_TX_BYTES) {
-    return Response.json({ status: 'error', observedAt, error: `Invalid signed transaction size: ${raw.length} bytes.`, execution: 'signer-dry-run-no-broadcast', safeToBroadcastIfLiveEnabled: false, blockers: ['Invalid transaction size.'] }, { status: 400 });
+  const raw = body.unsignedTransaction ?? body.signedTransaction;
+  if (!raw) {
+    return Response.json({
+      status: 'blocked',
+      observedAt,
+      error: 'Missing unsignedTransaction or signedTransaction base64 payload.',
+      transactionPreview: buildTransactionPreview({
+        status: 'blocked',
+        mode: 'preview-only',
+        action: 'swap',
+        route: '/api/terminal/signer-dry-run',
+        blockers: ['Simulation pending — no unsigned transaction built yet.'],
+        warnings: ['Dry-run only. Signing and broadcast disabled.']
+      })
+    }, { status: 400 });
   }
 
+  let transaction: VersionedTransaction;
   try {
-    const decoded = decodeTransactionPolicy(raw);
-    const policy = policyCheck({ decoded, intentId: body.intentId ?? null, expectedSigner: body.expectedSigner ?? null, expectedMint: body.expectedMint ?? null });
-    return Response.json({
-      status: policy.safeToBroadcastIfLiveEnabled ? 'ok' : 'broadcast_blocked',
-      observedAt,
-      execution: 'signer-dry-run-no-broadcast',
-      signerMatched: policy.signerMatched,
-      expectedSigner: body.expectedSigner ?? policy.intent?.expectedSigner ?? null,
-      actualSigners: decoded.signerKeys,
-      expectedMint: body.expectedMint ?? policy.intent?.expectedMint ?? null,
-      expectedMintReferenced: policy.expectedMintReferenced,
-      programs: decoded.programs,
-      requiredAccountsMatched: policy.requiredAccountsMatched,
-      transactionMessageHash: policy.transactionMessageHash,
-      safeToBroadcastIfLiveEnabled: policy.safeToBroadcastIfLiveEnabled,
-      blockers: policy.blockers,
-      intent: policy.intent ? { id: policy.intent.id, status: policy.intent.status, expiresAt: policy.intent.expiresAt } : null,
-      serverSigning: false
-    });
+    transaction = decodeTransaction(raw);
   } catch (error) {
     return Response.json({
       status: 'error',
       observedAt,
-      error: error instanceof Error ? error.message : 'Unable to decode signed transaction.',
-      execution: 'signer-dry-run-no-broadcast',
-      safeToBroadcastIfLiveEnabled: false,
-      blockers: ['Transaction decode failed.'],
-      serverSigning: false
+      error: error instanceof Error ? error.message : 'Transaction decode failed.',
+      transactionPreview: buildTransactionPreview({
+        status: 'error',
+        mode: 'simulation-ready',
+        action: 'swap',
+        tokenMint: body.mint,
+        wallet: body.wallet,
+        route: '/api/terminal/signer-dry-run',
+        simulationStatus: 'failed',
+        blockers: ['Transaction decode failed.'],
+        warnings: ['No signing or broadcast was attempted.']
+      })
     }, { status: 400 });
+  }
+
+  const rpc = configuredSolanaRpc();
+  const rpcHealth = await getSolanaRpcHealth();
+  const liveActivation = getLiveActivationStatus({ rpcHealth });
+
+  if (rpcHealth.status !== 'live') {
+    const providerState = rpcHealth.status === 'provider-limited' || rpcHealth.quotaLimited ? 'provider-limited' : rpcHealth.status === 'modeled' ? 'modeled' : 'unavailable';
+    const message = providerState === 'provider-limited'
+      ? `Provider-limited: simulation was not run because ${rpcHealth.selectedProviderLabel} RPC is quota-limited, timed out, or degraded. This is provider state, not transaction failure. ${rpcHealth.note}`
+      : `Simulation unavailable: ${rpcHealth.selectedProviderLabel} RPC is ${providerState}. This is provider state, not transaction failure. ${rpcHealth.note}`;
+    return Response.json({
+      status: providerState,
+      observedAt,
+      error: message,
+      execution: 'simulation-only-provider-blocked',
+      rpcProvider: rpc.provider,
+      rpcHealth: { status: rpcHealth.status, quotaLimited: rpcHealth.quotaLimited, provider: rpcHealth.selectedProvider, providerLabel: rpcHealth.selectedProviderLabel, note: rpcHealth.note },
+      transactionPreview: buildTransactionPreview({
+        status: 'blocked',
+        mode: 'simulation-ready',
+        action: 'swap',
+        tokenMint: body.mint,
+        wallet: body.wallet,
+        provider: rpc.provider,
+        route: '/api/terminal/signer-dry-run',
+        simulationStatus: 'failed',
+        blockers: [message],
+        warnings: ['No signing or broadcast was attempted.']
+      })
+    }, { status: providerState === 'provider-limited' ? 429 : 503 });
+  }
+
+  try {
+    const connection = new Connection(rpc.url, 'confirmed');
+    const simulation = await connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: true });
+    const failed = Boolean(simulation.value.err);
+    const failureSummary = failed ? summarizeSimulationFailure(simulation.value.err, simulation.value.logs) : null;
+    return Response.json({
+      status: failed ? 'error' : 'ok',
+      observedAt,
+      execution: 'simulation-only',
+      liveTradingEnabled: liveActivation.liveTradingEnabled,
+      signingEnabled: liveActivation.signingEnabled && !failed,
+      broadcastEnabled: liveActivation.broadcastEnabled && !failed,
+      requireSimulation: liveActivation.requireSimulation,
+      rpcProvider: rpc.provider,
+      simulation: {
+        err: simulation.value.err,
+        logs: simulation.value.logs ?? [],
+        unitsConsumed: simulation.value.unitsConsumed ?? null,
+        failureSummary,
+      },
+      transactionPreview: buildTransactionPreview({
+        status: failed ? 'blocked' : 'ok',
+        mode: 'simulation-ready',
+        action: 'swap',
+        tokenMint: body.mint,
+        wallet: body.wallet,
+        provider: rpc.provider,
+        route: '/api/terminal/signer-dry-run',
+        simulationStatus: failed ? 'failed' : 'passed',
+        blockers: failed ? [failureSummary ?? 'Simulation failed; signing/broadcast blocked while LIVE_REQUIRE_SIMULATION is active.'] : liveActivation.blockers.filter((item) => item !== 'LIVE_BETA_SIGNING_ENABLED is false.'),
+        warnings: ['Simulation only. Server did not sign or broadcast this transaction.', ...liveActivation.warnings]
+      })
+    }, { status: failed ? 422 : 200 });
+  } catch (error) {
+    const providerLimited = isProviderLimitedError(error);
+    const message = providerLimited ? providerLimitedNote(error, 'transaction simulation') : error instanceof Error ? `Simulation unavailable: RPC/provider request failed before transaction execution. Detail: ${error.message}` : 'Simulation unavailable: RPC/provider request failed before transaction execution.';
+    return Response.json({
+      status: providerLimited ? 'provider-limited' : 'unavailable',
+      observedAt,
+      error: message,
+      rpcProvider: rpc.provider,
+      transactionPreview: buildTransactionPreview({
+        status: 'error',
+        mode: 'simulation-ready',
+        action: 'swap',
+        tokenMint: body.mint,
+        wallet: body.wallet,
+        provider: rpc.provider,
+        route: '/api/terminal/signer-dry-run',
+        simulationStatus: 'failed',
+        blockers: [message],
+        warnings: ['No signing or broadcast was attempted.']
+      })
+    }, { status: providerLimited ? 429 : 503 });
   }
 }
 
 export async function GET() {
+  const rpcHealth = await getSolanaRpcHealth();
+  const liveActivation = getLiveActivationStatus({ rpcHealth });
   return Response.json({
     status: 'ok',
     observedAt: new Date().toISOString(),
+    execution: 'simulation-only',
     route: '/api/terminal/signer-dry-run',
-    method: 'POST',
-    required: ['signedTransaction'],
-    optional: ['expectedSigner', 'expectedMint', 'intentId'],
-    execution: 'decode-and-policy-check-only-no-broadcast',
-    serverSigning: false
+    liveActivation,
+    transactionPreview: buildTransactionPreview({
+      status: 'blocked',
+      mode: 'preview-only',
+      action: 'swap',
+      route: '/api/terminal/signer-dry-run',
+      blockers: ['POST an unsignedTransaction to simulate.'],
+      warnings: ['Dry-run only. Signing and broadcast disabled unless explicit gates are active.']
+    })
   });
 }

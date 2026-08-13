@@ -4,6 +4,62 @@ import { join } from 'node:path';
 export type ProjectStatus = 'draft' | 'pending' | 'deployed' | 'cto';
 export type FlowType = 'buy' | 'sell';
 
+export type WalletPlanEntry = {
+  walletId: string;
+  role: string;
+  participate: boolean;
+  plannedBuySol: number;
+  maxBuySol: number;
+  maxSlippageBps: number;
+  takeProfitPercents: number[];
+  stopLossPct: number;
+  trailingStopPct: number;
+  perTxSellCapPct: number;
+  cooldownSeconds: number;
+};
+
+export type LaunchConfig = {
+  route: {
+    initialBuySol: number;
+    slippageBps: number;
+    priorityFeeMode: string;
+    graduationMonitor: string;
+    raydiumLiquiditySol: number;
+    raydiumWithheldTokenPct: number;
+    raydiumWithheldTokenAmount: number;
+    burnLiquidity: boolean;
+  };
+  walletPlan: WalletPlanEntry[];
+  devWalletRules: {
+    controlledWalletRole: string;
+    maxInitialBuySol: number;
+    maxSlippageBps: number;
+    maxPriorityFeeSol: number;
+    perTxSellCapPct: number;
+    cooldownSeconds: number;
+    takeProfitPercents: number[];
+    stopLossPct: number;
+    trailingStopPct: number;
+    trailingActivationPct: number;
+    maxDevExposureSol: number;
+    maxDevSupplyPct: number;
+  };
+  updatedAt?: string;
+};
+
+export type PreLiveDryRun = {
+  status: 'pass' | 'warn' | 'fail';
+  observedAt: string;
+  launchPath: string;
+  participatingWalletCount: number;
+  totalPlannedBuySol: number;
+  totalMaxBuySol: number;
+  maxSlippageBps: number;
+  warnings: string[];
+  blockers: string[];
+  execution: 'dry-run-only-no-signing-no-broadcast';
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -29,6 +85,8 @@ export type Project = {
     devBuySol: number;
     collectionWalletId: string;
   };
+  launchConfig?: LaunchConfig;
+  preLiveDryRun?: PreLiveDryRun;
   deploymentState: {
     stage: string;
     ready: boolean;
@@ -52,6 +110,10 @@ export type Wallet = {
   lastActivityAt?: string;
   archivedAt?: string;
   archiveReason?: string;
+  custodyMode?: 'watch-only' | 'managed-local';
+  vaultKeyId?: string;
+  keyExportedAt?: string;
+  keyBackupWarningDismissedAt?: string;
 };
 
 export type WalletActivity = {

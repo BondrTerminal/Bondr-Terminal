@@ -1,4 +1,4 @@
-import { MockWalletConnect } from '../components/MockWalletConnect';
+import { BrowserWalletConnect } from '../components/BrowserWalletConnect';
 import { LiquidityBackendStatus } from './components/LiquidityBackendStatus';
 import { LiquidityEngineProbe } from './components/LiquidityEngineProbe';
 
@@ -10,7 +10,7 @@ const engineCapabilities = [
   ['Route preview', 'Uses Jupiter quote previews before any swap transaction is built.'],
   ['Browser signing', 'Live actions require browser-wallet approval; server custody is intentionally blocked.'],
   ['Risk gates', 'Server caps max SOL/USDC, slippage, and live-mode availability before building transactions.'],
-  ['Backend status', 'Shows route readiness, wallet balance reads, execution gates, and engine status from /api/terminal-backend.']
+  ['Backend status', 'Shows canonical snapshot liquidity plus backend route readiness, wallet balance reads, execution gates, and engine status.']
 ];
 
 const engineWorkflow = [
@@ -18,7 +18,7 @@ const engineWorkflow = [
   ['02', 'Inspect LP', 'Resolve supported LP mints and scan lock/burn distribution.'],
   ['03', 'Preview route', 'Use Jupiter quotes for route, impact, and amount checks.'],
   ['04', 'Build unsigned tx', 'Only when live gate is enabled and wallet signing is required.'],
-  ['05', 'Broadcast signed tx', 'Only after the browser wallet signs and the server broadcaster accepts it.']
+  ['05', 'Signed tx submit preview', 'Future live phase only: after browser-wallet signing, explicit confirmation, and broadcaster gate approval.']
 ];
 
 export default async function LiquidityPage() {
@@ -63,7 +63,7 @@ export default async function LiquidityPage() {
         </section>
 
         <section className="terminalShell focusedTerminal embeddedTerminalShell">
-          <MockWalletConnect />
+          <BrowserWalletConnect />
           <LiquidityBackendStatus />
         </section>
       </div>

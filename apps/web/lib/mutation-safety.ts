@@ -32,7 +32,10 @@ export function sameOriginAllowed(request: Request) {
   try {
     const req = new URL(request.url);
     const src = new URL(origin);
-    const allowed = src.host === req.host;
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+    const sameHost = src.host === req.host;
+    const sameLocalLoopback = localHosts.has(src.hostname) && localHosts.has(req.hostname) && src.port === req.port;
+    const allowed = sameHost || sameLocalLoopback;
     return { allowed, note: allowed ? 'Same-origin mutation request.' : `Cross-origin mutation blocked from ${src.host}.` };
   } catch {
     return { allowed: false, note: 'Invalid Origin header.' };

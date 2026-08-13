@@ -21,7 +21,7 @@ export const meridianObligationMatrix: MeridianObligation[] = [
     route: '/wallets',
     obligation: 'Inspect wallet records, groups, archive state, and balance labels.',
     source: 'Local Meridian model plus RPC/Helius-ready SOL balance hydration.',
-    blocked: 'No create, import private key, fund, collect, send, delete, or export key material.',
+    blocked: 'No create, import sensitive credential, fund, collect, send, delete, or export key material.',
     capability: 'read-only'
   },
   {
@@ -49,19 +49,11 @@ export const meridianObligationMatrix: MeridianObligation[] = [
     capability: 'disabled'
   },
   {
-    section: 'Projects',
-    route: '/projects',
-    obligation: 'Coordinate project objects and module handoffs.',
-    source: 'Local JSON-backed Meridian project store until durable storage is added.',
-    blocked: 'No claim of production persistence, ownership enforcement, or live project automation.',
-    capability: 'read-only'
-  },
-  {
     section: 'Project Dashboard',
-    route: '/project-dashboard',
-    obligation: 'Show accounting-only flow.',
-    source: 'Stored project buy/sell flow events; net SOL equals sells minus buys.',
-    blocked: 'No mark-to-market PnL claim for tokens still held.',
+    route: '/projects',
+    obligation: 'Coordinate project objects, net-flow history, ATH labels, and module handoffs from one unified dashboard.',
+    source: 'Local JSON-backed BONDR project store plus stored buy/sell flow events; legacy aliases are not separate product modules.',
+    blocked: 'No separate legacy project list, no mark-to-market PnL claim for tokens still held, and no live project automation.',
     capability: 'read-only'
   },
   {

@@ -1,4 +1,4 @@
-import { createIntent, listIntents, liveMutationMeta, type TerminalIntentStatus } from '../../../../lib/live-store';
+import { createIntentAsync, listIntentsAsync, liveMutationMeta, type TerminalIntentStatus } from '../../../../lib/live-store';
 import { DEFAULT_ALLOWED_SWAP_PROGRAMS } from '../../../../lib/transaction-policy';
 import { sameOriginAllowed, mutationBlockedResponse } from '../../../../lib/mutation-safety';
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   return Response.json({
     status: 'ok',
     source: 'terminal-intent-registry',
-    intents: listIntents({ id, status: status ?? 'all' }),
+    intents: await listIntentsAsync({ id, status: status ?? 'all' }),
     ...liveMutationMeta('Intent registry read from local-dev live store.')
   });
 }
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
   const allowedPrograms = body.allowedPrograms?.length ? body.allowedPrograms : DEFAULT_ALLOWED_SWAP_PROGRAMS;
   const requiredAccounts = Array.from(new Set([...(body.requiredAccounts ?? []), body.expectedSigner, body.expectedMint]));
-  const intent = createIntent({
+  const intent = await createIntentAsync({
     expectedSigner: body.expectedSigner,
     expectedMint: body.expectedMint,
     expectedSide: String(body.expectedSide ?? 'buy').toLowerCase() === 'sell' ? 'sell' : 'buy',

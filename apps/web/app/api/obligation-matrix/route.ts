@@ -6,7 +6,7 @@ export function GET() {
   return Response.json({
     phase: 'backend-wired-live-gated',
     execution: 'disabled',
-    obligation: 'Represent current source truth for each Meridian section; do not imply live operation.',
+    obligation: 'Represent current source truth for each Bond.Terminal section; do not imply live operation.',
     matrix: meridianObligationMatrix
   });
 }

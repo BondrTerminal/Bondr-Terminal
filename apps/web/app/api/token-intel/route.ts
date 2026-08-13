@@ -6,6 +6,15 @@ export const dynamic = 'force-dynamic';
 
 const DEXSCREENER_TIMEOUT_MS = 5_000;
 const RPC_TIMEOUT_MS = 6_000;
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SOLANA_ADDRESS_IN_TEXT_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+
+function extractMint(input: string | null | undefined) {
+  const trimmed = (input ?? '').trim();
+  if (SOLANA_ADDRESS_RE.test(trimmed)) return trimmed;
+  const matches = trimmed.match(SOLANA_ADDRESS_IN_TEXT_RE) ?? [];
+  return matches.find((candidate) => SOLANA_ADDRESS_RE.test(candidate)) ?? '';
+}
 
 type OnChainTokenInfo = {
   status: 'ok' | 'unavailable';
@@ -105,9 +114,8 @@ function counterToken(pair: DexPair, mint: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const mint = searchParams.get('mint')?.trim();
+  const mint = extractMint(searchParams.get('mint'));
   if (!mint) return Response.json({ error: 'Missing mint query parameter.' }, { status: 400 });
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return Response.json({ error: 'Invalid Solana mint/address shape.' }, { status: 400 });
 
   try {
     const onChain = await fetchOnChainTokenInfo(mint);

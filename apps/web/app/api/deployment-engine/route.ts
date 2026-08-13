@@ -1,5 +1,8 @@
 import { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { buildMeridianHubContext, resolveMeridianProjectContextId } from '../../../lib/meridian-context';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
+import { getLiveActivationStatus } from '../../../lib/live-activation';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +12,7 @@ const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xW
 const RENT_SYSVAR_ID = new PublicKey('SysvarRent111111111111111111111111111111111');
 const MINT_SIZE = 82;
 
-function liveEnabled() { return process.env.LIVE_TRADING_ENABLED === 'true'; }
+function liveEnabled() { return getLiveActivationStatus().deploymentEnabled; }
 function parsePk(value: unknown, label: string) { if (typeof value !== 'string' || !ADDRESS_RE.test(value)) throw new Error(`Missing or invalid ${label}.`); return new PublicKey(value); }
 function u64LE(value: bigint) { const b = Buffer.alloc(8); b.writeBigUInt64LE(value); return b; }
 function u32LE(value: number) { const b = Buffer.alloc(4); b.writeUInt32LE(value); return b; }
@@ -39,9 +42,46 @@ function createMintToCheckedInstruction(mint: PublicKey, destination: PublicKey,
   ], data: Buffer.concat([u8(14), u64LE(amount), u8(decimals)]) });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const projectId = searchParams.get('project')?.trim() || null;
+  const observedAt = new Date().toISOString();
+  const store = await getMeridianWalletStore();
+
+  if (projectId && !resolveMeridianProjectContextId(projectId, store)) {
+    return Response.json({ status: 'error', observedAt, error: 'Unknown Bond.Terminal project or wallet group.', project: projectId }, { status: 404 });
+  }
+
+  const context = buildMeridianHubContext(projectId, store);
+  const activeProject = context.projects[0] ?? null;
+
   return Response.json({
-    status: 'ok', observedAt: new Date().toISOString(), signer: 'browser-wallet+client-mint-keypair', liveTradingEnabled: liveEnabled(),
+    status: 'ok', observedAt, signer: 'browser-wallet+client-mint-keypair', liveTradingEnabled: liveEnabled(),
+    contract: 'deployment-engine-v2-shared-context',
+    projectContext: activeProject,
+    deploymentSnapshot: activeProject ? {
+      project: activeProject.project,
+      deploymentStatus: activeProject.deployment,
+      metadataStatus: activeProject.preflight.find((check) => check.label === 'Metadata') ?? null,
+      walletStatus: activeProject.preflight.find((check) => check.label === 'Wallet group') ?? null,
+      fundingStatus: activeProject.fundingPlan,
+      launchPathStatus: activeProject.preflight.find((check) => check.label === 'Launch path') ?? null,
+      launchConfig: activeProject.launchConfig,
+      walletPlan: activeProject.launchConfig.walletPlan,
+      walletPlanSummary: {
+        walletCount: activeProject.launchConfig.walletPlan.length,
+        participatingWallets: activeProject.launchConfig.walletPlan.filter((entry) => entry.participate).length,
+        plannedBuySol: activeProject.launchConfig.walletPlan.filter((entry) => entry.participate).reduce((sum, entry) => sum + entry.plannedBuySol, 0),
+        maxBuySol: activeProject.launchConfig.walletPlan.filter((entry) => entry.participate).reduce((sum, entry) => sum + entry.maxBuySol, 0)
+      },
+      preflightChecks: activeProject.preflight,
+      transactionPlan: { status: liveEnabled() ? 'builder-available-for-token-mint' : 'disabled until live-gated', path: activeProject.project.launchPath, raydiumBurnLiquidity: activeProject.launchConfig.route.burnLiquidity, raydiumLiquiditySol: activeProject.launchConfig.route.raydiumLiquiditySol, note: 'Simulation/preflight only unless LIVE_TRADING_ENABLED and browser-wallet signing are explicitly enabled.' },
+      simulationStatus: { status: 'preflight-only', path: activeProject.project.launchPath, walletPlanStatus: activeProject.launchConfig.walletPlan.length ? 'configured' : 'missing-wallet-plan', note: 'No signed deployment or fund movement is performed by GET.' },
+      liveReadiness: { status: liveEnabled() ? 'requires browser-wallet signing' : 'disabled until live-gated', requiresExplicitConfirmation: true },
+      blockers: activeProject.blockers,
+      nextActions: activeProject.nextActions,
+      sourceStatus: activeProject.sourceStatus
+    } : null,
     engines: {
       tokenMint: { status: liveEnabled() ? 'transaction-builder-ready' : 'live-disabled', method: 'POST {operation:"create-spl-token", payer, mint, decimals, initialSupply, freezeAuthority?}' },
       launchBundle: { status: 'preflight-only', note: 'Bundle execution requires funded wallet set, signing order, and anti-self-trade checks.' },

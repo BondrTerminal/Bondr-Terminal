@@ -47,7 +47,7 @@ function TurnkeyConfiguredPanel() {
   const browserWallet = detectBrowserWallet();
 
   async function login() {
-    await turnkey.handleLogin({ title: 'Log in to Meridian' });
+    await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
   }
 
   async function refresh() {
@@ -57,13 +57,13 @@ function TurnkeyConfiguredPanel() {
   return (
     <section className="profileGrid">
       <div className="documentCard profileCard">
-        <div className="profileAvatar">{authenticated ? 'TK' : 'M'}</div>
+        <div className="profileAvatar">{authenticated ? 'TK' : 'B'}</div>
         <div>
           <div className="eyebrow">Turnkey profile</div>
           <h1>{authenticated ? 'Read-only identity connected' : 'Connect read-only identity'}</h1>
           <p>
             Turnkey is installed only as a profile identity surface. It may show user/wallet/account metadata,
-            but signing, swaps, private-key export, wallet mutation, and live trading remain disabled in Meridian.
+            but signing, swaps, credential export, wallet mutation, and live trading remain disabled in Bond.Terminal.
           </p>
         </div>
         <div className="profileActions">
@@ -95,7 +95,7 @@ function TurnkeyConfiguredPanel() {
         <h2>Profile obligation</h2>
         <ol className="roadmapList">
           <li>Represent operator identity through Turnkey Auth Proxy.</li>
-          <li>Expose only read-only user/wallet/account metadata inside Meridian.</li>
+          <li>Expose only read-only user/wallet/account metadata inside Bond.Terminal.</li>
           <li>Do not treat embedded wallet visibility as execution permission.</li>
           <li>Map identity to projects later as metadata only until a separate permission model exists.</li>
         </ol>
@@ -133,7 +133,7 @@ export function TurnkeyProfileLogin() {
           <h2>Current obligation</h2>
           <ol className="roadmapList">
             <li>Only public Turnkey IDs belong in NEXT_PUBLIC vars.</li>
-            <li>No private keys, API keys, or Turnkey secret material should be committed.</li>
+            <li>No sensitive credentials, provider credentials, or Turnkey secret material should be committed.</li>
             <li>This section represents identity only; signing, swaps, wallet export/import, and live trading remain disabled.</li>
           </ol>
         </div>

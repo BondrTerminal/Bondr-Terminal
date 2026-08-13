@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
+import { buildTransactionPreview } from '../../../lib/transaction-preview';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,7 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const JUPITER_QUOTE_URL = process.env.JUPITER_QUOTE_URL ?? 'https://lite-api.jup.ag/swap/v1/quote';
 const QUOTE_TIMEOUT_MS = 7_000;
+const MAX_SLIPPAGE_BPS = Number(process.env.LIVE_MAX_SLIPPAGE_BPS ?? '500');
 
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -40,11 +42,14 @@ function parsePositiveAmount(raw: unknown): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function parseSlippageBps(raw: unknown): number {
-  if (raw === null || raw === undefined || raw === '' || raw === 'Auto') return 100;
+function parseSlippageBps(raw: unknown): { ok: true; value: number } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === '' || raw === 'Auto') return { ok: true, value: 100 };
   const value = typeof raw === 'number' ? raw : Number(String(raw).replace(/bps/i, '').trim());
-  if (!Number.isFinite(value)) return 100;
-  return Math.max(1, Math.min(2_000, Math.round(value)));
+  if (!Number.isFinite(value)) return { ok: true, value: 100 };
+  const rounded = Math.round(value);
+  if (rounded < 1) return { ok: false, error: 'Slippage must be at least 1 bps.' };
+  if (rounded > MAX_SLIPPAGE_BPS) return { ok: false, error: `Requested slippage ${rounded} bps exceeds LIVE_MAX_SLIPPAGE_BPS (${MAX_SLIPPAGE_BPS}).` };
+  return { ok: true, value: rounded };
 }
 
 function decimalToRawUnits(amount: number, decimals: number): string {
@@ -86,7 +91,21 @@ export async function POST(request: Request) {
   try {
     body = await request.json() as QuoteRequest;
   } catch {
-    return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: 'Invalid JSON body.', execution: 'quote-only' }, { status: 400 });
+    return Response.json({
+      status: 'error',
+      observedAt: new Date().toISOString(),
+      error: 'Invalid JSON body.',
+      execution: 'quote-only',
+      transactionPreview: buildTransactionPreview({
+        status: 'error',
+        mode: 'preview-only',
+        action: 'swap',
+        provider: 'Jupiter',
+        route: '/api/execution-quote',
+        blockers: ['Invalid JSON body.', 'Unsigned transaction not built yet.', 'Signing and broadcast remain disabled.'],
+        warnings: ['Quote preview only.']
+      })
+    }, { status: 400 });
   }
 
   const mint = body.mint?.trim();
@@ -107,7 +126,30 @@ export async function POST(request: Request) {
   const quoteMint = spendAsset === 'USDC' ? USDC_MINT : SOL_MINT;
   const inputMint = side === 'buy' ? quoteMint : mint;
   const outputMint = side === 'buy' ? mint : quoteMint;
-  const slippageBps = parseSlippageBps(body.slippageBps);
+  if (inputMint === outputMint) {
+    return Response.json({
+      status: 'error',
+      observedAt: new Date().toISOString(),
+      error: spendAsset === 'SOL'
+        ? 'Quote route is SOL → SOL. Pick USDC mint or another token mint, or change settlement asset.'
+        : 'Quote input and output mint are identical. Pick a different token mint or settlement asset.',
+      execution: 'quote-rejected',
+      blocker: 'same-input-output-mint',
+      transactionPreview: buildTransactionPreview({
+        status: 'blocked',
+        mode: 'preview-only',
+        action: 'swap',
+        tokenMint: mint,
+        provider: 'Jupiter',
+        route: '/api/execution-quote',
+        blockers: ['Input mint and output mint are identical.', 'Jupiter cannot quote a same-mint no-op route.'],
+        warnings: ['Use USDC mint for the default SOL → USDC micro-buy QA route.']
+      })
+    }, { status: 400 });
+  }
+  const slippage = parseSlippageBps(body.slippageBps);
+  if (!slippage.ok) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: slippage.error, execution: 'quote-rejected', blocker: 'slippage-out-of-bounds' }, { status: 400 });
+  const slippageBps = slippage.value;
 
   try {
     const decimals = await fetchMintDecimals(inputMint);
@@ -130,6 +172,20 @@ export async function POST(request: Request) {
       execution: 'quote-only',
       liveTradingEnabled: false,
       safety: 'No transaction was built, signed, sent, or gated. This endpoint only returns a Jupiter route preview.',
+      transactionPreview: buildTransactionPreview({
+        status: 'ok',
+        mode: 'preview-only',
+        action: 'swap',
+        tokenMint: mint,
+        provider: 'Jupiter',
+        route: '/api/execution-quote',
+        inputAmount: String(amount),
+        outputEstimate: quote.outAmount ?? undefined,
+        slippageBps,
+        simulationStatus: 'not-run',
+        blockers: ['Unsigned transaction not built yet.', 'Signing and broadcast remain disabled.'],
+        warnings: ['Quote preview only.']
+      }),
       request: { mint, side, amount, spendAsset, slippageBps, inputMint, outputMint, rawAmount },
       quote: {
         inAmount: quote.inAmount ?? rawAmount,

@@ -1,4 +1,4 @@
-import { getMeridianStore } from '../../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { getHeliusApiKey } from '../../../lib/solana-rpc';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const limit = Number(searchParams.get('limit') ?? '100');
   if (!mint || !ADDRESS_RE.test(mint)) return Response.json({ error: 'Missing or invalid mint.' }, { status: 400 });
   const explicit = parseWallets(searchParams.get('devWallets'));
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const stored = store.wallets.filter((wallet) => !group || wallet.groupId === group).map((wallet) => wallet.address);
   const devWallets = Array.from(new Set(explicit.length ? explicit : stored)).slice(0, 25);
 

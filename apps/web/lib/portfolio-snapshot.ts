@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { displayWalletSol, hydrateWalletBalances } from './chain-hydration';
-import { allProjectFlow, getMeridianStore, projectFlow, walletBalanceSummary, type FlowEvent } from './meridian-store';
+import { allProjectFlow, projectFlow, walletBalanceSummary, type FlowEvent, type MeridianStore } from './meridian-store';
+import { getMeridianWalletStore } from './durable-wallet-store';
 import { configuredSolanaRpc } from './solana-rpc';
 
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -160,9 +161,9 @@ function flowHistory(rows: FlowEvent[], solUsd: number | null) {
   }));
 }
 
-export async function buildPortfolioSnapshot(): Promise<PortfolioSnapshot> {
+export async function buildPortfolioSnapshot(storeOverride?: MeridianStore): Promise<PortfolioSnapshot> {
   const observedAt = new Date().toISOString();
-  const store = getMeridianStore();
+  const store = storeOverride ?? await getMeridianWalletStore();
   const rpc = configuredSolanaRpc();
   const health = providerHealth(observedAt);
   const hydration = await hydrateWalletBalances(store.wallets);

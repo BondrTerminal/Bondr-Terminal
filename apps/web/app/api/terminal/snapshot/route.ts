@@ -42,23 +42,28 @@ function providerStatus(raw: Json, observedAt: string) {
   const rawSources = objectValue(raw.sources);
   const health = objectValue(rawSources.health);
   const sources = objectValue(health.sources);
-  const names = ['helius', 'birdeye', 'solscan', 'bitquery', 'geckoterminal', 'rugcheck', 'dexscreener', 'jupiter', 'pumpfun', 'solanaRpc'];
+  const envAudit = objectValue(raw.providerEnvAudit);
+  const envProviders = objectValue(envAudit.providers);
+  const names = ['solanaTracker', 'helius', 'birdeye', 'solscan', 'bitquery', 'geckoterminal', 'rugcheck', 'dexscreener', 'jupiter', 'pumpfun', 'solanaRpc'];
   const mapped: Record<string, Json> = {};
   for (const name of names) {
-    const value = name === 'solanaRpc' ? objectValue(raw.terminal).rpc : sources[name];
+    const auditValue = envProviders[name];
+    const value = name === 'solanaRpc' ? objectValue(raw.terminal).rpc : (auditValue ?? sources[name]);
     const item = objectValue(value);
     const configured = item.configured;
     const runtime = objectValue(item.runtime);
     const runtimeStatus = runtime.runtimeStatus;
+    const providerStatus = typeof item.providerStatus === 'string' ? item.providerStatus : null;
     mapped[name] = {
-      status: typeof item.status === 'string' ? item.status : runtimeStatus === 'ok' ? 'connected' : configured === false ? 'not-configured' : Object.keys(item).length ? 'partial' : 'unavailable',
+      status: providerStatus ?? (typeof item.status === 'string' ? item.status : runtimeStatus === 'ok' ? 'connected' : configured === false ? 'not-configured' : Object.keys(item).length ? 'partial' : 'unavailable'),
       source: name,
       observedAt,
       configured: typeof configured === 'boolean' ? configured : null,
+      latencyMs: typeof item.latencyMs === 'number' ? item.latencyMs : null,
       note: noteFrom(item)
     };
   }
-  return section('ok', 'indexer-health', observedAt, mapped, { providers: mapped });
+  return section(Object.keys(envProviders).length ? 'ok' : 'partial', Object.keys(envProviders).length ? 'terminal-provider-env-audit' : 'indexer-health', observedAt, mapped, { providers: mapped });
 }
 
 function normalize(raw: Json, observedAt: string) {
@@ -72,6 +77,13 @@ function normalize(raw: Json, observedAt: string) {
   const execution = objectValue(terminal.execution);
   const bundle = objectValue(terminal.bundle);
   const capabilities = execution.capabilities ?? null;
+  const canonicalChart = objectValue(raw.chart);
+  const canonicalMarket = objectValue(raw.market);
+  const canonicalSecurity = objectValue(raw.security);
+  const canonicalLiquidity = objectValue(raw.liquidity);
+  const canonicalDiscovery = objectValue(raw.discovery);
+  const canonicalHolderCoverage = objectValue(raw.holderCoverage);
+  const canonicalSourceStatus = objectValue(raw.sourceStatus);
 
   const tokenIdentity = {
     status: raw.mint ? 'ok' : 'missing-token',
@@ -124,6 +136,13 @@ function normalize(raw: Json, observedAt: string) {
     risk: section(statusFrom(raw.riskVerdict, 'partial'), 'terminal-risk-verdict', observedAt, { verdict: raw.riskVerdict ?? null, freshWallets: raw.freshWallets ?? null, snipers: raw.snipers ?? null, bundles: raw.bundles ?? null, devTokens }, { note: noteFrom(raw.riskVerdict) ?? 'Risk quality depends on configured Helius/Birdeye/Bitquery/provider coverage.' }),
     liveReadiness: section(statusFrom(raw.liveReadiness, 'partial'), 'terminal-live-readiness-checklist', observedAt, raw.liveReadiness ?? null),
     paperTradeDecision: section(statusFrom(raw.paperTradeDecision, 'quote-required'), 'paper-trade-decision', observedAt, raw.paperTradeDecision ?? null),
+    canonicalMarket: section(statusFrom(canonicalMarket, statusFrom(raw.pool, 'partial')), sourceFrom(objectValue(canonicalMarket.sourceStatus), sourceFrom(raw.pool, 'pool-index')), observedAt, canonicalMarket, { sourceStatus: canonicalMarket.sourceStatus ?? canonicalSourceStatus.market ?? null }),
+    canonicalChart: section(statusFrom(canonicalChart, 'partial'), sourceFrom(canonicalChart, 'token-chart'), observedAt, canonicalChart, { candles: canonicalChart.candles ?? [], candleCount: canonicalChart.candleCount ?? (Array.isArray(canonicalChart.candles) ? canonicalChart.candles.length : 0), sourceStatus: canonicalChart.sourceStatus ?? canonicalSourceStatus.chart ?? null }),
+    canonicalHolders: section(statusFrom(canonicalHolderCoverage, statusFrom(raw.holders, 'partial')), sourceFrom(canonicalHolderCoverage, sourceFrom(raw.holders, 'token-stats')), observedAt, canonicalHolderCoverage, { rows: objectValue(raw.holders).rows ?? [], sourceStatus: canonicalSourceStatus.holders ?? null }),
+    canonicalSecurity: section(statusFrom(canonicalSecurity, statusFrom(raw.riskVerdict, 'partial')), sourceFrom(objectValue(canonicalSecurity.sourceStatus), 'token-stats+risk'), observedAt, canonicalSecurity, { sourceStatus: canonicalSecurity.sourceStatus ?? canonicalSourceStatus.security ?? null }),
+    canonicalLiquidity: section(statusFrom(canonicalLiquidity, 'partial'), sourceFrom(objectValue(canonicalLiquidity.sourceStatus), 'lp-lock-burn-scanner'), observedAt, canonicalLiquidity, { scans: canonicalLiquidity.scans ?? [], sourceStatus: canonicalLiquidity.sourceStatus ?? canonicalSourceStatus.liquidity ?? null }),
+    canonicalDiscovery: section(statusFrom(canonicalDiscovery, 'partial'), sourceFrom(objectValue(canonicalDiscovery.sourceStatus), 'gmgn-or-local-discovery'), observedAt, canonicalDiscovery, { rows: canonicalDiscovery.scannerRows ?? [], sourceStatus: canonicalDiscovery.sourceStatus ?? canonicalSourceStatus.discovery ?? null }),
+    sourceStatus: section(Object.keys(canonicalSourceStatus).length ? 'ok' : 'partial', 'canonical-section-metadata', observedAt, canonicalSourceStatus),
     providerHealth: providerStatus(raw, observedAt),
     executionCapabilities: section(statusFrom(capabilities, 'ok'), 'execution-capabilities', observedAt, capabilities, { liveTradingEnabled: objectValue(capabilities).liveTradingEnabled ?? false })
   };
@@ -132,9 +151,10 @@ function normalize(raw: Json, observedAt: string) {
 export async function GET(request: Request) {
   const { origin, search, searchParams } = new URL(request.url);
   const prototype = searchParams.get('profile') === 'prototype' || searchParams.get('prototype') === '1';
+  const fastPrimary = searchParams.get('fastPrimary') === '1' || (searchParams.get('profile') === 'live-read' && searchParams.get('enrich') !== '1');
   const [response, providerReadinessResponse] = await Promise.all([
     fetch(`${origin}/api/terminal-token-snapshot${search}`, { cache: 'no-store' }),
-    prototype ? Promise.resolve(null) : fetch(`${origin}/api/provider-readiness`, { cache: 'no-store' }).catch(() => null)
+    prototype || fastPrimary ? Promise.resolve(null) : fetch(`${origin}/api/provider-readiness`, { cache: 'no-store' }).catch(() => null)
   ]);
   const providerReadiness = providerReadinessResponse?.ok ? await providerReadinessResponse.json().catch(() => null) : null;
   const raw = await response.json().catch(() => ({ status: 'error', error: 'Terminal token snapshot returned invalid JSON.' })) as Json;

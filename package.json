@@ -17,21 +17,25 @@
     "openbook:market": "tsx scripts/openbook-market.ts",
     "web:dev": "pnpm --filter @soulana/market-maker-web dev",
     "web:build": "pnpm --filter @soulana/market-maker-web build",
-    "web:check": "pnpm --filter @soulana/market-maker-web check"
+    "web:check": "pnpm --filter @soulana/market-maker-web check",
+    "check:terminal-indexers": "node scripts/check-terminal-indexers.mjs",
+    "check:terminal-hardwire": "node scripts/check-terminal-hardwire.mjs",
+    "smoke:bondr": "node scripts/bondr-production-smoke.mjs"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
     "@jup-ag/api": "^6.0.48",
+    "@neondatabase/serverless": "^1.1.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "better-sqlite3": "^12.11.1",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.4.2",
-    "pino": "^10.3.1",
-    "zod": "^4.4.3",
     "next": "^16.0.7",
+    "pino": "^10.3.1",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

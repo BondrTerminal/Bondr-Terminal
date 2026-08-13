@@ -1,473 +1,309 @@
 'use client';
 
 import { VersionedTransaction } from '@solana/web3.js';
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-
-type MarketFeed = {
-  sources?: {
-    jupiter?: { status: string; routeLabels: string[]; priceImpactPct: string | null; outAmount: string | null; note?: string };
-    raydium?: { status: string; pairCount: number };
-    pumpswap?: { status: string; pairCount: number };
-  };
-  transactions?: { m5: { buys: number; sells: number }; h1: { buys: number; sells: number }; h24: { buys: number; sells: number } };
-};
+import { useEffect, useMemo, useState } from 'react';
+import type { TransactionPreview } from '../../../lib/transaction-preview';
 
 type ExecutionQuote = {
   status?: string;
   error?: string;
-  observedAt?: string;
-  execution?: string;
-  request?: { side: string; amount: number; spendAsset: string; slippageBps: number; inputMint: string; outputMint: string };
   quote?: { outAmount: string | null; priceImpactPct: string | null; routeLabels: string[]; routePlanLength: number; contextSlot: number | null };
-  safety?: string;
+  transactionPreview?: TransactionPreview;
 };
 
 type SwapBuild = ExecutionQuote & {
-  liveTradingEnabled?: boolean;
-  swap?: { swapTransaction?: string; lastValidBlockHeight?: number | null; computeUnitLimit?: number | null; prioritizationFeeLamports?: number | null; simulationError?: unknown };
+  swap?: { swapTransaction?: string; lastValidBlockHeight?: number | null; simulationError?: unknown };
 };
+
+type SimulationPayload = { status?: string; error?: string; simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null }; transactionPreview?: TransactionPreview };
+type SignedSwapPayload = { signedTransaction: string; signature?: string; explorerUrl?: string; submitted?: boolean };
 
 type BrowserSolanaProvider = {
   isPhantom?: boolean;
-  publicKey?: { toString(): string };
-  connect(): Promise<{ publicKey: { toString(): string } }>;
+  publicKey?: { toString(): string; toBase58?: () => string };
+  connect(): Promise<{ publicKey: { toString(): string; toBase58?: () => string } }>;
   signTransaction(transaction: VersionedTransaction): Promise<VersionedTransaction>;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  off?: (event: string, handler: (...args: unknown[]) => void) => void;
 };
 
 type BrowserWindowWithSolana = Window & { solana?: BrowserSolanaProvider };
 
 type ExecutionCapabilities = {
   liveTradingEnabled: boolean;
+  signingEnabled?: boolean;
+  broadcastEnabled?: boolean;
+  requireSimulation?: boolean;
+  readinessLevel?: string;
   disabledReason?: string | null;
+  blockers?: string[];
+  warnings?: string[];
   limits?: { maxSolPerSwap: number; maxUsdcPerSwap: number; maxSlippageBps: number };
+  auth?: { configured?: boolean; authenticated?: boolean; reason?: string | null };
 };
 
-const buyPresets = [['0.05', 'Scout'], ['0.10', 'Starter'], ['0.25', 'Build'], ['0.50', 'Support']];
-const sellPresets = [['10%', 'Trim'], ['25%', 'De-risk'], ['50%', 'Recover'], ['100%', 'Exit']];
-const ticketModes = ['Market', 'Limit', 'Take Profit', 'Stop Loss', 'Bundle'] as const;
-type TicketMode = (typeof ticketModes)[number];
 type TicketSide = 'Buy' | 'Sell';
 type DockWallet = { id: string; address: string; role: string; balanceSol: number; purpose?: string; scope?: string };
-type SizeUnit = 'SOL' | '%';
+type WalletTokenBalanceRow = { id?: string | null; wallet?: string | null; address?: string | null; role?: string | null; uiAmount?: number | null; valueUsd?: number | null; status?: string | null; balanceStatus?: string | null; source?: string | string[] | null };
+type WalletTokenBalances = { status?: string; provider?: string | null; confidence?: string | null; note?: string | null; wallets?: WalletTokenBalanceRow[]; totals?: { uiAmount?: number | null } };
 
-function formatImpact(value?: string | null) {
-  if (!value) return 'impact —';
-  const n = Number(value);
-  if (Number.isNaN(n)) return `impact ${value}`;
-  return `impact ${(n * 100).toFixed(2)}%`;
-}
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
-function routeLabel(feed: MarketFeed | null) {
-  const labels = feed?.sources?.jupiter?.routeLabels ?? [];
-  if (labels.length) return labels.slice(0, 2).join(' / ');
-  const status = feed?.sources?.jupiter?.status;
-  if (status) return status;
-  return 'quote pending';
-}
+function compact(address: string) { return address ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—'; }
+function base64ToBytes(value: string): Uint8Array { const binary = atob(value); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i); return bytes; }
+function bytesToBase64(bytes: Uint8Array): string { let binary = ''; const chunkSize = 0x8000; for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.slice(i, i + chunkSize)); return btoa(binary); }
+function formatTokenAmount(value?: number | null) { const n = Number(value ?? 0); if (!Number.isFinite(n) || n === 0) return '0'; if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`; if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(2)}K`; return n.toLocaleString(undefined, { maximumFractionDigits: 6 }); }
+function formatBalanceRow(row?: WalletTokenBalanceRow | null) { if (!row) return '—'; if (row.uiAmount == null || row.balanceStatus === 'provider-unavailable' || row.balanceStatus === 'error' || row.status === 'modeled-only') return String(row.balanceStatus ?? row.status ?? 'provider-limited'); return formatTokenAmount(row.uiAmount); }
+function formatWalletSol(wallet: DockWallet) { const status = (wallet as DockWallet & { balanceStatus?: string }).balanceStatus; return status && status !== 'live' ? status.replace(/unavailable/g, 'provider-limited') : `${wallet.balanceSol.toFixed(4)} SOL`; }
+function parseSlippage(value: string, fallback = 100) { const n = Number(String(value).replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : fallback; }
+function formatBps(value: string) { const bps = parseSlippage(value, 0); return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`; }
+function formatPriceImpact(value?: string | null) { const n = Number(value ?? NaN); if (!Number.isFinite(n)) return '—'; const pct = Math.abs(n) <= 1 ? n * 100 : n; return `${pct.toFixed(Math.abs(pct) >= 10 ? 1 : 2)}%`; }
+function formatQuoteAmount(value?: string | null) { if (!value) return '—'; const n = Number(value); return Number.isFinite(n) ? formatTokenAmount(n) : value; }
 
-function base64ToBytes(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
+const SOL_AMOUNT_PRESETS = ['0.01', '0.05', '0.10', '0.25'];
+const SELL_PERCENT_PRESETS = [25, 50, 75, 100];
+const SLIPPAGE_PRESETS = [50, 100, 250, 500];
+const PRIORITY_FEE_PRESETS = ['auto', 'low', 'fast', 'turbo'] as const;
 
-
-function compactWallet(address: string) {
-  return `${address.slice(0, 4)}…${address.slice(-4)}`;
-}
-
-function WalletSelectorPanel({ wallets, selectedWalletId, bundleWalletIds, walletPublicKey, selectedWalletLabel, mode, onSelect, onToggleBundle, onConnect }: { wallets: DockWallet[]; selectedWalletId: string; bundleWalletIds: string[]; walletPublicKey: string | null; selectedWalletLabel: string; mode: TicketMode; onSelect: (id: string) => void; onToggleBundle: (id: string) => void; onConnect: () => void }) {
-  const selectedWallet = wallets.find((wallet) => wallet.id === selectedWalletId) ?? wallets[0] ?? null;
-  const selectedBundleCount = wallets.filter((wallet) => bundleWalletIds.includes(wallet.id)).length;
-  return <div className="orderTicketWalletPanel" aria-label="Order ticket wallet selector">
-    <div className="ticketWalletSummary">
-      <div><span>Selected wallet</span><strong>{selectedWallet ? `${selectedWallet.role} · ${compactWallet(selectedWallet.address)}` : selectedWalletLabel}</strong></div>
-      <small>{mode === 'Bundle' ? `${selectedBundleCount} selected` : 'Primary wallet'}</small>
-    </div>
-    <div className="ticketWalletList" role="radiogroup" aria-label="Select trading wallet">
-      {wallets.map((wallet) => {
-        const selected = selectedWalletId === wallet.id;
-        const bundled = bundleWalletIds.includes(wallet.id);
-        return <div className={`ticketWalletRow ${selected ? 'selectedTicketWallet' : ''}`} key={wallet.id}>
-          <button type="button" className="ticketWalletSelectButton" role="radio" aria-checked={selected} onClick={() => onSelect(wallet.id)}>
-            <span className="ticketWalletRadio" aria-hidden />
-            <span className="ticketWalletIdentity"><strong>{wallet.role}</strong><em>{compactWallet(wallet.address)}</em></span>
-            <span className="ticketWalletBalance">{wallet.balanceSol.toFixed(4)} SOL</span>
-          </button>
-          <label className="ticketBundleToggle"><input type="checkbox" checked={bundled} onChange={() => onToggleBundle(wallet.id)} /> Bundle</label>
-        </div>;
-      })}
-      {wallets.length === 0 && <div className="ticketWalletEmpty"><strong>No project wallets loaded</strong><span>{selectedWalletLabel}</span></div>}
-    </div>
-    <div className="ticketSignerRow"><span>Signer</span><strong>{walletPublicKey ? compactWallet(walletPublicKey) : 'Not connected'}</strong><button className="button secondary smallButton" type="button" onClick={onConnect}>{walletPublicKey ? 'Reconnect' : 'Connect'}</button></div>
+function TransactionPreviewCard({ preview }: { preview?: TransactionPreview | null }) {
+  if (!preview) return <div className="transactionPreviewCard emptyPreview"><div><span>Transaction preview</span><strong>No transaction built yet</strong></div><p>Build an unsigned transaction, then simulate before signing.</p></div>;
+  return <div className={`transactionPreviewCard ${preview.status === 'blocked' ? 'blockedPreview' : preview.status === 'error' ? 'errorPreview' : 'okPreview'}`}>
+    <div className="transactionPreviewHeader"><div><span>Transaction preview</span><strong>{preview.mode.replace('-', ' ')}</strong></div><em>{preview.action}</em></div>
+    <div className="transactionPreviewGrid"><div><span>Signing</span><strong>{preview.signingEnabled ? 'Enabled' : 'Disabled'}</strong></div><div><span>Broadcast</span><strong>{preview.broadcastEnabled ? 'Enabled' : 'Disabled'}</strong></div><div><span>Simulation</span><strong>{preview.simulationStatus ?? 'not-run'}</strong></div><div><span>Route</span><strong>{preview.provider ?? preview.route ?? '—'}</strong></div></div>
+    {preview.blockers.length > 0 && <ul className="transactionPreviewList blockers">{preview.blockers.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>}
+    {preview.warnings.length > 0 && <ul className="transactionPreviewList warnings">{preview.warnings.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul>}
   </div>;
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
 export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { mint?: string; selectedWalletLabel: string; wallets?: DockWallet[] }) {
-  const [feed, setFeed] = useState<MarketFeed | null>(null);
   const [activeMint, setActiveMint] = useState(mint ?? '');
-  const [mode, setMode] = useState<TicketMode>('Market');
-  const [sizeUnit, setSizeUnit] = useState<SizeUnit>('SOL');
-  const [instantSide, setInstantSide] = useState<TicketSide>('Buy');
-  const [multiWalletOpen, setMultiWalletOpen] = useState(false);
-  const [quickPanelOpen, setQuickPanelOpen] = useState(false);
-  const [quickPanelPosition, setQuickPanelPosition] = useState({ x: 1120, y: 190 });
-  const [instantEditMode, setInstantEditMode] = useState(false);
-  const [instantBuyPresets, setInstantBuyPresets] = useState<[string, string][]>(() => buyPresets.map(([presetAmount, label]) => [presetAmount, label]));
-  const [instantSellPresets, setInstantSellPresets] = useState<[string, string][]>(() => sellPresets.map(([presetAmount, label]) => [presetAmount, label]));
-  const quickPanelDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
-  const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? 'browser-wallet');
-  const [bundleWalletIds, setBundleWalletIds] = useState(() => wallets.slice(0, Math.min(4, wallets.length)).map((wallet) => wallet.id));
   const [side, setSide] = useState<TicketSide>('Buy');
-  const [amount, setAmount] = useState('0.05');
-  const [spendAsset, setSpendAsset] = useState('SOL');
-  const [slippage, setSlippage] = useState('Auto');
-  const [triggerPrice, setTriggerPrice] = useState('');
-  const [priorityFee, setPriorityFee] = useState('Auto');
-  const [mevProtection, setMevProtection] = useState('Off');
+  const [amount, setAmount] = useState('0.01');
+  const [spendAsset, setSpendAsset] = useState<'SOL' | 'USDC'>('SOL');
+  const [slippage, setSlippage] = useState('100');
+  const [priorityFeePreset, setPriorityFeePreset] = useState<(typeof PRIORITY_FEE_PRESETS)[number]>('auto');
+  const [sellPercentPreset, setSellPercentPreset] = useState<number | null>(null);
+  const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? 'browser-wallet');
+  const [walletPublicKey, setWalletPublicKey] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<ExecutionCapabilities | null>(null);
+  const [tokenBalances, setTokenBalances] = useState<WalletTokenBalances | null>(null);
   const [quote, setQuote] = useState<ExecutionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [walletPublicKey, setWalletPublicKey] = useState<string | null>(null);
+  const [swapBuild, setSwapBuild] = useState<SwapBuild | null>(null);
+  const [simulation, setSimulation] = useState<SimulationPayload | null>(null);
+  const [signedSwap, setSignedSwap] = useState<SignedSwapPayload | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
-  const [capabilities, setCapabilities] = useState<ExecutionCapabilities | null>(null);
 
+  useEffect(() => { setActiveMint(mint ?? ''); }, [mint]);
   useEffect(() => {
-    setActiveMint(mint ?? '');
-  }, [mint]);
-
+    const controller = new AbortController();
+    void fetch('/api/execution-capabilities', { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((payload) => setCapabilities(payload as ExecutionCapabilities | null)).catch(() => setCapabilities(null));
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    const provider = (window as BrowserWindowWithSolana).solana;
+    const existing = provider?.publicKey?.toBase58?.() ?? provider?.publicKey?.toString?.() ?? null;
+    if (existing) setWalletPublicKey(existing);
+    const onAccount = (pubkey?: unknown) => {
+      const next = typeof pubkey === 'object' && pubkey && 'toString' in pubkey && typeof pubkey.toString === 'function' ? pubkey.toString() : ((window as BrowserWindowWithSolana).solana?.publicKey?.toBase58?.() ?? (window as BrowserWindowWithSolana).solana?.publicKey?.toString?.() ?? null);
+      setWalletPublicKey(next || null);
+      if (next) {
+        window.localStorage.setItem('bondr.activeWallet', next);
+        window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: next } }));
+      }
+    };
+    const onActiveWalletChanged = (event: Event) => {
+      const custom = event as CustomEvent<{ address?: string }>;
+      const next = custom.detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? null;
+      if (next) setSelectedWalletId((current) => wallets.find((wallet) => wallet.address === next)?.id ?? current);
+    };
+    provider?.on?.('accountChanged', onAccount);
+    window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+    return () => {
+      provider?.off?.('accountChanged', onAccount);
+      window.removeEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+    };
+  }, [wallets]);
+  useEffect(() => {
+    function onTokenLoaded(event: Event) { const custom = event as CustomEvent<{ mint?: string }>; if (custom.detail?.mint) setActiveMint(custom.detail.mint); }
+    window.addEventListener('meridian-token-loaded', onTokenLoaded);
+    return () => window.removeEventListener('meridian-token-loaded', onTokenLoaded);
+  }, []);
   useEffect(() => {
     if (!wallets.length) return;
     setSelectedWalletId((current) => wallets.some((wallet) => wallet.id === current) ? current : wallets[0].id);
-    setBundleWalletIds((current) => current.length ? current.filter((id) => wallets.some((wallet) => wallet.id === id)) : wallets.slice(0, Math.min(4, wallets.length)).map((wallet) => wallet.id));
   }, [wallets]);
-
   useEffect(() => {
-    function onTokenLoaded(event: Event) {
-      const custom = event as CustomEvent<{ mint?: string }>;
-      if (custom.detail?.mint) setActiveMint(custom.detail.mint);
-    }
-    function onTicketSide(event: Event) {
-      const custom = event as CustomEvent<{ side?: TicketSide }>;
-      if (custom.detail?.side === 'Buy' || custom.detail?.side === 'Sell') setSide(custom.detail.side);
-    }
-    window.addEventListener('meridian-token-loaded', onTokenLoaded);
-    window.addEventListener('meridian-ticket-side', onTicketSide);
-    return () => {
-      window.removeEventListener('meridian-token-loaded', onTokenLoaded);
-      window.removeEventListener('meridian-ticket-side', onTicketSide);
-    };
-  }, []);
-
-  useEffect(() => {
+    if (!activeMint) { setTokenBalances(null); return; }
     const controller = new AbortController();
-    void fetch('/api/execution-capabilities', { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => setCapabilities(payload as ExecutionCapabilities | null))
-      .catch(() => setCapabilities(null));
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    if (!activeMint) return;
-    const controller = new AbortController();
-    setFeed(null);
-    void fetch(`/api/token-market-feed?mint=${encodeURIComponent(activeMint)}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => setFeed(payload as MarketFeed | null))
-      .catch(() => setFeed(null));
+    void fetch(`/api/wallet-token-balances?mint=${encodeURIComponent(activeMint)}`, { signal: controller.signal, cache: 'no-store' }).then((response) => response.ok ? response.json() : null).then((payload) => setTokenBalances(payload as WalletTokenBalances | null)).catch(() => setTokenBalances(null));
     return () => controller.abort();
   }, [activeMint]);
-
-  function startQuickPanelDrag(event: ReactMouseEvent<HTMLDivElement>) {
-    quickPanelDragRef.current = {
-      offsetX: event.clientX - quickPanelPosition.x,
-      offsetY: event.clientY - quickPanelPosition.y
-    };
-    event.preventDefault();
-  }
-
-  useEffect(() => {
-    function onMove(event: MouseEvent) {
-      if (!quickPanelDragRef.current) return;
-      const nextX = Math.min(Math.max(12, event.clientX - quickPanelDragRef.current.offsetX), window.innerWidth - 340);
-      const nextY = Math.min(Math.max(12, event.clientY - quickPanelDragRef.current.offsetY), window.innerHeight - 120);
-      setQuickPanelPosition({ x: nextX, y: nextY });
-    }
-    function onUp() {
-      quickPanelDragRef.current = null;
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, []);
-
-  function updateInstantPreset(index: number, field: 'amount' | 'label', value: string) {
-    const setter = instantSide === 'Buy' ? setInstantBuyPresets : setInstantSellPresets;
-    setter((current) => current.map((preset, presetIndex) => presetIndex === index ? (field === 'amount' ? [value, preset[1]] : [preset[0], value]) : preset));
-  }
-
-  async function previewQuote() {
-    if (!activeMint || quoteLoading) return;
-    setQuoteLoading(true);
-    setQuote(null);
-    try {
-      const response = await fetch('/api/execution-quote', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mint: activeMint, side, amount, spendAsset, slippageBps: slippage, mode })
-      });
-      const payload = await response.json() as ExecutionQuote;
-      setQuote(response.ok ? payload : { ...payload, status: 'error' });
-    } catch (error) {
-      setQuote({ status: 'error', error: error instanceof Error ? error.message : 'Quote preview failed.' });
-    } finally {
-      setQuoteLoading(false);
-    }
-  }
+  useEffect(() => { setSwapBuild(null); setSimulation(null); setSignedSwap(null); }, [activeMint, side, amount, spendAsset, slippage, selectedWalletId]);
+  useEffect(() => { if (side === 'Buy') setSellPercentPreset(null); }, [side]);
 
   const selectedDockWallet = wallets.find((wallet) => wallet.id === selectedWalletId) ?? wallets[0] ?? null;
-  const selectedBundleWallets = wallets.filter((wallet) => bundleWalletIds.includes(wallet.id));
+  const tokenBalanceByAddress = useMemo(() => new Map((tokenBalances?.wallets ?? []).map((row) => [String(row.address ?? row.wallet ?? '').toLowerCase(), row])), [tokenBalances]);
+  const selectedTokenBalance = selectedDockWallet ? tokenBalanceByAddress.get(selectedDockWallet.address.toLowerCase()) ?? null : null;
   const selectedExecutionAddress = selectedDockWallet?.address ?? walletPublicKey;
+  const selectedSignerMatched = Boolean(walletPublicKey && selectedDockWallet && walletPublicKey === selectedDockWallet.address);
+  const signerMismatch = Boolean(walletPublicKey && selectedDockWallet && walletPublicKey !== selectedDockWallet.address);
+  const operatorAuthRequired = Boolean(capabilities?.auth?.configured && !capabilities.auth.authenticated);
+  const simulationPassed = simulation?.status === 'ok';
+  const canPreview = Boolean(activeMint && amount && !quoteLoading);
+  const canBuild = Boolean(capabilities?.liveTradingEnabled && activeMint && amount && !liveLoading && !operatorAuthRequired);
+  const canSign = Boolean(capabilities?.signingEnabled && swapBuild?.swap?.swapTransaction && (capabilities.requireSimulation === false || simulationPassed) && walletPublicKey && !liveLoading && !signerMismatch);
+  const canBroadcast = Boolean(capabilities?.broadcastEnabled && signedSwap?.signedTransaction && !signedSwap.submitted && !liveLoading);
+  const inputMint = side === 'Buy' ? (spendAsset === 'USDC' ? USDC_MINT : SOL_MINT) : activeMint;
+  const outputMint = side === 'Buy' ? activeMint : (spendAsset === 'USDC' ? USDC_MINT : SOL_MINT);
+  const sameMintRoute = Boolean(inputMint && outputMint && inputMint === outputMint);
+  const routeLabel = `${inputMint === SOL_MINT ? 'SOL' : inputMint === USDC_MINT ? 'USDC' : 'token'} → ${outputMint === SOL_MINT ? 'SOL' : outputMint === USDC_MINT ? 'USDC' : 'token'}`;
+  const quoteRouteLabels = quote?.quote?.routeLabels ?? [];
+  const routePlanLabel = quoteRouteLabels.length ? quoteRouteLabels.join(' / ') : routeLabel;
+  const estimatedReceive = formatQuoteAmount(quote?.quote?.outAmount);
+  const priceImpact = formatPriceImpact(quote?.quote?.priceImpactPct);
+  const priorityFeeCopy = priorityFeePreset === 'auto' ? 'Auto / API default' : priorityFeePreset === 'low' ? 'Low fee intent' : priorityFeePreset === 'fast' ? 'Fast fee intent' : 'Turbo intent (UI only)';
+  const blockReasons = [
+    !activeMint ? 'token mint missing' : null,
+    sameMintRoute ? 'same input/output mint' : null,
+    !walletPublicKey ? 'Connect a Solana browser wallet.' : null,
+    operatorAuthRequired ? 'Operator auth required.' : null,
+    signerMismatch ? `Signing blocked: selected wallet ${selectedDockWallet ? compact(selectedDockWallet.address) : '—'} does not match connected signer ${walletPublicKey ? compact(walletPublicKey) : '—'}.` : null,
+    !simulationPassed ? 'Simulation must pass before signing.' : null,
+    capabilities?.broadcastEnabled === false ? 'broadcast disabled in A-profile' : null
+  ].filter(Boolean) as string[];
 
-  function toggleBundleWallet(id: string) {
-    setBundleWalletIds((current) => current.includes(id) ? current.filter((walletId) => walletId !== id) : [...current, id]);
+  function applySellPercent(percent: number) {
+    setSide('Sell');
+    setSellPercentPreset(percent);
+    const balance = selectedTokenBalance?.uiAmount;
+    if (typeof balance === 'number' && Number.isFinite(balance) && balance > 0) {
+      const nextAmount = balance * (percent / 100);
+      setAmount(nextAmount.toFixed(nextAmount >= 1 ? 4 : 6).replace(/0+$/, '').replace(/\.$/, ''));
+    } else {
+      setLiveMessage(`${percent}% sell preset selected. Live token balance is unavailable, so enter the token amount manually before quote/build.`);
+    }
   }
 
   async function connectBrowserWallet(): Promise<string | null> {
     const provider = (window as BrowserWindowWithSolana).solana;
-    if (!provider) {
-      setLiveMessage('No Solana browser wallet detected. Install Phantom or another Solana wallet.');
-      return null;
-    }
+    if (!provider) { setLiveMessage('No Solana browser wallet detected. Install Phantom or Solflare.'); return null; }
     const connected = await provider.connect();
     const key = connected.publicKey.toString();
     setWalletPublicKey(key);
+    window.localStorage.setItem('bondr.activeWallet', key);
+    window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: key } }));
     return key;
   }
 
-  async function createStoredOrder() {
-    if (!activeMint || liveLoading) return;
-    setLiveLoading(true);
-    setLiveMessage(null);
-    try {
-      const publicKey = selectedExecutionAddress ?? walletPublicKey ?? await connectBrowserWallet();
-      if (!publicKey) return;
-      const kind = mode === 'Limit' ? 'limit' : mode === 'Take Profit' ? 'take-profit' : mode === 'Stop Loss' ? 'stop-loss' : 'market';
-      const response = await fetch('/api/terminal-order-engine', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'create', mint: activeMint, wallet: publicKey, side, kind, amount, spendAsset, slippageBps: slippage, triggerPriceUsd: triggerPrice })
-      });
-      const payload = await response.json() as { order?: { id?: string }; error?: string; execution?: string };
-      if (!response.ok) {
-        setLiveMessage(payload.error ?? 'Order create failed.');
-        return;
-      }
-      setLiveMessage(`Order stored: ${payload.order?.id ?? payload.execution ?? 'created'}`);
-      window.dispatchEvent(new CustomEvent('meridian-terminal-refresh'));
-    } catch (error) {
-      setLiveMessage(error instanceof Error ? error.message : 'Order create failed.');
-    } finally {
-      setLiveLoading(false);
-    }
-  }
-
-  async function buildBundlePreflight() {
-    if (!activeMint || liveLoading) return;
-    setLiveLoading(true);
-    setLiveMessage(null);
-    try {
-      const publicKey = selectedExecutionAddress ?? walletPublicKey ?? await connectBrowserWallet();
-      if (!publicKey) return;
-      const legs = (selectedBundleWallets.length ? selectedBundleWallets : [{ address: publicKey }]).map((wallet) => ({ wallet: wallet.address, side, amount, spendAsset, slippageBps: slippage }));
-      const response = await fetch('/api/bundle-sequencer', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mode: 'preflight', mint: activeMint, legs })
-      });
-      const payload = await response.json() as { error?: string; execution?: string; reason?: string };
-      if (!response.ok) {
-        setLiveMessage(payload.error ?? payload.reason ?? 'Bundle preflight failed.');
-        return;
-      }
-      setLiveMessage(`Bundle preflight: ${payload.execution ?? 'ok'}`);
-      window.dispatchEvent(new CustomEvent('meridian-terminal-refresh'));
-    } catch (error) {
-      setLiveMessage(error instanceof Error ? error.message : 'Bundle preflight failed.');
-    } finally {
-      setLiveLoading(false);
-    }
-  }
-
-  async function signAndSendSwap() {
-    if (!capabilities?.liveTradingEnabled) {
-      setLiveMessage(capabilities?.disabledReason ?? 'Live trading is disabled server-side.');
+  async function previewQuote() {
+    if (!canPreview) return;
+    if (sameMintRoute) {
+      const text = spendAsset === 'SOL' ? 'Quote route is SOL → SOL. Use USDC mint or another token mint before preview.' : 'Quote input and output mint are identical. Pick a different token mint or settlement asset.';
+      setQuote({ status: 'error', error: text });
+      setLiveMessage(text);
       return;
     }
+    setQuoteLoading(true); setQuote(null); setLiveMessage(null);
+    try {
+      const response = await fetch('/api/execution-quote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mint: activeMint, side, amount, spendAsset, slippageBps: parseSlippage(slippage), mode: 'Market' }) });
+      const payload = await response.json() as ExecutionQuote;
+      setQuote(response.ok ? payload : { ...payload, status: 'error' });
+      if (!response.ok) setLiveMessage(payload.error ?? 'Quote failed.');
+    } catch (error) { setQuote({ status: 'error', error: error instanceof Error ? error.message : 'Quote failed.' }); }
+    finally { setQuoteLoading(false); }
+  }
+
+  async function buildAndSimulateSwap() {
+    if (!capabilities?.liveTradingEnabled) { setLiveMessage(capabilities?.disabledReason ?? 'Unsigned transaction build is disabled.'); return; }
     if (!activeMint || liveLoading) return;
-    setLiveLoading(true);
-    setLiveMessage(null);
+    setLiveLoading(true); setLiveMessage(null); setSwapBuild(null); setSimulation(null); setSignedSwap(null);
+    try {
+      const publicKey = walletPublicKey ?? await connectBrowserWallet();
+      if (!publicKey) return;
+      if (selectedDockWallet && publicKey !== selectedDockWallet.address) { setLiveMessage(`Connected signer ${compact(publicKey)} does not match selected wallet ${compact(selectedDockWallet.address)}.`); return; }
+      const buildResponse = await fetch('/api/execution-swap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mint: activeMint, side, amount, spendAsset, slippageBps: parseSlippage(slippage), userPublicKey: publicKey }) });
+      const build = await buildResponse.json() as SwapBuild;
+      setSwapBuild(build); setQuote(build);
+      if (!buildResponse.ok || !build.swap?.swapTransaction) { setLiveMessage(build.error ?? 'Unsigned transaction build failed.'); return; }
+      const simulationResponse = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: 'swap', mint: activeMint, wallet: publicKey }) });
+      const sim = await simulationResponse.json() as SimulationPayload;
+      setSimulation(sim);
+      if (!simulationResponse.ok || sim.status !== 'ok') { setLiveMessage(sim.simulation?.failureSummary ?? sim.error ?? 'Simulation failed. Signing blocked.'); return; }
+      setLiveMessage('Unsigned transaction built and simulation passed. You can now sign in your browser wallet.');
+    } catch (error) { setLiveMessage(error instanceof Error ? error.message : 'Unsigned build/simulation failed.'); }
+    finally { setLiveLoading(false); }
+  }
+
+  async function signInWallet() {
+    if (!canSign) { setLiveMessage(blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Signing blocked: connect a browser wallet, pass simulation, and match the selected wallet before signing.'); return; }
+    setLiveLoading(true); setLiveMessage(null);
     try {
       const provider = (window as BrowserWindowWithSolana).solana;
       const publicKey = walletPublicKey ?? await connectBrowserWallet();
-      if (!provider || !publicKey) return;
-      if (selectedDockWallet && publicKey !== selectedDockWallet.address) {
-        setLiveMessage(`Connected browser wallet ${publicKey.slice(0, 4)}…${publicKey.slice(-4)} does not match selected ticket wallet ${selectedDockWallet.address.slice(0, 4)}…${selectedDockWallet.address.slice(-4)}.`);
-        return;
-      }
-
-      const buildResponse = await fetch('/api/execution-swap', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mint: activeMint, side, amount, spendAsset, slippageBps: slippage, userPublicKey: publicKey })
-      });
-      const build = await buildResponse.json() as SwapBuild;
-      if (!buildResponse.ok || !build.swap?.swapTransaction) {
-        setLiveMessage(build.error ?? 'Swap transaction build failed.');
-        return;
-      }
-
-      const transaction = VersionedTransaction.deserialize(base64ToBytes(build.swap.swapTransaction));
+      if (!provider || !publicKey || !swapBuild?.swap?.swapTransaction) return;
+      if (selectedDockWallet && publicKey !== selectedDockWallet.address) { setLiveMessage(`Connected signer ${compact(publicKey)} does not match selected wallet ${compact(selectedDockWallet.address)}.`); return; }
+      const transaction = VersionedTransaction.deserialize(base64ToBytes(swapBuild.swap.swapTransaction));
       const signed = await provider.signTransaction(transaction);
       const signedTransaction = bytesToBase64(signed.serialize());
-      const sendResponse = await fetch('/api/send-signed-transaction', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ signedTransaction })
-      });
-      const sent = await sendResponse.json() as { signature?: string; explorerUrl?: string; error?: string };
-      if (!sendResponse.ok || !sent.signature) {
-        setLiveMessage(sent.error ?? 'Signed transaction broadcast failed.');
-        return;
-      }
-      setLiveMessage(`Sent: ${sent.signature}`);
-    } catch (error) {
-      setLiveMessage(error instanceof Error ? error.message : 'Live swap failed or was rejected.');
-    } finally {
-      setLiveLoading(false);
-    }
+      setSignedSwap({ signedTransaction, submitted: false });
+      setLiveMessage(capabilities?.broadcastEnabled ? 'Signed locally. Broadcast is available only through the separate submit step.' : 'Signed locally. Broadcast is disabled in A-profile.');
+    } catch (error) { setLiveMessage(error instanceof Error ? error.message : 'Wallet signing failed or was rejected.'); }
+    finally { setLiveLoading(false); }
   }
 
-  const jupiter = feed?.sources?.jupiter;
-  const latestQuote = quote?.quote;
-  const estimate = latestQuote?.outAmount ? `est. ${latestQuote.outAmount}` : jupiter?.outAmount ? `est. ${jupiter.outAmount}` : `est. ${routeLabel(feed)}`;
-  const impact = formatImpact(latestQuote?.priceImpactPct ?? jupiter?.priceImpactPct);
-  const route = latestQuote?.routeLabels?.length ? latestQuote.routeLabels.slice(0, 2).join(' / ') : routeLabel(feed);
-  const txWindow = feed?.transactions?.m5 ? `${feed.transactions.m5.buys}/${feed.transactions.m5.sells} 5m` : 'tx —';
-  const ticketSummary = `${mode} ${side.toLowerCase()} · ${amount || '0'} ${side === 'Buy' ? spendAsset : 'position'} · ${slippage} slip`;
-  const canPreview = Boolean(activeMint && amount && !quoteLoading);
-  const canLiveSwap = Boolean(capabilities?.liveTradingEnabled && activeMint && amount && !liveLoading);
-  const canCreateOrder = Boolean(activeMint && amount && !liveLoading && (mode === 'Market' || mode === 'Bundle' || triggerPrice));
-  const walletLabel = selectedDockWallet ? `${selectedDockWallet.role} · ${selectedDockWallet.address.slice(0, 4)}…${selectedDockWallet.address.slice(-4)}` : walletPublicKey ? `${walletPublicKey.slice(0, 4)}…${walletPublicKey.slice(-4)}` : 'Connect wallet';
-  const bundleCount = selectedBundleWallets.length;
-  const multiWalletSelected = bundleCount > 1;
-  const selectedWalletBalance = selectedDockWallet ? `${selectedDockWallet.balanceSol.toFixed(4)} SOL` : walletPublicKey ? compactWallet(walletPublicKey) : 'connect signer';
-  const selectedBundleBalance = selectedBundleWallets.reduce((sum, wallet) => sum + wallet.balanceSol, 0);
-  const walletBalanceLabel = multiWalletSelected ? `Total ${selectedBundleBalance.toFixed(4)} SOL` : selectedWalletBalance;
-  const walletModeLabel = multiWalletSelected ? `${bundleCount} wallets selected` : 'Primary wallet';
+  async function submitBroadcast() {
+    if (!capabilities?.broadcastEnabled) { setLiveMessage('Broadcast is disabled in A-profile.'); return; }
+    if (!signedSwap?.signedTransaction || liveLoading) return;
+    setLiveLoading(true); setLiveMessage(null);
+    try {
+      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction: signedSwap.signedTransaction }) });
+      const sent = await response.json() as { signature?: string; explorerUrl?: string; error?: string };
+      if (!response.ok || !sent.signature) { setLiveMessage(sent.error ?? 'Broadcast failed.'); return; }
+      setSignedSwap((current) => current ? { ...current, signature: sent.signature, explorerUrl: sent.explorerUrl, submitted: true } : current);
+      setLiveMessage(`Sent: ${sent.signature}`);
+    } catch (error) { setLiveMessage(error instanceof Error ? error.message : 'Broadcast failed.'); }
+    finally { setLiveLoading(false); }
+  }
 
   return (
     <aside className="executionDock premiumExecutionDock">
       <section className="dockCard orderTicketCard premiumOrderCard">
-        <div className="dockHeader tradingPanelHeader"><span>Trading panel</span><strong>{side} · {mode}</strong></div>
-        <div className="axiomOrderTicket terminalTradeOnlyPanel">
-          <div className="terminalWalletDropdownRow">
-            <div className="primaryWalletDropdownWrap">
-              <button className={`primaryWalletDropdownButton ${multiWalletOpen ? 'walletDropdownOpen' : ''}`} type="button" onClick={() => setMultiWalletOpen((open) => !open)} aria-expanded={multiWalletOpen} aria-label="Open trading wallet selector">
-                <span className="walletDropdownEyebrow">Wallets</span>
-                <em aria-hidden>▾</em>
-              </button>
-              <div className="selectedWalletStatusLine" aria-label="Selected trading wallet status">
-                <span>{walletModeLabel}</span>
-                <strong>{walletLabel}</strong>
-                <small>{walletBalanceLabel}</small>
-              </div>
-              {multiWalletOpen && <div className="terminalWalletDropdown" aria-label="Select trading wallets">
-                <div className="terminalWalletDropdownHead"><span>Trading wallets</span><strong>{bundleCount || 1} selected</strong></div>
-                {wallets.slice(0, 10).map((wallet) => {
-                  const selected = selectedWalletId === wallet.id;
-                  const bundled = bundleWalletIds.includes(wallet.id);
-                  return <div className={`terminalWalletDropdownItem ${selected ? 'selectedPrimaryWallet' : ''} ${bundled ? 'selectedBundleWallet' : ''}`} key={wallet.id}>
-                    <button type="button" onClick={() => setSelectedWalletId(wallet.id)}><strong>{wallet.role}</strong><small>{compactWallet(wallet.address)} · {wallet.balanceSol.toFixed(4)} SOL</small></button>
-                    <label><input type="checkbox" checked={bundled} onChange={() => toggleBundleWallet(wallet.id)} /> Multi</label>
-                  </div>;
-                })}
-                {!wallets.length && <div className="multiWalletEmpty">No wallets loaded</div>}
-                <button className="terminalWalletSignerButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? `Signer ${compactWallet(walletPublicKey)}` : 'Connect signer'}</button>
-              </div>}
+        <div className="dockHeader tradingPanelHeader proPaperHeader"><span>Terminal</span><strong>Quote → build → simulate → sign</strong><small>Broadcast disabled in A-profile</small></div>
+        <div className="axiomOrderTicket terminalTradeOnlyPanel redesignedTradePanel">
+          <div className="tradePanelSection tradeWalletSection"><div className="tradePanelSectionHead"><span>01</span><strong>Active wallet</strong><small>Browser signer must match selected wallet</small></div><div className="terminalWalletRoutingList cleanWalletList" role="radiogroup" aria-label="Select active wallet">{wallets.length ? wallets.map((wallet) => <button type="button" className={`terminalWalletRoutingItem ${selectedWalletId === wallet.id ? 'selectedPrimaryWallet' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}><strong>{wallet.role}</strong><code>{compact(wallet.address)}</code><small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenBalanceByAddress.get(wallet.address.toLowerCase()))} · {tokenBalanceByAddress.get(wallet.address.toLowerCase())?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small></button>) : <div className="ticketWalletEmpty"><strong>No saved wallets</strong><span>{selectedWalletLabel}. Connect a browser wallet or add a watch-only record in Wallet Ops.</span></div>}</div><div className="ticketSignerRow"><span>Connected signer</span><strong>{walletPublicKey ? compact(walletPublicKey) : 'Not connected'}</strong><button className="button secondary smallButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Reconnect' : 'Connect wallet'}</button></div><div className={`ticketSignerMatchStatus ${selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'}`}><strong>{selectedSignerMatched ? 'Signer matches selected wallet' : signerMismatch ? 'Signer mismatch blocks signing' : 'Signer match pending'}</strong><small>{selectedDockWallet ? `Selected ${compact(selectedDockWallet.address)} · Connected ${walletPublicKey ? compact(walletPublicKey) : '—'}` : 'No Wallet Ops record selected; browser wallet rail still gates signing.'}</small></div></div>
+
+          <div className="tradePanelSection tradeSideSection">
+            <div className="tradePanelSectionHead"><span>02</span><strong>Route request</strong><small>Quote preview only until build/simulate</small></div>
+            <div className={`tradeActionBar primaryBuySellBar ${side === 'Sell' ? 'sellSelected' : 'buySelected'}`} role="tablist" aria-label="Trade side">
+              <button type="button" role="tab" aria-selected={side === 'Buy'} onClick={() => setSide('Buy')}>Buy</button>
+              <button type="button" role="tab" aria-selected={side === 'Sell'} onClick={() => setSide('Sell')}>Sell</button>
             </div>
-            <button className={capabilities?.liveTradingEnabled ? 'axiomLiveBadge' : 'axiomGateBadge'} type="button">{capabilities?.liveTradingEnabled ? 'Live' : 'Gated'}</button>
-          </div>
-
-          <div className={`tradeActionBar primaryBuySellBar ${side === 'Sell' ? 'sellSelected' : 'buySelected'}`}>
-            <button type="button" onClick={() => { setSide('Buy'); setInstantSide('Buy'); setSizeUnit('SOL'); }}>Buy</button>
-            <button type="button" onClick={() => { setSide('Sell'); setInstantSide('Sell'); setSizeUnit('%'); }}>Sell</button>
-          </div>
-
-          <div className="tradeInputGrid" aria-label="Fast order sizes">
-            {(side === 'Buy' ? buyPresets : sellPresets).map(([presetAmount, label]) => <button type="button" className={amount === presetAmount ? 'activeTradeInputSlot' : ''} onClick={() => { setAmount(presetAmount); setSizeUnit(presetAmount.includes('%') ? '%' : 'SOL'); }} key={`slot-${side}-${presetAmount}`}><strong>{presetAmount}</strong><span>{label}</span></button>)}
-          </div>
-
-          <div className="amountUnitRow">
-            <div className="axiomAmountBox compactAmountBox focusedAmountBox">
-              <label><span>{side === 'Buy' ? 'Spend' : 'Sell size'}</span><input placeholder={sizeUnit === '%' ? '0%' : '0.00'} value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+            <div className="tradeInputGrid">
+              <label><span>Token mint</span><input value={activeMint} onChange={(event) => setActiveMint(event.target.value.trim())} placeholder="Paste token mint" /></label>
+              <label><span>{side === 'Buy' ? `Spend amount (${spendAsset})` : 'Sell token amount'}</span><input value={amount} onChange={(event) => { setAmount(event.target.value); setSellPercentPreset(null); }} placeholder="0.01" /></label>
+              <label><span>Settlement asset</span><select value={spendAsset} onChange={(event) => setSpendAsset(event.target.value as 'SOL' | 'USDC')}><option>SOL</option><option>USDC</option></select></label>
+              <label><span>Slippage bps</span><input value={slippage} onChange={(event) => setSlippage(event.target.value)} placeholder="100" /></label>
             </div>
-            <div className="amountUnitSwitch"><button type="button" className={sizeUnit === 'SOL' ? 'activeAmountUnit' : ''} onClick={() => { setSizeUnit('SOL'); setSpendAsset('SOL'); }}>SOL</button><button type="button" className={sizeUnit === '%' ? 'activeAmountUnit' : ''} onClick={() => setSizeUnit('%')}>%</button></div>
-          </div>
-
-          <div className="quickTradePopoverWrap instantTradePanelWrap">
-            <button className="quickTradePopoverButton instantTradePanelButton" type="button" onClick={() => setQuickPanelOpen((open) => !open)}><span>Instant trade</span></button>
-            {quickPanelOpen && <div className="quickTradePopover instantTradePopover floatingInstantTerminal" style={{ left: quickPanelPosition.x, top: quickPanelPosition.y }} aria-label="Instant trade mini terminal">
-              <div className="floatingInstantTerminalHeader" onMouseDown={startQuickPanelDrag}><span>Instant trade</span><strong>Drag mini terminal</strong><button type="button" onMouseDown={(event) => event.stopPropagation()} onClick={() => setInstantEditMode((editing) => !editing)}>{instantEditMode ? 'Done' : 'Edit'}</button><button type="button" onMouseDown={(event) => event.stopPropagation()} onClick={() => setQuickPanelOpen(false)} aria-label="Close instant trade panel">×</button></div>
-              <div className={`quickTradeSideBar ${instantSide === 'Sell' ? 'sellSelected' : 'buySelected'}`}><button type="button" onClick={() => { setInstantSide('Buy'); setSide('Buy'); setSizeUnit('SOL'); }}>Buy</button><button type="button" onClick={() => { setInstantSide('Sell'); setSide('Sell'); setSizeUnit('%'); }}>Sell</button></div>
-              <div className="instantSettingsGrid" aria-label="Instant trade settings">
-                <label><span>Slippage</span><input value={slippage} onChange={(event) => setSlippage(event.target.value)} /></label>
-                <label><span>Priority</span><input value={priorityFee} onChange={(event) => setPriorityFee(event.target.value)} /></label>
-                <label><span>MEV</span><select value={mevProtection} onChange={(event) => setMevProtection(event.target.value)}><option>Off</option><option>Jito</option><option>Private</option></select></label>
-              </div>
-              {!instantEditMode && <div className="instantPresetGrid">{(instantSide === 'Buy' ? instantBuyPresets : instantSellPresets).map(([presetAmount, label], index) => <button type="button" onClick={() => { setSide(instantSide); setAmount(presetAmount); setSizeUnit(presetAmount.includes('%') ? '%' : 'SOL'); }} key={`instant-${instantSide}-${index}`}><strong>{presetAmount}</strong><span>{label}</span></button>)}</div>}
-              {instantEditMode && <div className="instantPresetEditor" aria-label="Edit instant trade presets">{(instantSide === 'Buy' ? instantBuyPresets : instantSellPresets).map(([presetAmount, label], index) => <div className="instantPresetEditorRow" key={`instant-edit-${instantSide}-${index}`}><label><span>Amount</span><input value={presetAmount} onChange={(event) => updateInstantPreset(index, 'amount', event.target.value)} /></label><label><span>Label</span><input value={label} onChange={(event) => updateInstantPreset(index, 'label', event.target.value)} /></label></div>)}</div>}
-              <div className="quickTradeWalletBlock"><div className="quickTradePopoverHeader"><span>Wallets</span><strong>{bundleCount || 1} selected</strong></div><div className="quickTradeWalletList">{wallets.slice(0, 8).map((wallet) => <label className={bundleWalletIds.includes(wallet.id) ? 'activeMultiWallet' : ''} key={`instant-wallet-${wallet.id}`}><input type="checkbox" checked={bundleWalletIds.includes(wallet.id)} onChange={() => toggleBundleWallet(wallet.id)} /><span><strong>{wallet.role}</strong><small>{compactWallet(wallet.address)} · {wallet.balanceSol.toFixed(4)} SOL</small></span></label>)}{!wallets.length && <em>No wallets loaded</em>}</div></div>
-            </div>}
-          </div>
-
-          <div className="compactTicketMatrix executionSettingsMatrix">
-            <div className="axiomModeTabs compactModeTabs">{ticketModes.map((ticketMode) => <button type="button" className={mode === ticketMode ? 'activeTicketMode' : ''} onClick={() => setMode(ticketMode)} key={ticketMode}>{ticketMode === 'Take Profit' ? 'TP' : ticketMode === 'Stop Loss' ? 'SL' : ticketMode}</button>)}</div>
-            <div className="axiomSettingsRow compactSettingsRow">
-              <label><span>Slippage</span><input value={slippage} onChange={(event) => setSlippage(event.target.value)} /></label>
-              {mode !== 'Market' && mode !== 'Bundle' && <label><span>Trigger</span><input value={triggerPrice} onChange={(event) => setTriggerPrice(event.target.value)} placeholder="price" /></label>}
-              <label><span>Priority</span><input value={priorityFee} onChange={(event) => setPriorityFee(event.target.value)} /></label>
-              <label><span>MEV</span><select value={mevProtection} onChange={(event) => setMevProtection(event.target.value)}><option>Off</option><option>Jito</option><option>Private</option></select></label>
+            {side === 'Buy' ? <div className="terminalPresetMatrix" aria-label="SOL amount presets">{SOL_AMOUNT_PRESETS.map((preset) => <button type="button" key={preset} className={amount === preset && spendAsset === 'SOL' ? 'selectedPrimaryWallet' : ''} onClick={() => { setSpendAsset('SOL'); setAmount(preset); }}><strong>{preset} SOL</strong><span>micro buy</span></button>)}</div> : <div className="terminalPresetMatrix" aria-label="Percent sell presets">{SELL_PERCENT_PRESETS.map((preset) => <button type="button" key={preset} className={sellPercentPreset === preset ? 'selectedPrimaryWallet' : ''} onClick={() => applySellPercent(preset)}><strong>{preset}%</strong><span>{selectedTokenBalance?.uiAmount ? `${formatTokenAmount((selectedTokenBalance.uiAmount * preset) / 100)} tokens` : 'manual amount'}</span></button>)}</div>}
+            <div className="executionSettingsMatrix" aria-label="Execution settings presets">
+              <div><span>Slippage</span><div className="terminalPresetMatrix compactPresetMatrix">{SLIPPAGE_PRESETS.map((preset) => <button type="button" key={preset} className={parseSlippage(slippage) === preset ? 'selectedPrimaryWallet' : ''} onClick={() => setSlippage(String(preset))}>{formatBps(String(preset))}</button>)}</div></div>
+              <div><span>Priority fee</span><div className="terminalPresetMatrix compactPresetMatrix">{PRIORITY_FEE_PRESETS.map((preset) => <button type="button" key={preset} className={priorityFeePreset === preset ? 'selectedPrimaryWallet' : ''} onClick={() => setPriorityFeePreset(preset)}>{preset}</button>)}</div><small>{priorityFeeCopy}; no new live execution path.</small></div>
+            </div>
+            <div className="routePreviewBox terminalRoutePreview" aria-label="Route and quote preview">
+              <span>Route / quote preview</span>
+              <strong>{routePlanLabel}</strong>
+              <div className="routePreviewGrid"><small>Estimated receive <b>{estimatedReceive}</b></small><small>Price impact <b>{priceImpact}</b></small><small>Slippage <b>{formatBps(slippage)}</b></small><small>Route legs <b>{quote?.quote?.routePlanLength ?? '—'}</b></small></div>
+              <small>{quote?.status === 'ok' ? `Context slot ${quote.quote?.contextSlot ?? '—'}` : 'Run Preview quote for live Jupiter route details.'}</small>
             </div>
           </div>
 
-          <div className="axiomRouteLine compactRouteLine"><span>{estimate}</span><small>{impact} · {txWindow} · best available route</small></div>
-
-          <div className="axiomActionRow">
-            <button className="axiomPreviewButton" type="button" onClick={() => mode === 'Bundle' ? void buildBundlePreflight() : mode === 'Market' ? void previewQuote() : void createStoredOrder()} disabled={mode === 'Market' ? !canPreview : !canCreateOrder}>{quoteLoading ? 'Quoting' : mode === 'Bundle' ? 'Preflight' : mode === 'Market' ? 'Preview' : 'Create'}</button>
-            <button className={`axiomExecuteButton ${side === 'Sell' ? 'sellExecute' : 'buyExecute'}`} type="button" onClick={() => mode === 'Market' ? void signAndSendSwap() : mode === 'Bundle' ? void buildBundlePreflight() : void createStoredOrder()} disabled={mode === 'Market' ? !canLiveSwap : !canCreateOrder}>{liveLoading ? 'Preparing' : mode === 'Market' ? (capabilities?.liveTradingEnabled ? side : 'Gated') : mode === 'Bundle' ? 'Bundle' : 'Store'}</button>
-          </div>
-
-          <div className="axiomTicketFooter"><button type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Signer linked' : 'Connect signer'}</button><span>{quote?.status === 'ok' ? `${latestQuote?.routePlanLength ?? 0} hop route` : liveMessage ?? 'Ready'}</span></div>
-          {quote?.error && <p className="orderTicketErrorLine">{quote.error}</p>}
-          {liveMessage && <p className={liveMessage.startsWith('Sent:') ? 'orderTicketSuccessLine' : 'orderTicketErrorLine'}>{liveMessage}</p>}
+          <div className="tradePanelSection tradeActionSection"><div className="tradePanelSectionHead"><span>03</span><strong>Execution ladder</strong><small>Simulation required before signing</small></div>{operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}{signerMismatch && <div className="walletMismatchNotice"><strong>Selected wallet and connected signer do not match.</strong><p>Selected: <code>{selectedDockWallet?.address}</code></p><p>Connected: <code>{walletPublicKey}</code></p></div>}<ul className="liveBetaStepLadder" aria-label="A-profile signing steps"><li className={`walletReadinessRow ${walletPublicKey ? 'pass' : 'warn'}`}><strong>1. Connect browser wallet</strong><span>{walletPublicKey ? compact(walletPublicKey) : 'Phantom/Solflare required'}</span></li><li className={`walletReadinessRow ${quote?.status === 'ok' ? 'pass' : 'warn'}`}><strong>2. Preview quote</strong><span>{quote?.status === 'ok' ? 'Quote ready' : 'Run quote preview'}</span></li><li className={`walletReadinessRow ${swapBuild?.swap?.swapTransaction ? 'pass' : 'warn'}`}><strong>3. Build unsigned transaction</strong><span>{swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : 'Run build + simulate'}</span></li><li className={`walletReadinessRow ${simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'}`}><strong>4. Simulate</strong><span>{simulationPassed ? 'Simulation passed' : simulation?.error ?? 'Required before signing'}</span></li><li className={`walletReadinessRow ${signedSwap?.signedTransaction ? 'pass' : canSign ? 'warn' : 'fail'}`}><strong>5. Sign in wallet</strong><span>{signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : (blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Blocked until simulation passes')}</span></li><li className="walletReadinessRow fail"><strong>6. Broadcast</strong><span>{capabilities?.broadcastEnabled ? 'Separate submit step required' : 'Broadcast OFF: A-profile signs locally only'}</span></li></ul><div className="terminalBlockReasonCard"><strong>Exact block reasons</strong><p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons after simulation/signing gates pass.'}</p><small>Broadcast is intentionally off for this profile. Signing creates a local signed payload only; nothing is submitted on-chain here.</small></div><div className="axiomActionRow"><button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Quoting…' : 'Preview quote'}</button><button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working…' : 'Build + simulate'}</button><button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign in wallet</button><button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Submit transaction' : 'Broadcast OFF — A-profile'}</button></div><div className="axiomTicketFooter"><button type="button" disabled>{capabilities?.readinessLevel ?? 'checking'}</button><span>{liveMessage ?? quote?.error ?? 'Ready for quote preview.'}</span></div></div>
+          <TransactionPreviewCard preview={simulation?.transactionPreview ?? swapBuild?.transactionPreview ?? quote?.transactionPreview ?? null} />
         </div>
       </section>
-
     </aside>
   );
 }

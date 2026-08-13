@@ -1,6 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { FastTradeFeed } from './FastTradeFeed';
+
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SOLANA_ADDRESS_IN_TEXT_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+
+function extractMint(input: string) {
+  const trimmed = input.trim();
+  if (SOLANA_ADDRESS_RE.test(trimmed)) return trimmed;
+  const matches = trimmed.match(SOLANA_ADDRESS_IN_TEXT_RE) ?? [];
+  return matches.find((candidate) => SOLANA_ADDRESS_RE.test(candidate)) ?? '';
+}
 
 type TradingTokenIntel = {
   mint: string;
@@ -207,53 +218,38 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
   const [loading, setLoading] = useState(false);
 
   async function loadToken() {
+    const normalizedMint = extractMint(mint);
+    if (!normalizedMint) {
+      setError('Paste a valid Solana token mint/contract address. DexScreener, Solscan, and pump.fun links are okay if they contain the mint.');
+      return;
+    }
+    setMint(normalizedMint);
     setLoading(true);
     setError('');
     setIntel(null);
-    setStats(null);
     setMarketFeed(null);
-    setTrades([]);
-    setBundleIndex(null);
-    setFreshIndex(null);
-    setDevSoldIndex(null);
-    setLpIndex(null);
-    setTerminalSnapshot(null);
     setTradeSource('loading');
     try {
-      const intelResponse = await fetch(`/api/token-intel?mint=${encodeURIComponent(mint)}`);
+      const intelResponse = await fetch(`/api/token-intel?mint=${encodeURIComponent(normalizedMint)}`);
       const data = await intelResponse.json();
       if (!intelResponse.ok) throw new Error(data.error ?? 'Token lookup failed.');
       setIntel(data as TradingTokenIntel);
       window.dispatchEvent(new CustomEvent('meridian-token-loaded', {
         detail: {
-          mint,
+          mint: normalizedMint,
           name: data.bestPair?.base?.name,
           symbol: data.bestPair?.base?.symbol
         }
       }));
-      void fetch(`/api/terminal/snapshot?mint=${encodeURIComponent(mint)}&holderLimit=40&limit=50&profile=live-read&devWallets=${encodeURIComponent(devWallets.join(','))}`)
+      void fetch(`/api/token-market-feed?mint=${encodeURIComponent(normalizedMint)}&holderLimit=100`)
         .then((response) => response.ok ? response.json() : null)
         .then((payload) => {
-          setTerminalSnapshot(payload as TerminalSnapshotLite | null);
-          setStats((payload?.holders || payload?.normalized?.holders?.data || null) ? payload as TokenTerminalStats : null);
-          setMarketFeed((payload?.marketFeed ?? payload?.normalized?.marketFeed?.data ?? null) as TokenMarketFeed | null);
-          setTrades((payload?.trades?.rows ?? payload?.normalized?.transactionTape?.rows ?? []) as TokenTrade[]);
-          setTradeSource(payload?.trades?.sources?.trades?.primary ?? payload?.sources?.tradeTape?.primary ?? payload?.sources?.tradeTape?.source ?? payload?.trades?.fallbackSource ?? payload?.normalized?.transactionTape?.source ?? 'unavailable');
-          setBundleIndex((payload?.bundles ?? payload?.normalized?.risk?.data?.bundles ?? null) as BundleIndex | null);
-          setFreshIndex((payload?.freshWallets ?? payload?.normalized?.risk?.data?.freshWallets ?? null) as FreshWalletIndex | null);
-          setDevSoldIndex((payload?.devTokens?.classifier ?? payload?.normalized?.risk?.data?.devTokens?.classifier ?? null) as DevSoldIndex | null);
-          setLpIndex((payload?.terminal?.lp ?? null) as LpLockBurnIndex | null);
+          setMarketFeed(payload as TokenMarketFeed | null);
+          setTradeSource(payload ? 'market-feed' : 'unavailable');
         })
         .catch(() => {
-          setTerminalSnapshot(null);
-          setStats(null);
           setMarketFeed(null);
-          setTrades([]);
           setTradeSource('unavailable');
-          setBundleIndex(null);
-          setFreshIndex(null);
-          setDevSoldIndex(null);
-          setLpIndex(null);
         });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Token lookup failed.');
@@ -290,88 +286,51 @@ export function TradingTokenLoader({ defaultMint = '', devWallets = [] }: { defa
   }
 
   return (
-    <section className="tradingTokenLoader premiumTokenLoader">
-      <div className="terminalPaneTitle chartTitleRow">
-        <span>01</span>
-        <strong>Token + chart</strong>
-        <div className="chartModeChips">{(['Price', 'MCap', 'Liquidity'] as const).map((metric) => <button type="button" className={chartMetric === metric ? 'activeChartMetric' : ''} onClick={() => setChartMetric(metric)} key={metric}>{metric}</button>)}</div>
-      </div>
-      <div className="terminalTokenInput premiumTokenInput">
-        <input placeholder="Paste token mint / contract" value={mint} onChange={(event) => setMint(event.target.value)} />
-        <button type="button" onClick={loadToken} disabled={!mint || loading}>{loading ? 'Loading…' : 'Load token'}</button>
-      </div>
-      {error && <p className="dangerText">{error}</p>}
-      {!intel && !error && <div className="emptyChartState">Load a token to view chart, liquidity, holders, and execution context.</div>}
-      {intel && (
-        <div className="tradingTokenContent premiumTokenContent">
-          <div className="premiumTokenHeader">
-            <div className="tokenIdentityBlock">
-              <span>Selected pair</span>
-              <strong>{baseSymbol} / {quoteSymbol}</strong>
-              <small>{intel.bestPair?.base?.name ?? 'Unknown token'} · {intel.mint}</small>
-            </div>
-            <div className="tokenHeaderActions">
-              <button type="button" onClick={copyMint}>{copiedMint ? 'Copied' : 'Copy mint'}</button>
-              {intel.bestPair?.url && <a href={intel.bestPair.url} target="_blank" rel="noreferrer">Open DEX</a>}
-              <a href={`https://solscan.io/token/${intel.mint}`} target="_blank" rel="noreferrer">Solscan</a>
-            </div>
-          </div>
-
-          <div className="premiumTokenStats">
-            <div><span>Price</span><strong>{intel.bestPair?.priceUsd ? `$${intel.bestPair.priceUsd}` : '—'}</strong></div>
-            <div><span>Market cap</span><strong>{formatUsd(intel.bestPair?.marketCap ?? intel.bestPair?.fdv)}</strong></div>
-            <div><span>Liquidity</span><strong>{formatUsd(intel.bestPair?.liquidityUsd)}</strong></div>
-            <div><span>24h volume</span><strong>{formatUsd(intel.bestPair?.volume24h)}</strong></div>
-            <div><span>Pool age</span><strong>{formatAge(intel.bestPair?.pairCreatedAt)}</strong></div>
-            <div><span>Pairs</span><strong>{intel.pairCount}</strong></div>
-          </div>
-
-          <div className="chartToolbar">
-            {['1m', '5m', '15m', '1h', '4h', '1d'].map((frame) => <a className="chartFrameLink" href={`/api/token-chart?mint=${intel.mint}&frame=${frame}`} target="_blank" rel="noreferrer" key={frame}>{frame}</a>)}
-            <span>{marketSources.jupiter?.status === 'ok' ? `Route · ${jupiterRouteLabels.slice(0, 2).join(' / ') || 'route'}` : `${intel.bestPair?.dex ?? 'DEX'} route`}</span>
-          </div>
-
-          <div className="chartAndTapeGrid">
-            <div className="dexChartFrame premiumDexChart">
-              {chartUrl ? <iframe title="DEX chart" src={chartUrl} loading="lazy" /> : <div>No DEX chart available for this token yet.</div>}
-            </div>
-            <aside className="transactionTapePanel" aria-label="Transaction tape">
-              <div className="transactionTapeHeader"><span>Transactions</span><strong>{liveTradeLabel}</strong></div>
-              <div className="feedSourceGrid">
-                <div><span>Jupiter</span><strong>{marketSources.jupiter?.status ?? 'loading'}</strong></div>
-                <div><span>Raydium</span><strong>{marketSources.raydium?.status ?? 'loading'}</strong></div>
-                <div><span>PumpSwap</span><strong>{marketSources.pumpswap?.status ?? 'loading'}</strong></div>
-              </div>
-              <div className="transactionTapeStats">
-                <div><span>5m</span><strong>{(marketTransactions.m5?.buys ?? intel.bestPair?.txns?.m5?.buys ?? 0).toLocaleString()} / {(marketTransactions.m5?.sells ?? intel.bestPair?.txns?.m5?.sells ?? 0).toLocaleString()}</strong><small>buys / sells</small></div>
-                <div><span>1h</span><strong>{(marketTransactions.h1?.buys ?? intel.bestPair?.txns?.h1?.buys ?? 0).toLocaleString()} / {(marketTransactions.h1?.sells ?? intel.bestPair?.txns?.h1?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketTransactions.h1?.buys ?? intel.bestPair?.txns?.h1?.buys, marketTransactions.h1?.sells ?? intel.bestPair?.txns?.h1?.sells)}</small></div>
-                <div><span>24h</span><strong>{(marketTransactions.h24?.buys ?? intel.bestPair?.txns?.h24?.buys ?? 0).toLocaleString()} / {(marketTransactions.h24?.sells ?? intel.bestPair?.txns?.h24?.sells ?? 0).toLocaleString()}</strong><small>{txnRatio(marketTransactions.h24?.buys ?? intel.bestPair?.txns?.h24?.buys, marketTransactions.h24?.sells ?? intel.bestPair?.txns?.h24?.sells)}</small></div>
-              </div>
-              <div className="transactionTapeList">
-                {trades.slice(0, 14).map((trade, index) => (
-                  <a href={trade.txHash ? `https://solscan.io/tx/${trade.txHash}` : '#'} target="_blank" rel="noreferrer" className={`transactionTapeTrade ${trade.side === 'buy' ? 'buyTrade' : trade.side === 'sell' ? 'sellTrade' : ''}`} key={`${trade.txHash}-${index}`}>
-                    <strong>{(trade.side || 'unknown').toUpperCase()}</strong>
-                    <span>{trade.volumeUsd ? `$${Number(trade.volumeUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'volume —'}</span>
-                    <small>{trade.wallet ? `${trade.wallet.slice(0, 4)}…${trade.wallet.slice(-4)}` : 'wallet —'} · {trade.priceUsd ? `$${Number(trade.priceUsd).toPrecision(4)}` : 'price —'}</small>
-                  </a>
-                ))}
-                {trades.length === 0 && <div><strong>Trade tape</strong><span>Loading</span><small>No trades loaded for this token yet.</small></div>}
-              </div>
-            </aside>
-          </div>
-
-          <div className="terminalPairStrip premiumPairStrip">
-            {intel.pairs.slice(0, 6).map((pair, index) => (
-              <a href={pair.url ?? '#'} target="_blank" rel="noreferrer" key={`${pair.dex}-${pair.pairAddress}-${index}`}>
-                <strong>{pair.dex ?? 'DEX'}</strong>
-                <span>{pair.base ?? '?'} / {pair.quote ?? '?'}</span>
-                <small>{formatUsd(pair.liquidityUsd)} liq · {formatUsd(pair.volume24h)} vol</small>
-              </a>
-            ))}
-          </div>
-
+    <section className="tradingTokenLoader premiumTokenLoader proTradingTerminal">
+      <div className="proTokenCommandBar" aria-label="Token loader">
+        <div className="proTokenSearchLabel"><span>Token mint / contract</span><small>{intel ? `${baseSymbol}/${quoteSymbol}` : 'Paste a Solana mint to load market context'}</small></div>
+        <div className="terminalTokenInput premiumTokenInput proTokenInput">
+          <input aria-label="Token mint or contract" placeholder="Paste token mint / contract" value={mint} onChange={(event) => setMint(event.target.value)} />
+          <button type="button" onClick={loadToken} disabled={!mint || loading}>{loading ? 'Loading…' : 'Load'}</button>
         </div>
-      )}
+      </div>
+      {error && <p className="dangerText proInlineError">{error}</p>}
+      <div className={`tradingTokenContent premiumTokenContent ${intel ? 'tokenLoadedContent' : 'preScanTokenContent'}`}>
+        {intel && <div className="premiumTokenHeader proTokenHeader">
+          <div className="tokenIdentityBlock">
+            <span>Selected pair</span>
+            <strong>{baseSymbol} / {quoteSymbol}</strong>
+            <small>{intel.bestPair?.base?.name ?? 'Unknown token'} · {compactAddress(intel.mint)}</small>
+          </div>
+          <div className="tokenHeaderActions proTokenHeaderActions">
+            <button type="button" onClick={copyMint}>{copiedMint ? 'Copied' : 'Copy'}</button>
+            {intel.bestPair?.url && <a href={intel.bestPair.url} target="_blank" rel="noreferrer">DEX</a>}
+            <a href={`https://solscan.io/token/${intel.mint}`} target="_blank" rel="noreferrer">Solscan</a>
+          </div>
+        </div>}
+
+        {intel && <div className="premiumTokenStats">
+          <div><span>Price</span><strong>{intel.bestPair?.priceUsd ? `$${intel.bestPair.priceUsd}` : '—'}</strong></div>
+          <div><span>Market cap</span><strong>{formatUsd(intel.bestPair?.marketCap ?? intel.bestPair?.fdv)}</strong></div>
+          <div><span>Liquidity</span><strong>{formatUsd(intel.bestPair?.liquidityUsd)}</strong></div>
+          <div><span>24h volume</span><strong>{formatUsd(intel.bestPair?.volume24h)}</strong></div>
+          <div><span>Pool age</span><strong>{formatAge(intel.bestPair?.pairCreatedAt)}</strong></div>
+          <div><span>Pairs</span><strong>{intel.pairCount}</strong></div>
+        </div>}
+
+        {intel && <div className="chartToolbar">
+          {['1m', '5m', '15m', '1h', '4h', '1d'].map((frame) => <a className="chartFrameLink" href={`/api/token-chart?mint=${intel.mint}&frame=${frame}`} target="_blank" rel="noreferrer" key={frame}>{frame}</a>)}
+          <span>{marketSources.jupiter?.status === 'ok' ? `Route · ${jupiterRouteLabels.slice(0, 2).join(' / ') || 'route'}` : `${intel.bestPair?.dex ?? 'DEX'} route`}</span>
+        </div>}
+
+        <div className="chartAndTapeGrid axiomChartTapeGrid">
+          <div className={`dexChartFrame premiumDexChart ${chartUrl ? '' : 'preScanChartShell'}`}>
+            {chartUrl ? <iframe title="DEX chart" src={chartUrl} loading="lazy" /> : <div className="preScanChartMessage"><strong>{loading ? 'Loading chart…' : 'Load a token to begin'}</strong><span>Chart, liquidity, route, and trading controls stay read-only. The live feed shell stays open while waiting for a contract.</span></div>}
+          </div>
+          <FastTradeFeed mint={intel?.mint ?? defaultMint} compact />
+        </div>
+
+      </div>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
 import { mutationBlockedResponse, mutationMeta, sameOriginAllowed } from '../../../lib/mutation-safety';
+import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,9 +33,9 @@ export async function GET() {
     signer: 'browser-wallet',
     liveTradingEnabled: liveEnabled(),
     operations: {
-      create: { status: 'client-side-only', note: 'Server will not generate/export wallet private keys. Generate in browser wallet/Turnkey only.' },
-      import: { status: 'client-side-only', note: 'Server will not receive seed phrases/private keys. Import through wallet provider only.' },
-      export: { status: 'blocked-server-side', note: 'Private-key export is intentionally unavailable from the web server.' },
+      create: { status: 'encrypted-local-vault', route: '/api/wallet-vault', note: 'Managed-local wallet creation encrypts key material into the local vault; no signing or broadcast is enabled.' },
+      import: { status: 'encrypted-local-vault', route: '/api/wallet-vault', note: 'Private-key import is accepted only by the encrypted local vault route; seed phrases remain blocked.' },
+      export: { status: 'vault-backup-confirmation-required', route: '/api/wallet-vault', note: 'Private-key backup/export requires vault passphrase plus exact EXPORT PRIVATE KEY confirmation.' },
       fund: { status: liveEnabled() ? 'transaction-builder-ready' : 'live-disabled', method: 'POST {operation:"fund", from, to, amountSol}' },
       collect: { status: liveEnabled() ? 'transaction-builder-ready' : 'live-disabled', method: 'POST {operation:"collect", from, to, amountSol}' }
     },
@@ -45,6 +46,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authBlocked = await meridianAuthRequiredResponse(request);
+  if (authBlocked) return authBlocked;
   const origin = sameOriginAllowed(request);
   if (!origin.allowed) return mutationBlockedResponse(origin.note);
   const body = await request.json().catch(() => null) as null | { operation?: string; from?: string; to?: string; amountSol?: number };

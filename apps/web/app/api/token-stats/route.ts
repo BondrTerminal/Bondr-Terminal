@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 const RPC_TIMEOUT_MS = 8_000;
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const RUGCHECK_TIMEOUT_MS = 6_000;
+const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
 type ParsedTokenAccount = {
   data?: {
@@ -48,6 +49,11 @@ type HolderAccountRow = {
   rank?: number | null;
   ownerSolBalance?: number | null;
   ownerBalanceStatus?: string;
+  avgEntryUsd?: number | null;
+  avgExitUsd?: number | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+  dataSources?: string[];
 };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = RPC_TIMEOUT_MS): Promise<T> {
@@ -60,6 +66,43 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = RPC_TIMEOUT_MS): Promis
 function pct(value: number | null, total: number | null): number | null {
   if (value === null || total === null || total <= 0) return null;
   return Number(((value / total) * 100).toFixed(2));
+}
+
+
+type LargestHolderAccount = { tokenAccount: string; amount: number; decimals: number };
+
+async function readTokenSupplyWithFallback(primary: Connection, mint: PublicKey, warnings: string[]) {
+  try {
+    return await withTimeout(primary.getTokenSupply(mint, 'confirmed'), 6_000);
+  } catch (error) {
+    warnings.push(`Primary RPC supply lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
+  }
+  try {
+    const fallback = new Connection(PUBLIC_SOLANA_RPC_URL, 'confirmed');
+    const result = await withTimeout(fallback.getTokenSupply(mint, 'confirmed'), 6_000);
+    warnings.push('Supply lookup used public Solana RPC fallback.');
+    return result;
+  } catch (error) {
+    warnings.push(`Fallback RPC supply lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
+    return null;
+  }
+}
+
+async function readLargestAccountsWithFallback(primary: Connection, mint: PublicKey, warnings: string[], timeoutMs: number) {
+  try {
+    return await withTimeout(primary.getTokenLargestAccounts(mint, 'confirmed'), timeoutMs);
+  } catch (error) {
+    warnings.push(`Primary RPC largest holder lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
+  }
+  try {
+    const fallback = new Connection(PUBLIC_SOLANA_RPC_URL, 'confirmed');
+    const result = await withTimeout(fallback.getTokenLargestAccounts(mint, 'confirmed'), timeoutMs);
+    warnings.push('Largest holder lookup used public Solana RPC fallback.');
+    return result;
+  } catch (error) {
+    warnings.push(`Fallback RPC largest holder lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
+    return null;
+  }
 }
 
 function parseDevWallets(raw: string | null): string[] {
@@ -95,22 +138,32 @@ async function getSolscanHolderRows(mint: string, limit: number) {
   const key = process.env.SOLSCAN_API_KEY?.trim() || process.env.SOLSCAN_PRO_API_KEY?.trim();
   if (!key) return null;
   const pageSize = Math.min(Math.max(limit, 10), 40);
-  const url = new URL('https://pro-api.solscan.io/v2.0/token/holders');
-  url.searchParams.set('address', mint);
-  url.searchParams.set('page', '1');
-  url.searchParams.set('page_size', String(pageSize));
+  const targetRows = Math.min(Math.max(limit, 1), 100);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
-    const response = await fetch(url.toString(), {
-      signal: controller.signal,
-      cache: 'no-store',
-      headers: { accept: 'application/json', token: key }
-    });
-    if (!response.ok) return null;
-    const payload = await response.json() as { success?: boolean; total?: number; data?: { total?: number; items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>; items?: Array<Record<string, unknown>> };
-    const items = Array.isArray(payload.data) ? payload.data : payload.data?.items ?? payload.items ?? [];
-    const rows = items.slice(0, limit).map((holder) => {
+    const items: Array<Record<string, unknown>> = [];
+    let total: number | null = null;
+    const maxPages = Math.ceil(targetRows / pageSize);
+    for (let page = 1; page <= maxPages && items.length < targetRows; page += 1) {
+      const url = new URL('https://pro-api.solscan.io/v2.0/token/holders');
+      url.searchParams.set('address', mint);
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('page_size', String(pageSize));
+      const response = await fetch(url.toString(), {
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { accept: 'application/json', token: key }
+      });
+      if (!response.ok) break;
+      const payload = await response.json() as { success?: boolean; total?: number; data?: { total?: number; items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>; items?: Array<Record<string, unknown>> };
+      total = Number(payload.total ?? (Array.isArray(payload.data) ? null : payload.data?.total) ?? total) || total;
+      const pageItems = Array.isArray(payload.data) ? payload.data : payload.data?.items ?? payload.items ?? [];
+      if (!pageItems.length) break;
+      items.push(...pageItems);
+      if (pageItems.length < pageSize) break;
+    }
+    const rows = items.slice(0, targetRows).map((holder) => {
       const amount = Number(holder.amount ?? holder.uiAmount ?? 0) || 0;
       return {
         tokenAccount: String(holder.address ?? holder.tokenAccount ?? 'solscan-holder'),
@@ -124,7 +177,7 @@ async function getSolscanHolderRows(mint: string, limit: number) {
       };
     }).filter((row) => row.owner || row.uiAmount > 0);
     const uniqueOwners = new Set(rows.map((row) => row.owner).filter(Boolean));
-    return rows.length ? { tokenAccountCount: Number(payload.total ?? (Array.isArray(payload.data) ? rows.length : payload.data?.total) ?? rows.length) || null, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: uniqueOwners.size, rows } : null;
+    return rows.length ? { tokenAccountCount: total ?? rows.length, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: uniqueOwners.size, rows } : null;
   } catch {
     return null;
   } finally {
@@ -135,24 +188,36 @@ async function getSolscanHolderRows(mint: string, limit: number) {
 async function getHeliusHolderTokenAccounts(mint: string, limit: number) {
   const key = getHeliusApiKey();
   if (!key) return null;
+  const targetRows = Math.min(Math.max(limit, 1), 250);
+  const pageSize = Math.min(targetRows, 100);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'content-type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'meridian-token-accounts',
-        method: 'getTokenAccounts',
-        params: { mint, page: 1, limit: Math.min(Math.max(limit, 1), 100), displayOptions: { showZeroBalance: false } }
-      })
-    });
-    if (!response.ok) return null;
-    const payload = await response.json() as { result?: { token_accounts?: Array<{ address?: string; owner?: string; amount?: number | string; rawAmount?: string; decimals?: number }> } };
-    const rows = (payload.result?.token_accounts ?? []).map((account) => ({
+    const allAccounts: Array<{ address?: string; owner?: string; amount?: number | string; rawAmount?: string; decimals?: number }> = [];
+    let total: number | null = null;
+    const maxPages = Math.ceil(targetRows / pageSize);
+    for (let page = 1; page <= maxPages && allAccounts.length < targetRows; page += 1) {
+      const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: `meridian-token-accounts-${page}`,
+          method: 'getTokenAccounts',
+          params: { mint, page, limit: pageSize, displayOptions: { showZeroBalance: false } }
+        })
+      });
+      if (!response.ok) break;
+      const payload = await response.json() as { result?: { total?: number; token_accounts?: Array<{ address?: string; owner?: string; amount?: number | string; rawAmount?: string; decimals?: number }> } };
+      total = typeof payload.result?.total === 'number' ? payload.result.total : total;
+      const pageRows = payload.result?.token_accounts ?? [];
+      if (!pageRows.length) break;
+      allAccounts.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+    }
+    const rows = allAccounts.slice(0, targetRows).map((account) => ({
       tokenAccount: account.address ?? 'helius-token-account',
       owner: account.owner ?? null,
       uiAmount: Number(account.amount ?? 0) || 0,
@@ -160,7 +225,63 @@ async function getHeliusHolderTokenAccounts(mint: string, limit: number) {
       decimals: account.decimals ?? null
     })).filter((row) => row.uiAmount > 0);
     const uniqueOwners = new Set(rows.map((row) => row.owner).filter(Boolean));
-    return rows.length ? { tokenAccountCount: null as number | null, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: uniqueOwners.size, rows } : null;
+    return rows.length ? { tokenAccountCount: total, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: uniqueOwners.size, rows } : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getBirdeyeHolderRows(mint: string, limit: number) {
+  const key = process.env.BIRDEYE_API_KEY?.trim();
+  if (!key) return null;
+  const targetRows = Math.min(Math.max(limit, 1), 100);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const url = new URL('https://public-api.birdeye.so/defi/v3/token/holder');
+    url.searchParams.set('address', mint);
+    url.searchParams.set('offset', '0');
+    url.searchParams.set('limit', String(targetRows));
+    url.searchParams.set('mode', 'wallet');
+    url.searchParams.set('get_holder_infos', 'true');
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+      cache: 'no-store',
+      headers: { accept: 'application/json', 'x-api-key': key, 'x-chain': 'solana' }
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { success?: boolean; data?: { items?: Array<Record<string, unknown>>; holder?: number; top10_hold_percent?: number } };
+    const items = payload.data?.items ?? [];
+    const rows = items.slice(0, targetRows).map((holder, index) => {
+      const owner = String(holder.owner ?? holder.wallet ?? holder.address ?? '') || null;
+      const amount = Number(holder.amount ?? holder.ui_amount ?? holder.uiAmount ?? 0) || 0;
+      const firstTrade = Number(holder.first_trade_unix_time ?? 0) || 0;
+      const lastTrade = Number(holder.last_trade_unix_time ?? 0) || 0;
+      const avgEntryUsd = Number(holder.avg_buy_price ?? holder.hold_avg_price ?? 0) || null;
+      const avgExitUsd = Number(holder.avg_sell_price ?? 0) || null;
+      const valueUsd = Number(holder.amount_usd ?? holder.valueUsd ?? 0) || null;
+      return {
+        tokenAccount: owner ?? `birdeye-holder-${index + 1}`,
+        owner,
+        uiAmount: amount,
+        rawAmount: String(holder.raw_amount ?? holder.amount ?? amount),
+        decimals: null,
+        pct: null,
+        valueUsd,
+        rank: index + 1,
+        ownerSolBalance: Number(holder.sol_balance ?? 0) || null,
+        ownerBalanceStatus: holder.sol_balance !== undefined ? 'birdeye-holder-info' : 'birdeye-holder-list',
+        avgEntryUsd,
+        avgExitUsd,
+        firstSeenAt: firstTrade ? new Date(firstTrade * 1000).toISOString() : null,
+        lastSeenAt: lastTrade ? new Date(lastTrade * 1000).toISOString() : null,
+        dataSources: ['birdeye-token-holder-wallet-mode']
+      };
+    }).filter((row) => row.owner || row.uiAmount > 0);
+    const uniqueOwners = new Set(rows.map((row) => row.owner).filter(Boolean));
+    return rows.length ? { tokenAccountCount: typeof payload.data?.holder === 'number' ? payload.data.holder : null, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: uniqueOwners.size, rows } : null;
   } catch {
     return null;
   } finally {
@@ -245,7 +366,7 @@ async function fetchRugCheck(mint: string): Promise<RugCheckReport | null> {
   try {
     const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, {
       signal: controller.signal,
-      headers: { accept: 'application/json', 'user-agent': 'MeridianTerminal/0.1' },
+      headers: { accept: 'application/json', 'user-agent': 'BondTerminal/0.1' },
       next: { revalidate: 20 }
     });
     if (!response.ok) return null;
@@ -290,6 +411,81 @@ function countInsiderNetworks(report: RugCheckReport | null): number | null {
   return null;
 }
 
+function holderCoverageMeta(args: { source: string; requestedLimit: number; returnedRows: number; totalHolders: number | null; baseNote: string }) {
+  const providerMax = args.source === 'solana-rpc-getTokenLargestAccounts' ? 20 : null;
+  const providerLimitSuspected = args.returnedRows > 0 && args.returnedRows < args.requestedLimit && (
+    args.source === 'rugcheck-top-holders' ||
+    args.source === 'solana-rpc-getTokenLargestAccounts' ||
+    args.source === 'pumpfun-top-holders'
+  );
+  const isTruncated = Boolean(providerLimitSuspected || (providerMax !== null && args.requestedLimit > providerMax) || (args.totalHolders !== null && args.returnedRows > 0 && args.returnedRows < args.totalHolders));
+  const provider = args.source === 'rugcheck-top-holders'
+    ? 'RugCheck fallback'
+    : args.source === 'solana-rpc-getTokenLargestAccounts'
+      ? 'Solana RPC getTokenLargestAccounts fallback'
+      : args.source === 'pumpfun-top-holders'
+        ? 'Pump.fun holder fallback'
+        : args.source || 'holder provider';
+  const coverageLabel = args.returnedRows
+    ? isTruncated
+      ? `Top ${args.returnedRows} wallets from ${provider}${providerMax ? ` hard cap (${providerMax})` : ''}`
+      : `${args.returnedRows} wallet rows from ${provider}`
+    : `No wallet rows from ${provider}`;
+  const note = isTruncated
+    ? `${args.baseNote} Requested top ${args.requestedLimit}, but ${provider} returned ${args.returnedRows}; use Solscan Pro or paginated Helius DAS for top-100+ coverage when credentials allow it.`
+    : args.baseNote;
+  return { providerLimitSuspected, isTruncated, providerMax, coverageLabel, note };
+}
+
+
+function insiderGraphEstimate(args: { rugcheck: RugCheckReport | null; devWallets: string[]; devBalances: Array<{ wallet: string; amount: number }>; supply: number | null; holders: HolderAccountRow[]; lightweightHolders: boolean }) {
+  const evidence: string[] = [];
+  const limitations: string[] = [];
+  const rugNetworks = countInsiderNetworks(args.rugcheck);
+  const creator = args.rugcheck?.creator ?? null;
+  const candidateWallets = new Set<string>();
+  if (creator) {
+    candidateWallets.add(creator);
+    evidence.push(`RugCheck creator wallet available: ${creator.slice(0, 6)}…${creator.slice(-5)}.`);
+  }
+  if (rugNetworks !== null) evidence.push(`RugCheck reports ${rugNetworks} insider network${rugNetworks === 1 ? '' : 's'} / graph signal${rugNetworks === 1 ? '' : 's'}.`);
+  for (const wallet of args.devWallets) candidateWallets.add(wallet);
+  const devAmount = args.devBalances.reduce((sum, row) => sum + row.amount, 0);
+  const devPct = pct(devAmount, args.supply);
+  if (args.devWallets.length) evidence.push(`${args.devWallets.length} configured dev wallet${args.devWallets.length === 1 ? '' : 's'} checked for token balance.`);
+  if (devPct !== null) evidence.push(`Configured dev wallets currently hold ${devPct}% of supply.`);
+  const holderOwners = new Set(args.holders.map((row) => row.owner).filter((owner): owner is string => typeof owner === 'string'));
+  let insiderHolderAmount = 0;
+  for (const row of args.holders) {
+    if (row.owner && candidateWallets.has(row.owner)) insiderHolderAmount += row.uiAmount;
+  }
+  const directPct = pct(insiderHolderAmount || devAmount || null, args.supply);
+  const directMatches = Array.from(candidateWallets).filter((wallet) => holderOwners.has(wallet)).length;
+  if (directMatches) evidence.push(`${directMatches} known creator/dev wallet${directMatches === 1 ? '' : 's'} matched current holder rows.`);
+  if (args.lightweightHolders) limitations.push('Fast/prototype holder mode skips deeper owner-balance and wallet-history enrichment.');
+  if (!args.holders.length) limitations.push('No holder rows were available, so insider supply percentage cannot be estimated from holder overlap.');
+  if (!args.devWallets.length) limitations.push('No configured project/dev wallets were provided; estimate relies on RugCheck creator/network metadata only.');
+  limitations.push('This is a conservative read-only estimate, not a full wallet graph: shared funding, private transfers, CEX funding, and undisclosed team wallets may be missed.');
+  limitations.push('Exact insider percentage requires a wallet graph/indexer linking deployer/team funding, early buyers, token transfers, and current balances.');
+  const hasDirectPct = directPct !== null && directPct > 0;
+  const hasRugSignal = rugNetworks !== null || Boolean(creator);
+  const confidence: 'low' | 'medium' | 'high' = hasDirectPct && args.devWallets.length && !args.lightweightHolders ? 'medium' : hasRugSignal || args.devWallets.length ? 'low' : 'low';
+  const status = hasDirectPct ? 'estimated-from-known-wallet-overlap' : hasRugSignal ? 'metadata-only' : 'wallet-graph-parser-pending';
+  return {
+    pct: directPct,
+    insiderStatus: status,
+    status,
+    insiderNetworks: rugNetworks,
+    networks: rugNetworks,
+    insiderWalletCount: candidateWallets.size || null,
+    insiderSupplyPctEstimate: directPct,
+    confidence,
+    evidence,
+    limitations,
+    note: directPct !== null ? `Known creator/dev wallet overlap estimates ${directPct}% of supply; confidence ${confidence}.` : 'Exact insider supply percentage unavailable without wallet graph parser/indexer.'
+  };
+}
+
 function unavailableResponse(mint: string, reason: string, configured: boolean) {
   return Response.json({
     mint,
@@ -303,7 +499,7 @@ function unavailableResponse(mint: string, reason: string, configured: boolean) 
     devHolding: { devWallets: [], amount: null, pct: null, status: 'unavailable', note: reason },
     snipers: { pct: null, status: 'launch-parser-pending', note: 'Read-data providers are Helius/RPC-aware; launch-window parser still needs first buyers, funding source, hold/sell state.' },
     bundlers: { pct: null, status: 'bitquery-or-helius-required', note: 'Requires same-slot/same-block transaction clustering and bundle signature grouping.' },
-    insiders: { pct: null, status: 'wallet-graph-parser-pending', note: 'Requires wallet graph parser: deployer/team funding links, token transfers, shared authorities.' },
+    insiders: { pct: null, insiderStatus: 'wallet-graph-parser-pending', status: 'wallet-graph-parser-pending', insiderNetworks: null, networks: null, insiderWalletCount: null, insiderSupplyPctEstimate: null, confidence: 'low', evidence: [], limitations: ['Token stats unavailable.', 'Requires wallet graph parser: deployer/team funding links, token transfers, shared authorities.'], note: 'Requires wallet graph parser: deployer/team funding links, token transfers, shared authorities.' },
     lpBurned: { pct: null, status: 'pool-lp-scan-required', note: 'Requires pool LP mint/lock/burn inspection for the active DEX pair.' },
     execution: 'read-only'
   });
@@ -312,9 +508,11 @@ function unavailableResponse(mint: string, reason: string, configured: boolean) 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const prototype = searchParams.get('profile') === 'prototype' || searchParams.get('prototype') === '1';
+  const fastHolders = searchParams.get('fastHolders') === '1';
+  const lightweightHolders = prototype || fastHolders;
   const mintParam = searchParams.get('mint')?.trim();
   const devWallets = parseDevWallets(searchParams.get('devWallets'));
-  const holderListLimit = Math.min(Math.max(Number(searchParams.get('holderListLimit') ?? '100'), 1), prototype ? 20 : 250);
+  const holderListLimit = Math.min(Math.max(Number(searchParams.get('holderListLimit') ?? '100'), 1), fastHolders ? 100 : prototype ? 50 : 250);
 
   if (!mintParam) return Response.json({ error: 'Missing mint query parameter.' }, { status: 400 });
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mintParam)) return Response.json({ error: 'Invalid Solana mint/address shape.' }, { status: 400 });
@@ -328,27 +526,21 @@ export async function GET(request: Request) {
     const mint = new PublicKey(mintParam);
     const warnings: string[] = [];
     const rugcheck = await fetchRugCheck(mintParam);
-    const supplyResult = prototype ? null : await withTimeout(connection.getTokenSupply(mint, 'confirmed')).catch((error) => {
-      warnings.push(`Supply lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
-      return null;
-    });
+    const supplyResult = lightweightHolders ? null : await readTokenSupplyWithFallback(connection, mint, warnings);
 
     const fallbackDecimals = rugcheck?.token?.decimals ?? 0;
     const supply = supplyResult?.value.uiAmount ?? (typeof rugcheck?.token?.supply === 'number' ? rugcheck.token.supply : null);
     const supplyDecimals = supplyResult?.value.decimals ?? fallbackDecimals;
     const supplyRaw = supplyResult?.value.amount ?? (typeof rugcheck?.token?.supply === 'number' ? String(rugcheck.token.supply) : null);
-    const largestAccounts = prototype ? null : await withTimeout(connection.getTokenLargestAccounts(mint, 'confirmed')).catch((error) => {
-      warnings.push(`Largest holder lookup unavailable: ${error instanceof Error ? error.message : 'RPC failed'}`);
-      return null;
-    });
-    const largest = (largestAccounts?.value ?? []).map((account) => ({
+    const largestAccounts = await readLargestAccountsWithFallback(connection, mint, warnings, fastHolders ? 4_000 : 8_000);
+    const largest: LargestHolderAccount[] = (largestAccounts?.value ?? []).map((account) => ({
         tokenAccount: account.address.toBase58(),
-        amount: account.uiAmount ?? Number(account.amount) / (10 ** supplyDecimals),
-        decimals: supplyDecimals
+        amount: account.uiAmount ?? Number(account.amount) / (10 ** (account.decimals ?? supplyDecimals)),
+        decimals: account.decimals ?? supplyDecimals
       }));
     const top10Amount = largest.slice(0, 10).reduce((sum, account) => sum + account.amount, 0);
-    const top20WithOwners = prototype
-      ? largest.slice(0, 20).map((account) => ({ ...account, owner: null, pct: pct(account.amount, supply), ownerStatus: 'prototype-skip' }))
+    const top20WithOwners = lightweightHolders
+      ? largest.slice(0, 20).map((account) => ({ ...account, owner: null, pct: pct(account.amount, supply), ownerStatus: fastHolders ? 'fast-holder-skip' : 'prototype-skip' }))
       : await Promise.all(largest.slice(0, 20).map(async (account) => ({
         ...account,
         owner: await getParsedOwner(connection, account.tokenAccount),
@@ -356,7 +548,7 @@ export async function GET(request: Request) {
         ownerStatus: 'solana-rpc-getParsedAccountInfo'
       })));
 
-    const devBalances = await Promise.all(devWallets.map(async (wallet) => {
+    const devBalances = lightweightHolders ? [] : await Promise.all(devWallets.map(async (wallet) => {
       try {
         return { wallet, amount: await getDevTokenBalance(connection, mint, wallet) };
       } catch (error) {
@@ -368,8 +560,29 @@ export async function GET(request: Request) {
 
     let holderSource = 'unavailable';
     const prototypeRugRows = prototype ? rugHolderRows(rugcheck, holderListLimit, supply) : [];
-    let holderAccounts: (Omit<Awaited<ReturnType<typeof getHolderTokenAccounts>>, 'tokenAccountCount'> & { tokenAccountCount: number | null }) | null = prototypeRugRows.length ? { tokenAccountCount: null, nonZeroTokenAccounts: prototypeRugRows.length, uniqueOwnerCount: new Set(prototypeRugRows.map((row) => row.owner).filter(Boolean)).size, rows: prototypeRugRows } : await getSolscanHolderRows(mint.toBase58(), holderListLimit);
-    if (holderAccounts?.rows?.length) holderSource = prototypeRugRows.length ? 'rugcheck-top-holders' : 'solscan-pro-token-holders';
+    const fastLargestRows = fastHolders && largest.length
+      ? largest.slice(0, holderListLimit).map((account, index) => ({
+        tokenAccount: account.tokenAccount,
+        owner: null,
+        uiAmount: account.amount,
+        rawAmount: String(account.amount),
+        decimals: account.decimals,
+        pct: pct(account.amount, supply),
+        rank: index + 1,
+        ownerStatus: 'fast-rpc-largest-account-owner-deferred'
+      }))
+      : [];
+    let holderAccounts: (Omit<Awaited<ReturnType<typeof getHolderTokenAccounts>>, 'tokenAccountCount'> & { tokenAccountCount: number | null }) | null = prototypeRugRows.length
+      ? { tokenAccountCount: null, nonZeroTokenAccounts: prototypeRugRows.length, uniqueOwnerCount: new Set(prototypeRugRows.map((row) => row.owner).filter(Boolean)).size, rows: prototypeRugRows }
+      : fastLargestRows.length
+        ? { tokenAccountCount: null, nonZeroTokenAccounts: fastLargestRows.length, uniqueOwnerCount: 0, rows: fastLargestRows }
+        : await getSolscanHolderRows(mint.toBase58(), holderListLimit);
+    if (holderAccounts?.rows?.length) holderSource = prototypeRugRows.length ? 'rugcheck-top-holders' : fastLargestRows.length ? 'solana-rpc-getTokenLargestAccounts-fast' : 'solscan-pro-token-holders';
+
+    if (!holderAccounts?.rows?.length) {
+      holderAccounts = await getBirdeyeHolderRows(mint.toBase58(), holderListLimit);
+      if (holderAccounts?.rows?.length) holderSource = 'birdeye-token-holder-wallet-mode';
+    }
 
     if (!holderAccounts?.rows?.length) {
       holderAccounts = await getHeliusHolderTokenAccounts(mint.toBase58(), holderListLimit);
@@ -382,6 +595,21 @@ export async function GET(request: Request) {
         return null;
       });
       if (holderAccounts?.rows?.length) holderSource = 'solana-rpc-getTokenLargestAccounts';
+    }
+
+    if (!holderAccounts?.rows?.length && largest.length) {
+      const rows = largest.slice(0, holderListLimit).map((account, index) => ({
+        tokenAccount: account.tokenAccount,
+        owner: null,
+        uiAmount: account.amount,
+        rawAmount: String(account.amount),
+        decimals: account.decimals,
+        pct: pct(account.amount, supply),
+        rank: index + 1,
+        ownerStatus: 'rpc-largest-account-owner-deferred'
+      }));
+      holderAccounts = { tokenAccountCount: null, nonZeroTokenAccounts: rows.length, uniqueOwnerCount: 0, rows };
+      holderSource = 'solana-rpc-getTokenLargestAccounts-owner-deferred';
     }
 
     if (!holderAccounts?.rows?.length) {
@@ -419,9 +647,13 @@ export async function GET(request: Request) {
       rank: typeof row.rank === 'number' ? row.rank : index + 1,
       pct: typeof row.pct === 'number' ? row.pct : pct(row.uiAmount, supply)
     }));
-    const holderRows = prototype
-      ? rankedHolderRows.map((row) => ({ ...row, ownerSolBalance: null, ownerBalanceStatus: row.owner ? 'prototype-skip' : 'missing-owner' }))
+    const holderRows = lightweightHolders
+      ? rankedHolderRows.map((row) => ({ ...row, ownerSolBalance: null, ownerBalanceStatus: row.owner ? (fastHolders ? 'fast-holder-skip' : 'prototype-skip') : 'missing-owner' }))
       : await enrichHolderOwnerBalances(connection, rankedHolderRows, warnings);
+    const holderBaseNote = holderAccounts?.rows?.length ? (fastHolders ? `Fast holder rows loaded from ${holderSource}; slow owner-balance and lifecycle enrichment skipped for terminal responsiveness.` : prototype ? `Top holder rows loaded from ${holderSource}; owner SOL balance enrichment skipped in prototype mode.` : searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'Token holder accounts loaded through full Solana RPC token program account scan; owner SOL balances enriched through RPC.' : `Top holder rows loaded from ${holderSource}; owner SOL balances enriched through RPC when owners are known.`)  : typeof rugcheck?.totalHolders === 'number' ? 'Total holders from RugCheck report; RPC holder account list unavailable.' : 'RPC/RugCheck did not return exact holders.';
+    const totalHolderEstimate = holderAccounts?.uniqueOwnerCount ?? (typeof rugcheck?.totalHolders === 'number' ? rugcheck.totalHolders : null);
+    const holderCoverage = holderCoverageMeta({ source: holderSource, requestedLimit: holderListLimit, returnedRows: holderRows.length, totalHolders: totalHolderEstimate, baseNote: holderBaseNote });
+    const insiderEstimate = insiderGraphEstimate({ rugcheck, devWallets, devBalances, supply, holders: holderRows, lightweightHolders });
 
     return Response.json({
       mint: mint.toBase58(),
@@ -438,15 +670,24 @@ export async function GET(request: Request) {
         note: supplyResult ? null : 'RPC supply lookup unavailable; holder table continues with Solscan/Helius/RPC/Pump.fun/RugCheck fallback rows.'
       },
       holders: {
+        requestedLimit: holderListLimit,
+        returnedRows: holderRows.length,
+        walletCountReturned: holderRows.length,
+        walletLimit: holderListLimit,
+        isTruncated: holderCoverage.isTruncated,
+        nextCursor: null,
+        paginationStatus: holderCoverage.providerMax ? `provider-hard-cap-${holderCoverage.providerMax}` : holderCoverage.isTruncated ? 'truncated-or-provider-limited' : 'complete-for-requested-limit',
+        coverageLabel: holderCoverage.coverageLabel,
+        providerLimitSuspected: holderCoverage.providerLimitSuspected,
         tokenAccountCount,
         nonZeroTokenAccounts: holderAccounts?.nonZeroTokenAccounts ?? null,
         uniqueOwnerCount: holderAccounts?.uniqueOwnerCount ?? null,
-        totalHolders: holderAccounts?.uniqueOwnerCount ?? (typeof rugcheck?.totalHolders === 'number' ? rugcheck.totalHolders : null),
+        totalHolders: totalHolderEstimate,
         listLimit: holderListLimit,
         rows: holderRows,
         status: holderAccounts?.rows?.length ? 'ok' : typeof rugcheck?.totalHolders === 'number' ? 'summary-only' : 'limited',
         source: holderAccounts?.rows?.length ? (searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'solana-rpc-getParsedProgramAccounts' : holderSource) : 'rugcheck-summary',
-        note: holderAccounts?.rows?.length ? (prototype ? `Top holder rows loaded from ${holderSource}; owner SOL balance enrichment skipped in prototype mode.` : searchParams.get('fullHolders') === '1' && tokenAccountCount != null ? 'Token holder accounts loaded through full Solana RPC token program account scan; owner SOL balances enriched through RPC.' : `Top holder rows loaded from ${holderSource}; owner SOL balances enriched through RPC when owners are known.`)  : typeof rugcheck?.totalHolders === 'number' ? 'Total holders from RugCheck report; RPC holder account list unavailable.' : 'RPC/RugCheck did not return exact holders.'
+        note: holderCoverage.note
       },
       concentration: {
         top10Amount,
@@ -457,8 +698,8 @@ export async function GET(request: Request) {
         devWallets,
         amount: devAmount,
         pct: pct(devAmount, supply),
-        status: devWallets.length ? 'ok' : 'missing-dev-wallets',
-        note: devWallets.length ? 'Computed by reading token accounts owned by configured project/dev wallets.' : 'Pass project/dev wallet addresses to compute dev holding.'
+        status: lightweightHolders ? 'skipped-fast-holder-mode' : devWallets.length ? 'ok' : 'missing-dev-wallets',
+        note: lightweightHolders ? 'Skipped in fast holder mode so the terminal holder feed can render quickly.' : devWallets.length ? 'Computed by reading token accounts owned by configured project/dev wallets.' : 'Pass project/dev wallet addresses to compute dev holding.'
       },
       snipers: {
         pct: null,
@@ -470,12 +711,7 @@ export async function GET(request: Request) {
         status: process.env.BITQUERY_API_KEY || rpc.enhancedTransactions ? 'indexer-configured-parser-pending' : 'bitquery-or-helius-required',
         note: 'Requires same-slot/same-block transaction clustering and bundle signature grouping.'
       },
-      insiders: {
-        pct: null,
-        networks: countInsiderNetworks(rugcheck),
-        status: rugcheck ? 'rugcheck' : 'wallet-graph-parser-pending',
-        note: rugcheck ? 'RugCheck insider network count available; exact insider percentage needs our wallet-graph parser/indexer.' : 'Requires wallet graph parser: deployer/team funding links, token transfers, shared authorities.'
-      },
+      insiders: insiderEstimate,
       lpBurned: {
         pct: null,
         lockerScanStatus: rugcheck?.lockerScanStatus ?? null,

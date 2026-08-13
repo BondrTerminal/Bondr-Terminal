@@ -1,211 +1,82 @@
-import { allProjectFlow, eventsForProject, formatSol, getMeridianStore, projectFlow, projectNextAction, readinessScore } from '../../lib/meridian-store';
+import { allProjectFlow, eventsForProject, formatSol, projectFlow, projectNextAction, readinessScore } from '../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { CreateProjectForm } from './components/CreateProjectForm';
 
 export const dynamic = 'force-dynamic';
 
-const projectTabs = [
-  ['All Projects', 'Complete project index across drafts, pending launches, deployed tokens, and CTO operations.'],
-  ['Pending', 'Projects waiting on metadata, wallet setup, funding plan, launch path, or final review.'],
-  ['Deployed', 'Launched projects with post-launch charting, holders, liquidity, orders, and dev-token tracking.'],
-  ['CTO', 'Community takeover project tracking, ownership notes, relaunch status, and operator tasks.']
-];
+type ProjectsPageProps = { searchParams?: Promise<{ project?: string }> };
 
-const moduleCoverage = [
-  ['Deployment', 'Metadata, launch path, funding plan, preflight, and post-launch monitor.'],
-  ['Wallet Ops', 'Project/global wallets, wallet groups, roles, funding readiness, and wallet-ops engine routes.'],
-  ['Sniper Terminal', 'Read-only token lookup, pairs, liquidity, route and risk context.'],
-  ['Project Dashboard', 'Today and 30-day net SOL flow; sells minus buys only.'],
-  ['Liquidity Engine', 'Autonomous market-maker/scalper cockpit and passive-income focus.']
-];
+function BalanceGraph({ points }: { points: number[] }) {
+  const flowPoints = points.length > 1 ? points : [0, 0];
+  const width = 920;
+  const height = 260;
+  const pad = 30;
+  const max = Math.max(...flowPoints, 1);
+  const min = Math.min(...flowPoints, -1);
+  const x = (index: number) => pad + (index / (flowPoints.length - 1)) * (width - pad * 2);
+  const y = (value: number) => pad + ((max - value) / Math.max(1, max - min)) * (height - pad * 2);
+  const path = flowPoints.map((value, index) => `${index === 0 ? 'M' : 'L'} ${x(index).toFixed(2)} ${y(value).toFixed(2)}`).join(' ');
+  return <div className="projectFlowChartWrap bigFlowChart"><svg viewBox={`0 0 ${width} ${height}`} className="projectFlowChart" role="img" aria-label="Total net flow graph"><path className="chartArea" d={`${path} L ${width - pad} ${height - pad} L ${pad} ${height - pad} Z`} /><path className="chartLine" d={path} />{flowPoints.map((value, index) => <circle key={`${value}-${index}`} cx={x(index)} cy={y(value)} r="4" />)}</svg></div>;
+}
 
-export default function ProjectsPage() {
-  const store = getMeridianStore();
+export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
+  const params = await searchParams;
+  const store = await getMeridianWalletStore();
+  const selectedProject = params?.project ? store.projects.find((project) => project.id === params.project) : undefined;
   const totalFlow = allProjectFlow(store);
-  const pipeline = [
-    ['Draft', store.projects.filter((project) => project.status === 'draft').length],
-    ['Pending', store.projects.filter((project) => project.status === 'pending').length],
-    ['Deployed', store.projects.filter((project) => project.status === 'deployed').length],
-    ['CTO', store.projects.filter((project) => project.status === 'cto').length]
-  ];
-  const maxPipeline = Math.max(...pipeline.map(([, count]) => Number(count)), 1);
-  const stats = [
-    ['All', String(store.projects.length)],
-    ['Pending', String(store.projects.filter((project) => project.status === 'pending').length)],
-    ['Deployed', String(store.projects.filter((project) => project.status === 'deployed').length)],
-    ['CTO', String(store.projects.filter((project) => project.status === 'cto').length)],
-    ['30d Net SOL', formatSol(totalFlow.netSol)]
-  ];
-  const actionQueue = store.projects.map((project) => ({ project, action: projectNextAction(project, store) }));
+  const projects = selectedProject ? [selectedProject] : store.projects;
+  const totalBuys = store.flowEvents.filter((event) => event.type === 'buy').reduce((sum, event) => sum + event.solAmount, 0);
+  const totalSells = store.flowEvents.filter((event) => event.type === 'sell').reduce((sum, event) => sum + event.solAmount, 0);
+  const deployed = store.projects.filter((project) => project.status === 'deployed').length;
+  const totalVolume = totalBuys + totalSells;
 
   return (
-    <main>
-      <div className="contentShell">
-        <section className="documentHero oceanHero projectsHero">
-          <div className="eyebrow">Project Management</div>
-          <h1>Launch workspace control.</h1>
-          <p>
-            Durable project command center across drafts, deployments, CTO operations, wallet groups,
-            net SOL flow, launch readiness, event logs, and module handoffs.
-          </p>
+    <main className="projectDashboardMain">
+      <div className="contentShell projectDashboardShell">
+        <section className="documentHero oceanHero projectsHero projectDashboardHeroV2">
+          <div className="eyebrow">Projects</div>
+          <h1>{selectedProject ? `${selectedProject.name} command view.` : 'Real project command center.'}</h1>
+          <p>Track real project records, launch configuration, stored flow events, and routing into Deployment, Terminal, Wallets, and Portfolio. Empty state is intentional until you create a project.</p>
+          <div className="projectHeroActions"><a href="/deployment">Open Deployment</a><a href="/sniper">Open Terminal</a><a href="/portfolio">Open Portfolio</a></div>
         </section>
 
-        <section className="projectStatsGrid" aria-label="Project status counts">
-          {stats.map(([label, value]) => (
-            <div className="projectStat" key={label}>
-              <span>{label}</span>
-              <strong className={value.startsWith('+') ? 'profitText' : value.startsWith('-') ? 'dangerText' : ''}>{value}</strong>
-            </div>
-          ))}
+        <section className="projectDashboardKpiGrid" aria-label="Project dashboard KPIs">
+          <div className={`projectStat heroMetric ${totalFlow.netSol >= 0 ? 'positiveFlow' : 'negativeFlow'}`}><span>Total net flow</span><strong>{formatSol(totalFlow.netSol)}</strong><small>stored buys/sells only</small></div>
+          <div className="projectStat heroMetric"><span>Realized PnL</span><strong>{formatSol(totalFlow.netSol)}</strong><small>from stored flow events</small></div>
+          <div className="projectStat heroMetric"><span>Unrealized PnL</span><strong>Provider-limited</strong><small>requires live mark-to-market data</small></div>
+          <div className="projectStat heroMetric"><span>Deployed capital</span><strong>{totalBuys.toFixed(2)} SOL</strong><small>stored buy flow</small></div>
+          <div className="projectStat heroMetric"><span>Total routed flow</span><strong>{totalVolume.toFixed(2)} SOL</strong><small>buys + sells</small></div>
+          <div className="projectStat heroMetric"><span>Projects</span><strong>{store.projects.length}</strong><small>{deployed} deployed</small></div>
         </section>
 
-        <section className="projectTabGrid" aria-label="Project tabs">
-          {projectTabs.map(([title, body]) => (
-            <article className="documentCard projectTabCard" key={title}>
-              <h2>{title}</h2>
-              <p>{body}</p>
-            </article>
-          ))}
+        <section className="documentCard projectFlowPanel projectDashboardFlowPanel">
+          <div className="sectionIntro compactIntro"><span>Net flow</span><h2>Total project cash-flow history</h2><p>Realized buys/sells only. No synthetic prices or seeded project records are shown.</p></div>
+          <BalanceGraph points={selectedProject ? projectFlow(selectedProject.id, store).series : totalFlow.series} />
         </section>
 
         <CreateProjectForm />
 
-        <section className="projectOrganizationGrid">
-          <section className="documentCard pipelineGraphPanel">
-            <div className="sectionIntro compactIntro">
-              <span>Organization</span>
-              <h2>Project pipeline graph</h2>
-              <p>Quick visual view of where projects sit across draft, pending, deployed, and CTO workflows.</p>
-            </div>
-            <div className="pipelineGraph">
-              {pipeline.map(([label, count]) => (
-                <div className="pipelineBar" key={label as string}>
-                  <span>{label}</span>
-                  <div><i style={{ height: `${(Number(count) / maxPipeline) * 100}%` }} /></div>
-                  <strong>{count}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="documentCard projectControlPanel">
-            <div className="sectionIntro compactIntro">
-              <span>Controls</span>
-              <h2>Project control center</h2>
-              <p>Organization controls for filtering, reviewing, archiving, and handoff. Mutating actions remain disabled.</p>
-            </div>
-            <div className="projectControlGrid">
-              <button type="button" disabled>Filter by status</button>
-              <button type="button" disabled>Sort by readiness</button>
-              <button type="button" disabled>Open selected cockpit</button>
-              <button type="button" disabled>Archive project</button>
-              <button type="button" disabled>Export project list</button>
-              <button type="button" disabled>Assign owner</button>
-            </div>
-          </section>
-        </section>
-
-        <section className="documentCard projectReadinessPanel">
-          <div className="sectionIntro compactIntro">
-            <span>Readiness</span>
-            <h2>Launch readiness matrix</h2>
-            <p>Computed from stored metadata, wallet groups, funding plan, launch path, deployment state, and monitor coverage.</p>
-          </div>
-          <div className="infoGrid deploymentChecklist">
-            {store.projects.map((project) => {
-              const readiness = readinessScore(project, store);
-              return (
-                <div className="sideRow" key={project.id}>
-                  <span><a href={`/projects/${project.id}`}>{project.name}</a></span>
-                  <strong>{readiness.score}% ready — {readiness.missing.length ? `Missing: ${readiness.missing.join(', ')}` : 'Ready for review'}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="projectOpsGrid">
-          <section className="documentCard projectActionQueue">
-            <div className="sectionIntro compactIntro">
-              <span>Operator queue</span>
-              <h2>Next actions</h2>
-              <p>Quick-action workflow. Links move the operator to the module that owns the missing work.</p>
-            </div>
-            <div className="linkStack projectActionLinks">
-              {actionQueue.map(({ project, action }) => (
-                <a href={action.href} key={`${project.id}-${action.label}`}>
-                  <strong>{project.name}</strong>
-                  <span>{action.label}</span>
-                </a>
-              ))}
-            </div>
-          </section>
-
-          <section className="documentCard projectCoveragePanel">
-            <div className="sectionIntro compactIntro">
-              <span>Coverage</span>
-              <h2>Module coverage</h2>
-              <p>What each project can attach to as the Meridian hub matures.</p>
-            </div>
-            <div className="infoGrid deploymentChecklist">
-              {moduleCoverage.map(([label, value]) => (
-                <div className="sideRow" key={label}>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <section className="documentCard projectTablePanel">
-          <div className="sectionIntro compactIntro">
-            <span>Projects</span>
-            <h2>Project index</h2>
-            <p>Data-driven project list from local Meridian storage. Net SOL = sells - buys; held tokens are excluded.</p>
-          </div>
-          <div className="projectTable" role="table" aria-label="Project index">
-            <div className="projectRow managementProjectRow projectHead" role="row">
-              <span>Project</span><span>Status</span><span>Path</span><span>Readiness</span><span>Net SOL</span><span>Net- buys</span><span>Net+ sells</span><span>Next step</span>
-            </div>
-            {store.projects.map((project) => {
+        <section className="documentCard projectTablePanel projectHistoryPanel">
+          <div className="sectionIntro compactIntro"><span>Projects</span><h2>Stored project records</h2><p>Click any project to inspect it, or route directly into Terminal/Deployment/Portfolio.</p></div>
+          <div className="projectTable projectDashboardTable" role="table" aria-label="Stored project records">
+            <div className="projectRow projectDashboardRow projectHead" role="row"><span>Project</span><span>Status</span><span>Path</span><span>Mint</span><span>Pool</span><span>Realized PnL</span><span>Flow</span><span>Readiness</span><span>Actions</span></div>
+            {projects.length ? projects.map((project) => {
               const flow = projectFlow(project.id, store);
               const readiness = readinessScore(project, store);
-              const action = projectNextAction(project, store);
-              return (
-                <div className="projectRow managementProjectRow" role="row" key={project.id}>
-                  <a href={`/projects/${project.id}`}><strong>{project.name}</strong></a>
-                  <span>{project.status}</span>
-                  <span>{project.launchPath}</span>
-                  <span>{readiness.score}%</span>
-                  <span className={flow.netSol > 0 ? 'profitText' : flow.netSol < 0 ? 'dangerText' : ''}>{formatSol(flow.netSol)}</span>
-                  <span>{flow.buysSol.toFixed(2)} SOL</span>
-                  <span>{flow.sellsSol.toFixed(2)} SOL</span>
-                  <a href={action.href}>{action.label}</a>
-                </div>
-              );
-            })}
+              const terminalHref = `/sniper?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`;
+              return <div className="projectRow projectDashboardRow" role="row" key={project.id}>
+                <a href={`/projects/${project.id}`}><strong>{project.name}</strong><small>{project.ticker}</small></a>
+                <span>{project.status}</span><span>{project.launchPath}</span><span>{project.tokenMint ? `${project.tokenMint.slice(0, 6)}…${project.tokenMint.slice(-5)}` : 'Not launched'}</span><span>{project.pool ? `${project.pool.slice(0, 6)}…${project.pool.slice(-5)}` : 'Not created'}</span>
+                <span className={flow.netSol >= 0 ? 'profitText' : 'dangerText'}>{formatSol(flow.netSol)}</span><span>{(flow.buysSol + flow.sellsSol).toFixed(2)} SOL</span><span>{readiness.score}%</span>
+                <span className="inlineActionStack"><a href={`/projects/${project.id}`}>Inspect</a><a href={terminalHref}>Terminal</a><a href={`/deployment?project=${project.id}`}>Deploy</a><a href={`/portfolio?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`}>Portfolio</a></span>
+              </div>;
+            }) : <div className="emptyPortfolioState">No projects yet. Create a project to start configuring launch state.</div>}
           </div>
         </section>
 
-        <section className="documentCard projectTablePanel">
-          <div className="sectionIntro compactIntro">
-            <span>Execution logs</span>
-            <h2>Project event history</h2>
-            <p>Competitor-grade terminals expose live logs. This is the first durable project-level audit feed.</p>
-          </div>
-          <div className="projectTable" role="table" aria-label="Project event history">
-            <div className="projectRow eventProjectRow projectHead" role="row">
-              <span>Project</span><span>Level</span><span>Module</span><span>Message</span>
-            </div>
-            {store.projects.flatMap((project) => eventsForProject(project.id, store).slice(0, 2).map((event) => (
-              <div className="projectRow eventProjectRow" role="row" key={event.id}>
-                <strong>{project.name}</strong>
-                <span className={event.level === 'warn' ? 'dangerText' : 'profitText'}>{event.level}</span>
-                <span>{event.module}</span>
-                <em>{event.message}</em>
-              </div>
-            )))}
-          </div>
+        <section className="projectOpsGrid projectDashboardOpsGrid">
+          <section className="documentCard projectActionQueue"><div className="sectionIntro compactIntro"><span>Next actions</span><h2>Operator routing</h2><p>Routes only appear for stored project records.</p></div><div className="linkStack projectActionLinks">{store.projects.length ? store.projects.map((project) => { const action = projectNextAction(project, store); return <a href={action.href} key={`${project.id}-${action.label}`}><strong>{project.name}</strong><span>{action.label}</span></a>; }) : <p>No stored project actions yet.</p>}</div></section>
+          <section className="documentCard projectCoveragePanel"><div className="sectionIntro compactIntro"><span>Recent history</span><h2>Audit feed</h2><p>Latest stored project events.</p></div><div className="infoGrid deploymentChecklist">{store.projects.flatMap((project) => eventsForProject(project.id, store).slice(0, 1).map((event) => <div className="sideRow" key={event.id}><span>{project.name}</span><strong>{event.module}: {event.message}</strong></div>)).length ? store.projects.flatMap((project) => eventsForProject(project.id, store).slice(0, 1).map((event) => <div className="sideRow" key={event.id}><span>{project.name}</span><strong>{event.module}: {event.message}</strong></div>)) : <p>No project events yet.</p>}</div></section>
         </section>
       </div>
     </main>

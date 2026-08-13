@@ -1,4 +1,5 @@
-import { getMeridianStore, getProject } from '../../lib/meridian-store';
+import { getProject } from '../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { TokenIntelLookup } from '../sniper/components/TokenIntelLookup';
 
 export const dynamic = 'force-dynamic';
@@ -37,11 +38,21 @@ const actionRows = [
 
 type TokenAnalyzerProps = { searchParams?: Promise<{ mint?: string; project?: string }> };
 
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SOLANA_ADDRESS_IN_TEXT_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+
+function extractMint(input: string | null | undefined) {
+  const trimmed = (input ?? '').trim();
+  if (SOLANA_ADDRESS_RE.test(trimmed)) return trimmed;
+  const matches = trimmed.match(SOLANA_ADDRESS_IN_TEXT_RE) ?? [];
+  return matches.find((candidate) => SOLANA_ADDRESS_RE.test(candidate)) ?? '';
+}
+
 export default async function TokenAnalyzerPage({ searchParams }: TokenAnalyzerProps) {
   const params = await searchParams;
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const selectedProject = params?.project ? getProject(params.project, store) : undefined;
-  const defaultMint = params?.mint ?? selectedProject?.tokenMint ?? '';
+  const defaultMint = extractMint(params?.mint) || extractMint(selectedProject?.tokenMint) || '';
 
   return (
     <main>

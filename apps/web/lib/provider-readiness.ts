@@ -1,6 +1,8 @@
 import { Connection } from '@solana/web3.js';
 import { serverEnvConfigured } from './server-env';
 import { configuredSolanaRpc } from './solana-rpc';
+import { gmgnReadiness } from './gmgn';
+import { getSolanaTrackerConfig, getSolanaTrackerCredits, getSolanaTrackerPrice } from './solana-tracker';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -58,6 +60,16 @@ function providerCapabilityMatrix() {
       unlocks: ['pool age', 'deep historical DEX context', 'same-block clustering research'],
       missingImpact: 'Pool-age and deep clustering confidence reduced.',
       classification: 'optional-confidence'
+    },
+    gmgn: {
+      unlocks: ['GMGN token info', 'GMGN security', 'GMGN pools', 'GMGN holders/traders', 'GMGN trending/hot-search discovery'],
+      missingImpact: 'GMGN intelligence unavailable; terminal falls back to existing providers.',
+      classification: 'optional-market-and-risk-intelligence'
+    },
+    solanaTracker: {
+      unlocks: ['token price', 'token metadata', 'holders', 'pools/liquidity', 'OHLCV chart', 'sniper/insider/bundler analytics', 'trade feed/events'],
+      missingImpact: 'Primary BONDR token intelligence degrades to GMGN/Birdeye/Helius/Solscan/DexScreener fallbacks.',
+      classification: 'preferred-primary-token-intelligence'
     }
   };
 }
@@ -118,14 +130,17 @@ export async function buildProviderReadiness() {
   const rpc = configuredSolanaRpc();
   const connection = new Connection(rpc.url, 'confirmed');
   const birdeyeKey = process.env.BIRDEYE_API_KEY?.trim();
-  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe, birdeyeProbe] = await Promise.all([
+  const solanaTrackerConfig = getSolanaTrackerConfig();
+  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe, birdeyeProbe, solanaTrackerPriceProbe, solanaTrackerCreditsProbe] = await Promise.all([
     timed(async () => connection.getSlot('confirmed')),
     timed(async () => connection.getLatestBlockhash('confirmed')),
     fetchProbe(`https://lite-api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=1000000&slippageBps=100`),
     fetchProbe(`https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`),
     fetchProbe('https://api.geckoterminal.com/api/v2/networks/solana/pools/BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'),
     fetchProbe(`https://api.rugcheck.xyz/v1/tokens/${USDC_MINT}/report/summary`),
-    birdeyeKey ? fetchProbeWithHeaders(`https://public-api.birdeye.so/defi/txs/token?address=${USDC_MINT}&offset=0&limit=1`, { 'X-API-KEY': birdeyeKey, 'x-chain': 'solana' }) : Promise.resolve({ value: null, probe: { status: 'optional-not-configured' as ProviderState, latencyMs: null, checkedAt: new Date().toISOString(), error: null } })
+    birdeyeKey ? fetchProbeWithHeaders(`https://public-api.birdeye.so/defi/txs/token?address=${USDC_MINT}&offset=0&limit=1`, { 'X-API-KEY': birdeyeKey, 'x-chain': 'solana' }) : Promise.resolve({ value: null, probe: { status: 'optional-not-configured' as ProviderState, latencyMs: null, checkedAt: new Date().toISOString(), error: null } }),
+    getSolanaTrackerPrice(SOL_MINT),
+    getSolanaTrackerCredits()
   ]);
 
   const heliusConfigured = rpc.provider === 'helius-rpc-url' || rpc.provider === 'helius-api-key';
@@ -135,6 +150,8 @@ export async function buildProviderReadiness() {
   const rpcStatus: ProviderState = rpc.configured ? (rpcLiveSuitable ? 'ok' : rpcHealthy ? 'partial' : 'unavailable') : (slotProbe.probe.status === 'ok' ? 'public-fallback' : 'unavailable');
   const heliusSourceStatus: ProviderState = heliusConfigured ? (rpc.provider === 'helius-api-key' || rpc.provider === 'helius-rpc-url' ? (rpcHealthy ? 'ok' : 'unavailable') : 'ok') : 'optional-not-configured';
   const birdeyeSourceStatus: ProviderState = birdeyeKey ? (birdeyeProbe.probe.status === 'ok' ? 'ok' : birdeyeProbe.probe.status === 'unavailable' && String(birdeyeProbe.probe.error ?? '').includes('429') ? 'partial' : 'unavailable') : 'optional-not-configured';
+  const solanaTrackerSourceStatus: ProviderState = !solanaTrackerConfig.configured ? 'optional-not-configured' : solanaTrackerPriceProbe.status === 'ok' ? 'ok' : solanaTrackerPriceProbe.status === 'rate-limited' ? 'partial' : 'unavailable';
+  const gmgn = gmgnReadiness();
   const sources = {
     solanaRpc: {
       status: rpcStatus,
@@ -146,7 +163,7 @@ export async function buildProviderReadiness() {
       suitableForLiveMode: rpcLiveSuitable,
       minimumReliabilityThreshold: { configuredPrivateRpc: true, currentSlotAvailable: true, latestBlockhashAvailable: true, slotLatencyMsUnder: 1500, blockhashLatencyMsUnder: 1500, noPublicFallback: true },
       thresholdPasses: { configuredPrivateRpc: rpc.configured, currentSlotAvailable: slotProbe.probe.status === 'ok', latestBlockhashAvailable: blockhashProbe.probe.status === 'ok', slotLatencyOk: (slotProbe.probe.latencyMs ?? 9999) < 1500, blockhashLatencyOk: (blockhashProbe.probe.latencyMs ?? 9999) < 1500, noPublicFallback: rpc.configured },
-      remediation: rpc.configured ? null : 'Set HELIUS_RPC_URL, HELIUS_API_KEY, QUICKNODE_RPC_URL, TRITON_RPC_URL, or SOLANA_RPC_URL before live trading.',
+      remediation: rpc.configured ? null : 'Set SOLANA_RPC_URL, QUICKNODE_RPC_URL, TRITON_RPC_URL, SYNDICA_RPC_URL, ALCHEMY_RPC_URL, CHAINSTACK_RPC_URL, ANKR_RPC_URL, JITO_RPC_URL, HELIUS_RPC_URL, or HELIUS_API_KEY before live trading.',
       latencyMs: slotProbe.probe.latencyMs,
       rateLimitOrError: slotProbe.probe.error,
       features: ['wallet SOL balances', 'SPL token account scans', 'recent blockhash', 'current slot'],
@@ -167,6 +184,19 @@ export async function buildProviderReadiness() {
       credentialProbeError: birdeyeKey && birdeyeSourceStatus !== 'ok' ? birdeyeProbe.probe.error : null,
       featuresUnlockedIfConfigured: ['preferred token transaction history', 'wallet-attributed trade history', 'higher-confidence PnL inputs'],
       note: birdeyeKey ? (birdeyeSourceStatus === 'ok' ? 'Birdeye configured and credential probe succeeded.' : 'Birdeye env is present, but the provider rejected or failed the runtime probe. Verify the API key and plan access.') : 'Optional provider for better token history/PnL.'
+    },
+    solanaTracker: {
+      status: solanaTrackerSourceStatus,
+      configured: solanaTrackerConfig.configured,
+      authMode: solanaTrackerConfig.authMode,
+      keyLooksLikeUrl: solanaTrackerConfig.keyLooksLikeUrl,
+      credentialProbeLatencyMs: solanaTrackerPriceProbe.latencyMs,
+      credentialProbeError: solanaTrackerSourceStatus !== 'ok' ? solanaTrackerPriceProbe.note : null,
+      creditsStatus: solanaTrackerCreditsProbe.status,
+      creditsLatencyMs: solanaTrackerCreditsProbe.latencyMs,
+      creditsNote: solanaTrackerCreditsProbe.note,
+      featuresUnlockedIfConfigured: ['token price', 'token metadata', 'holders', 'pools/liquidity', 'OHLCV chart', 'sniper/insider/bundler analytics', 'trade feed/events'],
+      note: solanaTrackerConfig.configured ? (solanaTrackerSourceStatus === 'ok' ? 'Solana Tracker configured and runtime price probe succeeded; secret value not exposed.' : solanaTrackerPriceProbe.note ?? 'Solana Tracker configured but runtime probe did not pass.') : 'Preferred primary token intelligence provider. Set SOLANATRACKER_API_KEY.'
     },
     bitquery: {
       status: configured('BITQUERY_API_KEY') ? 'ok' : 'optional-not-configured',
@@ -211,6 +241,15 @@ export async function buildProviderReadiness() {
       error: rugProbe.probe.error,
       features: ['risk summary', 'holder/rug hints where available'],
       note: 'No-key risk fallback; availability can vary by token.'
+    },
+    gmgn: {
+      status: gmgn.status,
+      configured: gmgn.configured,
+      cliInstalled: gmgn.cliInstalled,
+      execution: gmgn.execution,
+      featuresUnlockedIfConfigured: gmgn.featuresUnlockedIfConfigured,
+      disabledCapabilities: gmgn.disabledCapabilities,
+      note: gmgn.note
     }
   } as const;
 
@@ -224,8 +263,10 @@ export async function buildProviderReadiness() {
   const optionalProviderGaps = [
     !heliusConfigured ? 'Helius optional-not-configured: enhanced transaction history unavailable.' : heliusSourceStatus !== 'ok' ? 'Helius configured but runtime probe failed: verify API key/RPC URL.' : null,
     !birdeyeKey ? 'Birdeye optional-not-configured: preferred token transaction history unavailable.' : birdeyeSourceStatus !== 'ok' ? 'Birdeye configured but credential probe failed: verify API key and plan access.' : null,
+    !solanaTrackerConfig.configured ? 'Solana Tracker optional-not-configured: preferred token intelligence unavailable.' : solanaTrackerSourceStatus !== 'ok' ? 'Solana Tracker configured but runtime probe failed: verify key/base URL/plan access.' : null,
     !configured('SOLSCAN_API_KEY') && !configured('SOLSCAN_PRO_API_KEY') ? 'Solscan optional-not-configured: preferred ranked holder API unavailable.' : null,
-    !configured('BITQUERY_API_KEY') ? 'Bitquery optional-not-configured: deep bundle/same-block clustering unavailable.' : null
+    !configured('BITQUERY_API_KEY') ? 'Bitquery optional-not-configured: deep bundle/same-block clustering unavailable.' : null,
+    gmgn.status !== 'ok' ? `GMGN ${gmgn.status}: set GMGN_API_KEY to unlock read-only GMGN token/market intelligence.` : null
   ].filter((item): item is string => Boolean(item));
 
   return {

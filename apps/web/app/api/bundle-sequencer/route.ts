@@ -118,9 +118,16 @@ export async function POST(request: Request) {
 
     const built = [];
     for (const leg of normalized) {
+      const forwardedHeaders: Record<string, string> = { 'content-type': 'application/json' };
+      const cookie = request.headers.get('cookie');
+      const authorization = request.headers.get('authorization');
+      const operatorToken = request.headers.get('x-meridian-operator-token');
+      if (cookie) forwardedHeaders.cookie = cookie;
+      if (authorization) forwardedHeaders.authorization = authorization;
+      if (operatorToken) forwardedHeaders['x-meridian-operator-token'] = operatorToken;
       const response = await fetch(`${origin}/api/execution-swap`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: forwardedHeaders,
         cache: 'no-store',
         body: JSON.stringify({
           mint,

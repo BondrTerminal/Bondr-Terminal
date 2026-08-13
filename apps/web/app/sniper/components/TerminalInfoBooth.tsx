@@ -2,71 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { TerminalHolderAccount, TerminalTokenSnapshot, TerminalTopTrader, TerminalTradeEvent } from '../../../lib/terminal/contracts';
+import { PreLiveDryRunAction } from './PreLiveDryRunAction';
 
-
-
-type UiHolderRow = TerminalHolderAccount & {
-  pctSupply?: number | null;
-  valueUsd?: number | null;
-  boughtTokens?: number | null;
-  soldTokens?: number | null;
-  avgEntryUsd?: number | null;
-  avgExitUsd?: number | null;
-  totalPnlUsd?: number | null;
-  pnlStatus?: string | null;
-  ownerSolBalance?: number | null;
-  entryAt?: string | null;
-  exitAt?: string | null;
-  lifecycleStatus?: string | null;
-  lifecycleSource?: string | null;
-  lifecycleNote?: string | null;
-  lastSeenAt?: string | null;
-  tags?: string[];
-};
-
-type UiTopTrader = TerminalTopTrader & {
-  boughtTokens?: number;
-  soldTokens?: number;
-  netTokens?: number;
-  avgEntryUsd?: number | null;
-  avgExitUsd?: number | null;
-  totalPnlUsd?: number | null;
-  holdDurationHours?: number | null;
-  tags?: string[];
-};
-
-type UiPositionRow = {
-  wallet: string;
-  role?: string | null;
-  uiAmount: number;
-  valueUsd: number | null;
-  avgEntryUsd: number | null;
-  avgExitUsd: number | null;
-  realizedPnlUsd: number | null;
-  unrealizedPnlUsd: number | null;
-  totalPnlUsd: number | null;
-  txCount: number | null;
-  lastSeenAt: string | null;
-  source: string[];
-  status: string;
-};
-
-type SnapshotWithPositions = TerminalTokenSnapshot & { positions?: { rows?: UiPositionRow[]; summary?: Record<string, unknown> | null; source?: string } };
-
-type TerminalWallet = {
-  id: string;
-  address: string;
-  role: string;
-  scope: string;
-  balanceSol: number;
-  purpose: string;
-};
-
-type Flow = {
-  buysSol: number;
-  sellsSol: number;
-  netSol: number;
-} | null;
+type TerminalWallet = { id: string; address: string; role: string; scope: string; balanceSol: number; purpose: string };
+type Flow = { buysSol: number; sellsSol: number; netSol: number } | null;
+type IntelTab = 'Positions' | 'Orders' | 'Holders' | 'Top Traders' | 'Dev Tokens' | 'Only Tracked' | 'Instant Trade' | 'Checklist';
+type HolderFilter = 'all' | 'tagged' | 'pnl' | 'whales';
+type HolderSort = 'rank' | 'amount' | 'pct' | 'value' | 'pnl' | 'txs' | 'lastSeen';
+type ChecklistItem = { id: string; label: string; status: 'pass' | 'warn' | 'fail'; evidence: string; owner: string };
+type ChecklistSummary = { state: string; failed: string[]; warnings: string[]; items: ChecklistItem[] };
+type RpcSummary = { status: string; providerLabel?: string | null; quotaLimited?: boolean; configuredProviderCount: number; providerSummary?: string | null; currentSlot?: number | null; providers: Array<{ label: string; status: string; quotaLimited: boolean; latencyMs: number | null; currentSlot: number | null }> };
 
 type TerminalOrder = {
   id: string;
@@ -90,118 +35,169 @@ type TerminalOrder = {
 
 type BackendWalletRow = TerminalWallet & { solBalance?: number; balanceStatus?: string; balanceNote?: string };
 type BackendTokenRow = { id?: string | null; address?: string | null; role?: string | null; uiAmount?: number; rawAmount?: string };
-
 type TerminalBackendShape = {
-  execution?: {
-    liveTradingEnabled?: boolean;
-    orderEngine?: Record<string, string>;
-    terminalOrders?: { orders?: TerminalOrder[]; execution?: string };
-    bundleSequencer?: { execution?: string; reason?: string | null };
-  };
-  wallets?: {
-    count?: number;
-    totalSol?: number;
-    tokenBalances?: { walletCount?: number; nonZeroWallets?: number; totalUiAmount?: number; rows?: BackendTokenRow[] };
-    rows?: BackendWalletRow[];
-  };
-  bundle?: { selectedWalletCount?: number; solAvailable?: number; engineStatus?: string };
+  execution?: { liveTradingEnabled?: boolean; terminalOrders?: { orders?: TerminalOrder[]; execution?: string } };
+  wallets?: { count?: number; totalSol?: number; tokenBalances?: { walletCount?: number; nonZeroWallets?: number; totalUiAmount?: number; rows?: BackendTokenRow[] }; rows?: BackendWalletRow[] };
   accounting?: Flow;
 };
+type PositionRow = {
+  wallet: string;
+  role?: string | null;
+  uiAmount: number;
+  valueUsd: number | null;
+  avgEntryUsd: number | null;
+  avgExitUsd: number | null;
+  realizedPnlUsd: number | null;
+  unrealizedPnlUsd: number | null;
+  totalPnlUsd: number | null;
+  txCount: number | null;
+  lastSeenAt: string | null;
+  source: string[];
+  status: string;
+};
+type SnapshotWithExtras = TerminalTokenSnapshot & {
+  tradeTape?: { status?: string; primary?: string; rows?: number; blockers?: string[]; optionalProviderGaps?: string[]; recommendedFixes?: string[]; latencyMs?: number | null; note?: string | null };
+  positions?: { rows?: PositionRow[]; summary?: Record<string, unknown> | null; source?: string };
+  paperTradeDecision?: { status?: string; execution?: string; liveTradingEnabled?: boolean; currentPriceUsd?: number | null; note?: string | null };
+  riskVerdict?: { status?: string; reasons?: string[]; note?: string | null; liveTradingAllowed?: boolean };
+  pumpfun?: { token?: Record<string, unknown>; migrations?: { migrations?: Array<Record<string, unknown>>; status?: string; note?: string | null }; devTokens?: { tokens?: Array<Record<string, unknown>>; status?: string; note?: string | null } };
+};
+type ExecutionCapabilities = { liveTradingEnabled?: boolean; disabledReason?: string | null; signer?: string | null; broadcaster?: string | null; limits?: { maxSolPerSwap?: number; maxSlippageBps?: number } };
+type QuotePayload = { status?: string; error?: string; execution?: string; request?: Record<string, unknown>; quote?: { outAmount?: string | null; priceImpactPct?: string | null; routeLabels?: string[]; routePlanLength?: number }; safety?: string };
 
-type BundlePayload = { status?: string; execution?: string; reason?: string | null; error?: string; legs?: Array<Record<string, unknown>> };
-type TradeTapeState = { status?: string; primary?: string; rows?: number; blockers?: string[]; optionalProviderGaps?: string[]; recommendedFixes?: string[]; latencyMs?: number | null; note?: string | null };
-
-type PaperTradeDecision = {
-  status?: string;
-  execution?: string;
-  liveTradingEnabled?: boolean;
-  defaultRequest?: { mint?: string; side?: string; amount?: string; spendAsset?: string; slippageBps?: number };
-  quoteRoute?: string;
-  requiredBeforeLive?: string[];
-  currentPriceUsd?: number | null;
-  riskStatus?: string;
-  tradeTapeRows?: number;
-  note?: string | null;
+type UiHolderRow = TerminalHolderAccount & {
+  rank?: number;
+  pctSupply?: number | null;
+  valueUsd?: number | null;
+  boughtTokens?: number | null;
+  soldTokens?: number | null;
+  netTokensFromTape?: number | null;
+  avgEntryUsd?: number | null;
+  avgExitUsd?: number | null;
+  realizedPnlUsd?: number | null;
+  unrealizedPnlUsd?: number | null;
+  totalPnlUsd?: number | null;
+  txCount?: number | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+  ownerSolBalance?: number | null;
+  pnlStatus?: string | null;
+  tags?: string[];
+  dataSources?: string[];
 };
 
-type RiskVerdict = { status?: string; reasons?: string[]; note?: string | null; liveTradingAllowed?: boolean; checks?: Record<string, unknown> };
-type LiveReadiness = { status?: string; summary?: string; checks?: Array<{ id?: string; label?: string; status?: string; evidence?: string }>; failed?: string[]; partial?: string[]; liveTradingAllowed?: boolean; note?: string | null };
-type ProviderEnvAudit = { providers?: Record<string, { status?: string; providerStatus?: string; configured?: boolean | null; note?: string | null }>; blockingForLive?: string[]; optionalProviderGaps?: string[] };
-type PaperLedger = { entries?: Array<{ id: string; createdAt: string; mint: string; side: string; status: string; amountIn: number; spendAsset: string; tokens: number; entryPriceUsd: number | null; exitPriceUsd: number | null; realizedPnlUsd: number | null; execution: string }>; summary?: { entryCount?: number; openCount?: number; closedCount?: number; realizedPnlUsd?: number | null; unrealizedPnlUsd?: number | null; totalPnlUsd?: number | null; execution?: string }; storage?: { mode?: string; productionDurable?: boolean; dbConfigured?: boolean; note?: string; requiredEnv?: string[]; requiredTable?: string } };
+type UiTopTrader = TerminalTopTrader & { tags?: string[]; sources?: string[] };
 
-const tabs = ['Overview', 'Holders', 'Trades', 'Paper', 'Risk', 'Setup'] as const;
-type Tab = (typeof tabs)[number];
+const tabs: IntelTab[] = ['Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Only Tracked', 'Instant Trade', 'Checklist'];
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-
-function formatPct(value: number | null | undefined, fallback = 'API limited') {
-  return typeof value === 'number' ? `${value.toFixed(2)}%` : fallback;
-}
-
-function formatCount(value: number | null | undefined, fallback = 'API limited') {
-  return typeof value === 'number' ? value.toLocaleString() : fallback;
-}
-
-function formatUsd(value: number | null | undefined, fallback = '—') {
-  return typeof value === 'number' && Number.isFinite(value) ? `$${value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 })}` : fallback;
-}
-
-function formatTokenAmount(value: number | null | undefined, fallback = '—') {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: value >= 1000 ? 0 : 4 }) : fallback;
-}
-
-function formatDateTime(value: string | null | undefined, fallback = '—') {
-  return value ? new Date(value).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : fallback;
-}
-
-function formatPriceOrTime(price: number | null | undefined, timestamp: string | null | undefined, fallback = '—') {
-  if (typeof price === 'number' && Number.isFinite(price)) return formatUsd(price);
-  return formatDateTime(timestamp, fallback);
-}
 
 function compactAddress(address: string | null | undefined) {
   return address && ADDRESS_RE.test(address) ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—';
 }
-
+function formatUsd(value: number | null | undefined, fallback = '—') {
+  return typeof value === 'number' && Number.isFinite(value) ? `$${value.toLocaleString(undefined, { maximumFractionDigits: Math.abs(value) >= 100 ? 0 : 2 })}` : fallback;
+}
+function formatNumber(value: number | string | null | undefined, fallback = '—') {
+  const number = typeof value === 'string' ? Number(value) : value;
+  return typeof number === 'number' && Number.isFinite(number) ? number.toLocaleString(undefined, { maximumFractionDigits: Math.abs(number) >= 1000 ? 0 : 4 }) : fallback;
+}
+function formatPct(value: number | null | undefined, fallback = '—') {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}%` : fallback;
+}
+function formatTime(value: string | null | undefined, fallback = '—') {
+  return value ? new Date(value).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : fallback;
+}
+function pnlClass(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'neutralPnlCell';
+  return value >= 0 ? 'positivePnlCell' : 'negativePnlCell';
+}
 function sourceValue(snapshot: TerminalTokenSnapshot | null, key: string) {
-  const sources = snapshot?.sources as Record<string, unknown> | undefined;
-  const value = sources?.[key];
+  const value = (snapshot?.sources as Record<string, unknown> | undefined)?.[key];
   if (!value) return 'loading';
   if (typeof value === 'string') return value;
   if (typeof value === 'object' && value && 'source' in value) return String((value as { source?: unknown }).source ?? 'read');
   return 'read';
 }
-
 function asBackend(snapshot: TerminalTokenSnapshot | null): TerminalBackendShape | null {
   return (snapshot?.terminal ?? null) as TerminalBackendShape | null;
 }
-
-function rowsFromClassifier(value: unknown): Array<Record<string, unknown>> {
-  if (!value || typeof value !== 'object') return [];
-  const object = value as { rows?: Array<Record<string, unknown>>; wallets?: Array<Record<string, unknown>>; clusters?: Array<Record<string, unknown>> };
-  return object.rows ?? object.wallets ?? object.clusters ?? [];
+function textFromUnknown(value: unknown, fallback = '—') {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+function includesWallet(rowWallet: string | null | undefined, tracked: Set<string>) {
+  return Boolean(rowWallet && tracked.has(rowWallet.toLowerCase()));
 }
 
-export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets: TerminalWallet[]; flow: Flow; mint?: string; projectId?: string }) {
-  const [activeTab, setActiveTab] = useState<Tab>('Overview');
-  const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? '');
-  const [bundleWalletIds, setBundleWalletIds] = useState(() => wallets.slice(0, Math.min(4, wallets.length)).map((wallet) => wallet.id));
+function DataTable({ head, rows, empty, className = '' }: { head: string[]; rows: Array<Array<React.ReactNode>>; empty: React.ReactNode; className?: string }) {
+  return <div className={`axiomIntelTableWrap ${className}`}><table className="axiomIntelTable"><thead><tr>{head.map((cell) => <th key={cell}>{cell}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>) : <tr><td colSpan={head.length}>{empty}</td></tr>}</tbody></table></div>;
+}
+function Chip({ label, value, tone = 'neutral' }: { label: string; value: React.ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' }) {
+  return <div className={`axiomIntelChip ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
+}
+function SourceBadge({ label, value }: { label: string; value: React.ReactNode }) {
+  return <span className="axiomSourceBadge"><em>{label}</em>{value}</span>;
+}
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return <div className="axiomIntelEmpty"><strong>{title}</strong><span>{detail}</span></div>;
+}
+
+function snapshotScore(snapshot: TerminalTokenSnapshot | null) {
+  if (!snapshot) return 0;
+  const holders = snapshot.holders?.rows?.length ?? 0;
+  const trades = snapshot.trades?.rows?.length ?? 0;
+  const positions = (snapshot as SnapshotWithExtras).positions?.rows?.length ?? 0;
+  const tokenRows = asBackend(snapshot)?.wallets?.tokenBalances?.rows?.length ?? 0;
+  return holders * 4 + trades * 2 + positions + tokenRows;
+}
+
+function mergeUsefulSnapshot(current: TerminalTokenSnapshot | null, next: TerminalTokenSnapshot) {
+  if (!current) return next;
+  const nextScore = snapshotScore(next);
+  const currentScore = snapshotScore(current);
+  if (nextScore >= currentScore || next.status === 'ok') {
+    const currentTrades = current.trades?.rows ?? [];
+    const nextTrades = next.trades?.rows ?? [];
+    const currentHolders = current.holders?.rows ?? [];
+    const nextHolders = next.holders?.rows ?? [];
+    return {
+      ...current,
+      ...next,
+      trades: { ...(current.trades ?? {}), ...(next.trades ?? {}), rows: nextTrades.length ? nextTrades : currentTrades, topTraders: next.trades?.topTraders?.length ? next.trades.topTraders : current.trades?.topTraders ?? [] },
+      holders: { ...(current.holders ?? {}), ...(next.holders ?? {}), rows: nextHolders.length ? nextHolders : currentHolders }
+    } as TerminalTokenSnapshot;
+  }
+  return current;
+}
+
+export function TerminalInfoBooth({ wallets, flow, mint, projectId, projectName, terminalWarning, liveReadinessStatus, authConfigured, sessionAuthenticated, rpcSummary, checklist }: { wallets: TerminalWallet[]; flow: Flow; mint?: string; projectId?: string; projectName?: string | null; terminalWarning?: string | null; liveReadinessStatus?: string; authConfigured?: boolean; sessionAuthenticated?: boolean; rpcSummary?: RpcSummary; checklist?: ChecklistSummary }) {
+  const [activeTab, setActiveTab] = useState<IntelTab>('Holders');
   const [activeMint, setActiveMint] = useState(mint ?? '');
   const [snapshot, setSnapshot] = useState<TerminalTokenSnapshot | null>(null);
   const [snapshotStatus, setSnapshotStatus] = useState('idle');
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [tabActionMessage, setTabActionMessage] = useState<string | null>(null);
-  const [tabActionLoading, setTabActionLoading] = useState(false);
+  const [holderSearch, setHolderSearch] = useState('');
+  const [holderFilter, setHolderFilter] = useState<HolderFilter>('all');
+  const [holderSort, setHolderSort] = useState<HolderSort>('rank');
+  const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? '');
+  const [instantSide, setInstantSide] = useState<'Buy' | 'Sell'>('Buy');
+  const [instantAmount, setInstantAmount] = useState('0.05');
+  const [instantSlippage, setInstantSlippage] = useState('100');
+  const [capabilities, setCapabilities] = useState<ExecutionCapabilities | null>(null);
+  const [quote, setQuote] = useState<QuotePayload | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState('idle');
 
   useEffect(() => setActiveMint(mint ?? ''), [mint]);
-
+  useEffect(() => {
+    if (!wallets.length) return;
+    setSelectedWalletId((current) => wallets.some((wallet) => wallet.id === current) ? current : wallets[0].id);
+  }, [wallets]);
   useEffect(() => {
     function onTokenLoaded(event: Event) {
       const custom = event as CustomEvent<{ mint?: string }>;
       if (custom.detail?.mint) setActiveMint(custom.detail.mint);
     }
-    function onRefresh() {
-      setRefreshNonce((value) => value + 1);
-    }
+    function onRefresh() { setRefreshNonce((value) => value + 1); }
     window.addEventListener('meridian-token-loaded', onTokenLoaded);
     window.addEventListener('meridian-terminal-refresh', onRefresh);
     return () => {
@@ -209,306 +205,136 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId }: { wallets:
       window.removeEventListener('meridian-terminal-refresh', onRefresh);
     };
   }, []);
-
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/execution-capabilities', { signal: controller.signal, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => setCapabilities(payload as ExecutionCapabilities | null))
+      .catch(() => setCapabilities(null));
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     if (!activeMint) {
       setSnapshot(null);
       setSnapshotStatus('waiting-for-token');
       return;
     }
-
     const devWallets = wallets.map((wallet) => wallet.address).join(',');
-    const query = new URLSearchParams({ mint: activeMint, holderLimit: '40', limit: '50', profile: 'live-read' });
-    if (projectId) query.set('project', projectId);
-    if (devWallets) query.set('devWallets', devWallets);
-
+    const query = new URLSearchParams({ mint: activeMint, holderLimit: '100', limit: '100', profile: 'live-read', fastPrimary: '1' });
+    const enrichmentQuery = new URLSearchParams({ mint: activeMint, holderLimit: '120', limit: '120', profile: 'live-read', enrich: '1', enrichHolderLifecycle: '1' });
+    if (projectId) { query.set('project', projectId); enrichmentQuery.set('project', projectId); }
+    if (devWallets) { query.set('devWallets', devWallets); enrichmentQuery.set('devWallets', devWallets); }
     const controller = new AbortController();
     setSnapshotStatus('syncing');
-
     void fetch(`/api/terminal/snapshot?${query.toString()}`, { signal: controller.signal, cache: 'no-store' })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`snapshot ${response.status}`)))
       .then((payload) => {
-        setSnapshot(payload as TerminalTokenSnapshot);
-        setSnapshotStatus('synced');
+        setSnapshot((current) => mergeUsefulSnapshot(current, payload as TerminalTokenSnapshot));
+        setSnapshotStatus('synced-fast');
       })
-      .catch((error) => {
-        if (!controller.signal.aborted) setSnapshotStatus(error instanceof Error ? error.message : 'snapshot failed');
-      });
-
-    const stream = new EventSource(`/api/terminal/stream?${query.toString()}&intervalMs=5000`);
-    stream.addEventListener('open', () => setSnapshotStatus('stream-connected'));
-    stream.addEventListener('snapshot', (event) => {
-      try {
-        setSnapshot(JSON.parse((event as MessageEvent).data) as TerminalTokenSnapshot);
-        setSnapshotStatus('live');
-      } catch {
-        setSnapshotStatus('stream-parse-error');
-      }
+      .catch((error) => { if (!controller.signal.aborted) setSnapshotStatus(error instanceof Error ? error.message : 'snapshot failed'); });
+    const enrichmentTimer = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
+      setSnapshotStatus('enriching');
+      void fetch(`/api/terminal/snapshot?${enrichmentQuery.toString()}`, { signal: controller.signal, cache: 'no-store' })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error(`snapshot ${response.status}`)))
+        .then((payload) => {
+          setSnapshot((current) => mergeUsefulSnapshot(current, payload as TerminalTokenSnapshot));
+          setSnapshotStatus('enriched');
+        })
+        .catch((error) => { if (!controller.signal.aborted) setSnapshotStatus(error instanceof Error ? error.message : 'enrichment failed'); });
+    }, 900);
+    const streamDisabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('stream') === '0';
+    const streamEnabled = !streamDisabled;
+    const stream = streamEnabled ? new EventSource(`/api/terminal/stream?${query.toString()}&intervalMs=15000`) : null;
+    stream?.addEventListener('open', () => setSnapshotStatus('stream-connected'));
+    stream?.addEventListener('snapshot', (event) => {
+      try { setSnapshot((current) => mergeUsefulSnapshot(current, JSON.parse((event as MessageEvent).data) as TerminalTokenSnapshot)); setSnapshotStatus('live'); } catch { setSnapshotStatus('stream-parse-error'); }
     });
-    stream.addEventListener('partial', (event) => {
-      try {
-        const payload = JSON.parse((event as MessageEvent).data) as TerminalTokenSnapshot;
-        setSnapshot(payload);
-        setSnapshotStatus('stream-partial');
-      } catch {
-        setSnapshotStatus('stream-partial');
-      }
+    stream?.addEventListener('partial', (event) => {
+      try { setSnapshot((current) => mergeUsefulSnapshot(current, JSON.parse((event as MessageEvent).data) as TerminalTokenSnapshot)); setSnapshotStatus('stream-partial'); } catch { setSnapshotStatus('stream-partial'); }
     });
-    stream.addEventListener('heartbeat', () => setSnapshotStatus('stream-connected'));
-    stream.addEventListener('end', () => setSnapshotStatus('stream-reconnecting'));
-    stream.addEventListener('error', () => setSnapshotStatus('stream-reconnecting'));
-
-    return () => {
-      controller.abort();
-      stream.close();
-    };
+    stream?.addEventListener('heartbeat', () => setSnapshotStatus('stream-connected'));
+    stream?.addEventListener('error', () => setSnapshotStatus('stream-reconnecting'));
+    return () => { window.clearTimeout(enrichmentTimer); controller.abort(); stream?.close(); };
   }, [activeMint, projectId, refreshNonce, wallets]);
 
+  const extras = snapshot as SnapshotWithExtras | null;
   const backend = asBackend(snapshot);
-  const backendWallets = backend?.wallets?.rows;
-  const renderedWallets = backendWallets?.length
-    ? backendWallets.map((wallet) => ({ ...wallet, balanceSol: wallet.solBalance ?? wallet.balanceSol ?? 0, scope: wallet.scope ?? 'global' })) as TerminalWallet[]
-    : wallets;
-  const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0];
-  const bundleWallets = useMemo(() => renderedWallets.filter((wallet) => bundleWalletIds.includes(wallet.id)), [renderedWallets, bundleWalletIds]);
-  const tokenRows = backend?.wallets?.tokenBalances?.rows ?? [];
-  const orders = (snapshot?.orders as { orders?: TerminalOrder[] } | null)?.orders ?? backend?.execution?.terminalOrders?.orders ?? [];
-  const positionRows = (snapshot as SnapshotWithPositions | null)?.positions?.rows ?? [];
-  const trades = snapshot?.trades?.rows ?? [];
-  const tradeTape = ((snapshot as (TerminalTokenSnapshot & { tradeTape?: TradeTapeState }) | null)?.tradeTape ?? (snapshot?.trades as { tradeTape?: TradeTapeState } | undefined)?.tradeTape ?? null) as TradeTapeState | null;
-  const paperDecision = ((snapshot as (TerminalTokenSnapshot & { paperTradeDecision?: PaperTradeDecision }) | null)?.paperTradeDecision ?? null) as PaperTradeDecision | null;
-  const riskVerdict = ((snapshot as (TerminalTokenSnapshot & { riskVerdict?: RiskVerdict }) | null)?.riskVerdict ?? null) as RiskVerdict | null;
-  const liveReadiness = ((snapshot as (TerminalTokenSnapshot & { liveReadiness?: LiveReadiness }) | null)?.liveReadiness ?? null) as LiveReadiness | null;
-  const providerEnvAudit = ((snapshot as (TerminalTokenSnapshot & { providerEnvAudit?: ProviderEnvAudit }) | null)?.providerEnvAudit ?? null) as ProviderEnvAudit | null;
-  const paperLedger = ((snapshot as (TerminalTokenSnapshot & { paperLedger?: PaperLedger }) | null)?.paperLedger ?? null) as PaperLedger | null;
-  const topTraders = (snapshot?.trades?.topTraders ?? []) as UiTopTrader[];
+  const renderedWallets = backend?.wallets?.rows?.length ? backend.wallets.rows.map((wallet) => ({ ...wallet, balanceSol: wallet.solBalance ?? wallet.balanceSol ?? 0, scope: wallet.scope ?? 'global' })) : wallets;
+  const trackedAddresses = useMemo(() => new Set(renderedWallets.map((wallet) => wallet.address.toLowerCase())), [renderedWallets]);
+  const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0] ?? null;
   const holders = snapshot?.holders;
   const holderRows = (holders?.rows ?? []) as UiHolderRow[];
-  const holderValuedRows = holderRows.filter((row) => typeof row.valueUsd === 'number').length;
-  const holderPnlRows = holderRows.filter((row) => row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'trade-tape-estimate').length;
-  const traderPnlRows = topTraders.filter((row) => typeof row.totalPnlUsd === 'number').length;
-  const freshRows = rowsFromClassifier(snapshot?.freshWallets);
-  const bundleRows = rowsFromClassifier(snapshot?.bundles);
-  const devRows = (snapshot?.devTokens?.wallets ?? []) as Array<Record<string, unknown>>;
-  const poolSummary = (snapshot?.pool as { summary?: Record<string, unknown> } | null)?.summary;
-  const pumpfun = (snapshot as (TerminalTokenSnapshot & { pumpfun?: { token?: Record<string, unknown>; migrations?: { migrations?: Array<Record<string, unknown>>; status?: string; note?: string | null; authConfigured?: boolean }; devTokens?: { tokens?: Array<Record<string, unknown>>; status?: string; note?: string | null; authConfigured?: boolean } } }) | null)?.pumpfun;
-  const pumpfunDevTokens = pumpfun?.devTokens?.tokens ?? [];
-  const pumpfunMigrations = pumpfun?.migrations?.migrations ?? [];
-  const sources = snapshot?.sources as Record<string, unknown> | undefined;
+  const trades = snapshot?.trades?.rows ?? [];
+  const topTraders = (snapshot?.trades?.topTraders ?? []) as UiTopTrader[];
+  const orders = ((snapshot?.orders as { orders?: TerminalOrder[] } | null)?.orders ?? backend?.execution?.terminalOrders?.orders ?? []).filter((order) => !activeMint || order.mint === activeMint);
+  const tokenRows = backend?.wallets?.tokenBalances?.rows ?? [];
+  const positions = (extras?.positions?.rows?.length ? extras.positions.rows : renderedWallets.map((wallet) => {
+    const tokenRow = tokenRows.find((row) => row.id === wallet.id || row.address === wallet.address);
+    return { wallet: wallet.address, role: wallet.role, uiAmount: tokenRow?.uiAmount ?? 0, valueUsd: null, avgEntryUsd: null, avgExitUsd: null, realizedPnlUsd: null, unrealizedPnlUsd: null, totalPnlUsd: null, txCount: null, lastSeenAt: null, source: ['wallet-token-balances'], status: tokenRow ? 'balance-only' : 'tracked-empty' } satisfies PositionRow;
+  }));
+  const selectedWalletPosition = selectedWallet ? positions.find((position) => position.wallet.toLowerCase() === selectedWallet.address.toLowerCase()) ?? null : null;
+  const tradeTape = extras?.tradeTape ?? (snapshot?.trades as { tradeTape?: SnapshotWithExtras['tradeTape'] } | undefined)?.tradeTape ?? null;
+  const pumpfunDevTokens = extras?.pumpfun?.devTokens?.tokens ?? [];
+  const devWalletRows = (snapshot?.devTokens?.wallets ?? []) as Array<Record<string, unknown>>;
+  const devTokenRows = [...pumpfunDevTokens, ...devWalletRows];
+  const market = (snapshot?.market ?? {}) as Record<string, unknown>;
+  const liquidity = (snapshot?.liquidity ?? {}) as Record<string, unknown>;
+  const security = (snapshot?.security ?? {}) as Record<string, unknown>;
 
-  function toggleBundleWallet(walletId: string) {
-    setBundleWalletIds((current) => current.includes(walletId) ? current.filter((id) => id !== walletId) : [...current, walletId]);
-  }
+  const holderStats = useMemo(() => {
+    const returned = holders?.returnedRows ?? holderRows.length;
+    const total = holders?.totalHolders ?? holders?.walletCountReturned ?? null;
+    const top10 = holderRows.slice(0, 10).reduce((sum, row) => sum + (row.pctSupply ?? 0), 0);
+    const riskTagged = holderRows.filter((row) => (row.tags ?? []).some((tag) => /dev|insider|sniper|bundle|fresh|whale|risk/i.test(tag))).length;
+    return { returned, total, top10: top10 || null, riskTagged, valuedRows: holderRows.filter((row) => typeof row.valueUsd === 'number').length, pnlRows: holderRows.filter((row) => typeof row.totalPnlUsd === 'number').length };
+  }, [holders, holderRows]);
 
-  async function refreshTerminalTabs() {
-    setRefreshNonce((value) => value + 1);
-  }
+  const filteredHolders = useMemo(() => {
+    const search = holderSearch.trim().toLowerCase();
+    const sortValue = (row: UiHolderRow) => {
+      if (holderSort === 'amount') return row.uiAmount ?? 0;
+      if (holderSort === 'pct') return row.pctSupply ?? -1;
+      if (holderSort === 'value') return row.valueUsd ?? -1;
+      if (holderSort === 'pnl') return row.totalPnlUsd ?? -Number.MAX_SAFE_INTEGER;
+      if (holderSort === 'txs') return row.txCount ?? -1;
+      if (holderSort === 'lastSeen') return row.lastSeenAt ? new Date(row.lastSeenAt).getTime() : 0;
+      return -(row.rank ?? 999999);
+    };
+    return holderRows
+      .filter((row) => !search || `${row.owner ?? ''} ${row.tokenAccount ?? ''} ${(row.tags ?? []).join(' ')}`.toLowerCase().includes(search))
+      .filter((row) => holderFilter === 'all' || (holderFilter === 'tagged' && (row.tags ?? []).length > 0) || (holderFilter === 'pnl' && typeof row.totalPnlUsd === 'number') || (holderFilter === 'whales' && (row.pctSupply ?? 0) >= 1))
+      .sort((a, b) => holderSort === 'rank' ? (a.rank ?? 999999) - (b.rank ?? 999999) : sortValue(b) - sortValue(a));
+  }, [holderRows, holderSearch, holderFilter, holderSort]);
 
-  async function evaluateOrders() {
-    if (!activeMint || tabActionLoading) return;
-    setTabActionLoading(true);
-    setTabActionMessage(null);
-    try {
-      const response = await fetch('/api/routers/order/evaluate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mint: activeMint })
-      });
-      const payload = await response.json() as { error?: string; evaluated?: unknown[]; triggered?: unknown[]; execution?: string; router?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Order evaluation failed.');
-      setTabActionMessage(`Order monitor · ${payload.evaluated?.length ?? 0} checked · ${payload.triggered?.length ?? 0} triggered`);
-      await refreshTerminalTabs();
-    } catch (error) {
-      setTabActionMessage(error instanceof Error ? error.message : 'Order evaluation failed.');
-    } finally {
-      setTabActionLoading(false);
-    }
-  }
+  const trackedHolders = holderRows.filter((row) => includesWallet(row.owner, trackedAddresses) || includesWallet(row.tokenAccount, trackedAddresses));
+  const trackedTrades = trades.filter((trade) => includesWallet(trade.wallet, trackedAddresses));
+  const trackedOrders = orders.filter((order) => includesWallet(order.wallet, trackedAddresses));
+  const trackedPositions = positions.filter((position) => includesWallet(position.wallet, trackedAddresses));
 
-  async function cancelOrder(id: string) {
-    if (tabActionLoading) return;
-    setTabActionLoading(true);
-    setTabActionMessage(null);
-    try {
-      const response = await fetch('/api/terminal-order-engine', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel', id })
-      });
-      const payload = await response.json() as { error?: string; execution?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Cancel failed.');
-      setTabActionMessage(payload.execution ?? 'order-cancelled');
-      await refreshTerminalTabs();
-    } catch (error) {
-      setTabActionMessage(error instanceof Error ? error.message : 'Cancel failed.');
-    } finally {
-      setTabActionLoading(false);
-    }
-  }
-
-  async function preflightSelectedBundle() {
-    if (!activeMint || tabActionLoading) return;
-    setTabActionLoading(true);
-    setTabActionMessage(null);
-    try {
-      const legs = bundleWallets.map((wallet) => ({ wallet: wallet.address, side: 'Buy', amount: '0.01', spendAsset: 'SOL', slippageBps: 100 }));
-      const response = await fetch('/api/routers/bundle/preflight', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mint: activeMint, legs })
-      });
-      const payload = await response.json() as BundlePayload;
-      if (!response.ok && response.status !== 403) throw new Error(payload.error ?? 'Bundle preflight failed.');
-      setTabActionMessage(`Bundle check · ${payload.reason ?? `${payload.legs?.length ?? legs.length} legs ready`}`);
-      await refreshTerminalTabs();
-    } catch (error) {
-      setTabActionMessage(error instanceof Error ? error.message : 'Bundle preflight failed.');
-    } finally {
-      setTabActionLoading(false);
-    }
-  }
-
-  const openOrders = orders.filter((order) => order.status === 'open');
-  const triggeredOrders = orders.filter((order) => order.status === 'triggered');
-  const tokenInventory = backend?.wallets?.tokenBalances;
-  const sourceRows = [
-    ['Market data', snapshot?.execution ?? snapshotStatus, 'Terminal snapshot'],
-    ['Live stream', snapshotStatus, 'Realtime updates'],
-    ['Pool age', String((sources?.poolAge as { source?: string; firstSeenAt?: string } | undefined)?.source ?? 'loading'), String((sources?.poolAge as { firstSeenAt?: string } | undefined)?.firstSeenAt ?? 'waiting')],
-    ['Trade tape', sourceValue(snapshot, 'tradeTape'), `${tradeTape?.rows ?? trades.length} indexed swaps`],
-    ['Holders', String(holders?.source ?? sourceValue(snapshot, 'holders')), 'Wallet ownership'],
-    ['Fresh/snipers', sourceValue(snapshot, 'fresh'), 'Wallet classifier'],
-    ['Bundles', sourceValue(snapshot, 'bundles'), 'Slot clustering'],
-    ['Dev sold', sourceValue(snapshot, 'devSold'), 'Team wallet flow']
-  ];
-
-  function tabBadge(tab: Tab) {
-    switch (tab) {
-      case 'Overview': return snapshot ? 'live-read' : '…';
-      case 'Trades': return trades.length ? String(trades.length) : snapshot ? '0' : '…';
-      case 'Holders': return holderRows.length ? String(holderRows.length) : snapshot ? '0' : '…';
-      case 'Paper': return paperLedger?.storage?.productionDurable ? 'DB' : 'TMP';
-      case 'Risk': return riskVerdict?.liveTradingAllowed ? 'LIVE' : 'GATED';
-      case 'Setup': return paperLedger?.storage?.productionDurable ? 'DB' : 'TODO';
-      default: return '';
-    }
-  }
-
-  function tabStatusClass(tab: Tab) {
-    if (!snapshot) return 'loadingTab';
-    if (tab === 'Paper' && !paperLedger?.storage?.productionDurable) return 'warnTab';
-    if (tab === 'Risk' && !riskVerdict?.liveTradingAllowed) return 'safeTab';
-    if (tab === 'Setup' && !paperLedger?.storage?.productionDurable) return 'warnTab';
-    if ((tab === 'Trades' && trades.length === 0) || (tab === 'Holders' && holderRows.length === 0)) return 'warnTab';
-    return 'readyTab';
-  }
-
-  return (
-    <section className="terminalInfoBooth" data-contract="terminal-snapshot-v1">
-      <div className="terminalMarketViewer" data-hardwire="terminal-bottom-tabs" aria-label="Terminal market viewer">
-        <div className="terminalMarketHeader">
-          <div className="terminalMarketTitle"><span>Meridian Terminal</span><strong>Live Market</strong><small>{activeMint ? compactAddress(activeMint) : 'Load a token'} · {activeTab}</small></div>
-          <div className={snapshotStatus === 'live' || snapshotStatus === 'stream-connected' ? 'terminalSyncBadge synced' : snapshotStatus === 'stream-partial' ? 'terminalSyncBadge partial' : 'terminalSyncBadge syncing'}>{snapshotStatus === 'live' || snapshotStatus === 'stream-connected' ? 'Live' : snapshotStatus === 'stream-partial' ? 'Partial' : snapshotStatus.includes('reconnecting') || snapshotStatus.includes('error') ? 'Reconnecting' : snapshot ? 'Synced' : 'Syncing'}</div>
-        </div>
-
-        <div className="terminalMarketStats">
-          <div><span>Snapshot</span><strong>{snapshot ? 'Loaded' : 'Waiting'}</strong><small>{snapshotStatus}</small></div>
-          <div><span>Trades</span><strong>{trades.length}</strong><small>{tradeTape?.primary ?? 'market tape'}</small></div>
-          <div><span>Paper</span><strong>{paperLedger?.summary?.openCount ?? 0} open</strong><small>{paperLedger?.summary?.execution ?? 'paper only'}</small></div>
-          <div><span>Setup</span><strong>{paperLedger?.storage?.productionDurable ? 'DB ready' : 'DB needed'}</strong><small>{paperLedger?.storage?.mode ?? 'storage check'}</small></div>
-        </div>
-      </div>
-      {tabActionMessage && <div className="terminalActionMessage">{tabActionMessage}</div>}
-
-      <div className="terminalTabBar marketViewerTabs" role="tablist" aria-label="Trading terminal information tabs">
-        {tabs.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab} className={`${activeTab === tab ? 'activeTerminalTab' : ''} ${tabStatusClass(tab)}`} onClick={() => setActiveTab(tab)} key={tab}><span>{tab}</span><small>{tabBadge(tab)}</small></button>)}
-      </div>
-
-      <div className="terminalTabPanel">
-        {!snapshot && <TerminalTabLoading activeTab={activeTab} snapshotStatus={snapshotStatus} />}
-        {activeTab === 'Overview' && <OverviewPanel snapshotStatus={snapshotStatus} trades={trades} tradeTape={tradeTape} risk={riskVerdict} ledger={paperLedger} poolSummary={poolSummary} />}
-        {activeTab === 'Trades' && <TradeTable trades={trades} tradeTape={tradeTape} />}
-        {activeTab === 'Paper' && <PaperDecisionPanel mint={activeMint} decision={paperDecision} risk={riskVerdict} liveReadiness={liveReadiness} ledger={paperLedger} onLedgerChange={() => void refreshTerminalTabs()} />}
-        {activeTab === 'Holders' && <HoldersPanel holders={holders} rows={holderRows} providerEnvAudit={providerEnvAudit} />}
-        {activeTab === 'Risk' && <RiskPanel rows={sourceRows} risk={riskVerdict} liveReadiness={liveReadiness} providerEnvAudit={providerEnvAudit} />}
-        {activeTab === 'Setup' && <SetupPanel ledger={paperLedger} providerEnvAudit={providerEnvAudit} risk={riskVerdict} liveReadiness={liveReadiness} />}
-        {activeTab === 'Overview' && <details className="advancedTerminalDetails"><summary>Advanced / operator panels</summary><div className="advancedTerminalGrid"><PositionsPanel wallets={renderedWallets} tokenRows={tokenRows} positionRows={positionRows} positionSummary={(snapshot as SnapshotWithPositions | null)?.positions?.summary ?? null} tokenInventory={tokenInventory} flow={backend?.accounting ?? flow} mint={activeMint} /><OrdersPanel orders={orders} openCount={openOrders.length} triggeredCount={triggeredOrders.length} execution={backend?.execution?.terminalOrders?.execution} onEvaluate={() => void evaluateOrders()} onCancel={(id) => void cancelOrder(id)} loading={tabActionLoading} /><WalletsPanel wallets={renderedWallets} selectedWalletId={selectedWallet?.id ?? ''} bundleWalletIds={bundleWalletIds} tokenRows={tokenRows} onSelect={setSelectedWalletId} onToggleBundle={toggleBundleWallet} onOpenPositions={() => setActiveTab('Overview')} /><BundlePanel wallets={bundleWallets} bundleRows={bundleRows} execution={backend?.execution?.bundleSequencer?.execution ?? backend?.bundle?.engineStatus} onPreflight={() => void preflightSelectedBundle()} loading={!activeMint || !bundleWallets.length || tabActionLoading} /><DevTokensPanel rows={devRows} tokenRows={tokenRows} pumpfunTokens={pumpfunDevTokens} pumpfunStatus={pumpfun?.devTokens?.status ?? 'loading'} pumpfunToken={pumpfun?.token} devSource={sourceValue(snapshot, 'devSold')} /><MigrationPanel poolSummary={poolSummary} pumpfunToken={pumpfun?.token} pumpfunMigrations={pumpfunMigrations} pumpfunMigrationStatus={pumpfun?.migrations?.status ?? 'loading'} bundleWalletCount={bundleWallets.length} /><SignalsPanel freshRows={freshRows} bundleRows={bundleRows} topTraders={topTraders} holderRows={holderRows} holderValuedRows={holderValuedRows} holderPnlRows={holderPnlRows} traderPnlRows={traderPnlRows} pumpfunRows={String((snapshot?.trades?.summary as Record<string, unknown> | null)?.pumpfunRows ?? (pumpfun?.token ? 'token-read' : 'loading'))} liquidityUsd={poolSummary?.liquidityUsd} sourceFresh={sourceValue(snapshot, 'fresh')} sourceBundles={sourceValue(snapshot, 'bundles')} /><TopTradersPanel rows={topTraders} fallbackTrades={trades} /></div></details>}
-      </div>
-    </section>
-  );
-}
-
-function TerminalTabLoading({ activeTab, snapshotStatus }: { activeTab: Tab; snapshotStatus: string }) {
-  return <div className="terminalTabLoadingState" role="status"><strong>Loading {activeTab}</strong><span>{snapshotStatus}</span><small>Waiting for terminal snapshot data. Read-only panels can load; live execution stays disabled.</small></div>;
-}
-
-function storageLabel(mode?: string | null, durable?: boolean | null) {
-  if (mode === 'serverless-tmp') return 'Not durable — add DATABASE_URL';
-  if (mode === 'db-neon-postgres' || durable) return 'Durable DB enabled.';
-  return mode ?? 'storage loading';
-}
-
-function OverviewPanel({ snapshotStatus, trades, tradeTape, risk, ledger, poolSummary }: { snapshotStatus: string; trades: TerminalTradeEvent[]; tradeTape?: TradeTapeState | null; risk?: RiskVerdict | null; ledger?: PaperLedger | null; poolSummary?: Record<string, unknown> }) {
-  return <div className="overviewTabSurface">
-    <div className="tabInfoGrid">
-      <div><span>Snapshot</span><strong>{snapshotStatus}</strong><small>Live-read observation only.</small></div>
-      <div><span>Trades</span><strong>{trades.length}</strong><small>{tradeTape?.primary ?? 'provider pending'}</small></div>
-      <div><span>Risk</span><strong>{risk?.liveTradingAllowed ? 'Allowed' : 'Gated'}</strong><small>Full gate details live in Risk.</small></div>
-      <div><span>Paper ledger</span><strong>{ledger?.summary?.openCount ?? 0} open</strong><small>{storageLabel(ledger?.storage?.mode, ledger?.storage?.productionDurable)}</small></div>
-      <div><span>Main pool</span><strong>{String(poolSummary?.bestDex ?? 'loading')}</strong><small>{compactAddress(String(poolSummary?.bestPairAddress ?? ''))}</small></div>
-    </div>
-    <RowsTable head={['What lives where', 'Home', 'Why']} rows={[
-      ['Token price/chart/liquidity', 'Top chart', 'Fast market context without deep tables.'],
-      ['Holder concentration and coverage', 'Holders', 'Single source for holder intelligence.'],
-      ['Wallet-attributed trade tape', 'Trades', 'One tape table, provider/confidence included when available.'],
-      ['Paper quotes, entries, exits, PnL', 'Paper', 'Practice without building/signing/broadcasting transactions.'],
-      ['Live gates and readiness', 'Risk', 'Single source for anything blocking live mode.'],
-      ['Database and provider setup', 'Setup', 'Environment status without exposing secrets.']
-    ]} />
-  </div>;
-}
-
-function SetupPanel({ ledger, providerEnvAudit, risk, liveReadiness }: { ledger?: PaperLedger | null; providerEnvAudit?: ProviderEnvAudit | null; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null }) {
-  const storage = ledger?.storage;
-  const providerRows = Object.entries(providerEnvAudit?.providers ?? {}).map(([name, item]) => [name, item.configured ? 'configured' : item.status ?? 'missing', item.providerStatus ?? item.status ?? 'unknown', item.note ?? 'No secret value exposed.']);
-  const blockers = [
-    ...(storage?.productionDurable ? [] : ['DATABASE_URL missing or not active in production — paper ledger is not durable.']),
-    ...(providerEnvAudit?.blockingForLive ?? []),
-    ...(risk?.reasons ?? []),
-    ...(liveReadiness?.failed ?? [])
-  ].filter(Boolean);
-  return <div className="setupDatabaseSurface">
-    <RowsTable head={['Database / ledger', 'Status', 'Action']} rows={[
-      ['DATABASE_URL', storage?.dbConfigured ? 'configured' : 'missing', storage?.dbConfigured ? 'Server sees database env; value hidden.' : 'Add Neon pooled DATABASE_URL in Vercel Production.'],
-      ['Ledger storage mode', storage?.mode ?? 'loading', storageLabel(storage?.mode, storage?.productionDurable)],
-      ['productionDurable', storage?.productionDurable ? 'true' : 'false', storage?.productionDurable ? 'Paper ledger can persist across serverless invocations.' : 'Do not trust paper exits across invocations yet.'],
-      ['Required table', storage?.requiredTable ?? 'terminal_paper_ledger', 'Auto-created/verified when DATABASE_URL is configured.'],
-      ['Storage note', storage?.note ?? 'Waiting for paper ledger metadata.', 'No secrets displayed.']
-    ]} />
-    <RowsTable head={['Provider', 'Configured', 'Runtime status', 'Note']} rows={providerRows.length ? providerRows : [['Provider audit', 'loading', 'loading', 'No secrets exposed.']]} />
-    <RowsTable head={['Remaining blocker', 'Status', 'Where to fix']} rows={blockers.length ? blockers.map((blocker) => [blocker, 'blocking', blocker.includes('DATABASE_URL') ? 'Vercel Production env → redeploy' : 'Risk/provider setup']) : [['Setup blockers', 'none reported', 'Keep live execution disabled until explicit live sprint.']]} />
-  </div>;
-}
-
-function PaperDecisionPanel({ mint, decision, ledger, onLedgerChange }: { mint: string; decision?: PaperTradeDecision | null; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null; ledger?: PaperLedger | null; onLedgerChange: () => void }) {
-  const defaults = decision?.defaultRequest ?? { mint, side: 'Buy', amount: '0.01', spendAsset: 'SOL', slippageBps: 100 };
-  const [amount, setAmount] = useState(String(defaults.amount ?? '0.01'));
-  const [side, setSide] = useState(String(defaults.side ?? 'Buy'));
-  const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
-  const [quoteStatus, setQuoteStatus] = useState('idle');
-  const [ledgerStatus, setLedgerStatus] = useState('idle');
+  const tabCounts: Record<IntelTab, string> = {
+    Positions: String(positions.filter((position) => position.uiAmount > 0).length || positions.length || 0),
+    Orders: String(orders.length),
+    Holders: holderStats.total ? `(${holderStats.total.toLocaleString()})` : String(holderRows.length || 0),
+    'Top Traders': String(topTraders.length),
+    'Dev Tokens': `(${devTokenRows.length})`,
+    'Only Tracked': String(trackedPositions.length + trackedOrders.length + trackedTrades.length),
+    'Instant Trade': capabilities?.liveTradingEnabled ? 'LIVE' : 'GATED',
+    Checklist: checklist?.state ?? 'TEMP'
+  };
 
   async function previewQuote() {
-    if (!mint) return;
+    if (!activeMint || quoteStatus === 'quoting') return;
     setQuoteStatus('quoting');
     setQuote(null);
     try {
       const response = await fetch('/api/execution-quote', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mint, side, amount, spendAsset: defaults.spendAsset ?? 'SOL', slippageBps: defaults.slippageBps ?? 100, mode: 'paper-preview' })
+        body: JSON.stringify({ mint: activeMint, side: instantSide, amount: instantAmount, spendAsset: 'SOL', slippageBps: Number(instantSlippage), mode: 'terminal-instant-preview' })
       });
-      const payload = await response.json() as Record<string, unknown>;
+      const payload = await response.json() as QuotePayload;
       setQuote(payload);
       setQuoteStatus(response.ok ? 'quote-ready' : String(payload.error ?? 'quote-error'));
     } catch (error) {
@@ -516,157 +342,103 @@ function PaperDecisionPanel({ mint, decision, ledger, onLedgerChange }: { mint: 
     }
   }
 
-  async function recordPaperEntry() {
-    if (!mint || !quote) return;
-    setLedgerStatus('recording-entry');
-    try {
-      const response = await fetch('/api/paper-ledger', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'entry', mint, side, amountIn: amount, spendAsset: defaults.spendAsset ?? 'SOL', quote, priceUsd: decision?.currentPriceUsd ?? null })
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Paper entry failed.');
-      setLedgerStatus('paper-entry-recorded');
-      onLedgerChange();
-    } catch (error) {
-      setLedgerStatus(error instanceof Error ? error.message : 'paper entry failed');
-    }
-  }
+  return <section className="terminalInfoBooth axiomIntelBooth" data-contract="terminal-snapshot-v1" data-live-execution="disabled">
+    <header className="axiomIntelHeader">
+      <div>
+        <span>BONDR Terminal Intelligence</span>
+        <strong>{activeMint ? compactAddress(activeMint) : 'Load a token'}</strong>
+        <small>{snapshotStatus} · source labels are explicit; unavailable metrics stay blank.</small>
+      </div>
+      <div className="axiomIntelHeaderStats">
+        <SourceBadge label="Price" value={formatUsd(typeof market.priceUsd === 'number' ? market.priceUsd : null)} />
+        <SourceBadge label="MC" value={formatUsd(typeof market.marketCapUsd === 'number' ? market.marketCapUsd : null)} />
+        <SourceBadge label="Liq" value={formatUsd(typeof market.liquidityUsd === 'number' ? market.liquidityUsd : typeof liquidity.liquidityUsd === 'number' ? liquidity.liquidityUsd : null)} />
+        <SourceBadge label="Holders" value={holderStats.total?.toLocaleString() ?? holderStats.returned} />
+        <SourceBadge label="Live" value={capabilities?.liveTradingEnabled ? 'enabled' : 'disabled'} />
+      </div>
+    </header>
 
-  async function closePaperEntry(id: string) {
-    if (!decision?.currentPriceUsd) {
-      setLedgerStatus('current price required for paper exit');
-      return;
-    }
-    setLedgerStatus('recording-exit');
-    try {
-      const response = await fetch('/api/paper-ledger', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'exit', id, exitPriceUsd: decision.currentPriceUsd })
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Paper exit failed.');
-      setLedgerStatus('paper-exit-recorded');
-      onLedgerChange();
-    } catch (error) {
-      setLedgerStatus(error instanceof Error ? error.message : 'paper exit failed');
-    }
-  }
+    <nav className="axiomIntelTabs" role="tablist" aria-label="Terminal intelligence tabs">
+      {tabs.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? 'active' : ''} key={tab} onClick={() => setActiveTab(tab)}><span>{tab}</span><em>{tabCounts[tab]}</em></button>)}
+    </nav>
 
-  const quoteObject = (quote?.quote ?? {}) as Record<string, unknown>;
-  const routeLabels = Array.isArray(quoteObject.routeLabels) ? quoteObject.routeLabels.map(String).join(' / ') : '—';
-  return <div className="paperDecisionSurface">
-    <div className="terminalTabActionBar"><strong>Paper quote preview</strong><span>{quoteStatus} · {ledgerStatus}</span><input value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="Paper amount" /><button type="button" onClick={() => setSide(side === 'Buy' ? 'Sell' : 'Buy')}>{side}</button><button type="button" onClick={() => void previewQuote()} disabled={!mint || quoteStatus === 'quoting'}>Preview quote</button><button type="button" onClick={() => void recordPaperEntry()} disabled={!quote || ledgerStatus === 'recording-entry'}>Record paper entry</button></div>
-    <RowsTable head={['Quote field', 'Value', 'Source']} rows={[
-      ['Input amount', String((quote?.request as Record<string, unknown> | undefined)?.amount ?? amount), 'operator paper request'],
-      ['Expected out', String(quoteObject.outAmount ?? 'quote required'), 'Jupiter quote-only'],
-      ['Price impact', String(quoteObject.priceImpactPct ?? 'quote required'), 'Jupiter quote-only'],
-      ['Route', routeLabels, 'Jupiter route plan'],
-      ['Safety', String(quote?.safety ?? decision?.note ?? 'quote only'), 'server guardrail']
-    ]} />
-    <RowsTable head={['Paper ledger', 'Value', 'Execution']} rows={[
-      ['Open positions', String(ledger?.summary?.openCount ?? 0), ledger?.summary?.execution ?? 'paper-only-no-sign-no-send'],
-      ['Closed positions', String(ledger?.summary?.closedCount ?? 0), 'paper ledger'],
-      ['Realized PnL', formatUsd(ledger?.summary?.realizedPnlUsd ?? null), 'paper only'],
-      ['Unrealized PnL', formatUsd(ledger?.summary?.unrealizedPnlUsd ?? null), 'paper only']
-    ]} />
-    <div className="terminalDataTable paperLedgerTable" role="table" aria-label="Paper trade ledger"><div className="terminalDataRow terminalDataHead" role="row"><span>Time</span><span>Side</span><span>Status</span><span>Amount</span><span>Tokens</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Actions</span></div>{(ledger?.entries ?? []).slice(0, 20).map((entry) => <div className="terminalDataRow" role="row" key={entry.id}><span>{formatDateTime(entry.createdAt)}</span><strong>{entry.side}</strong><span>{entry.status}</span><span>{entry.amountIn} {entry.spendAsset}</span><span>{formatTokenAmount(entry.tokens)}</span><span>{formatUsd(entry.entryPriceUsd)}</span><span>{formatUsd(entry.exitPriceUsd)}</span><span>{formatUsd(entry.realizedPnlUsd)}</span><span>{entry.status === 'open' ? <button type="button" onClick={() => void closePaperEntry(entry.id)}>Paper exit</button> : entry.execution}</span></div>)}{!(ledger?.entries ?? []).length && <div className="terminalDataRow" role="row"><strong>No paper entries</strong><span>Preview quote, then record paper entry.</span><span>No real transaction will be created.</span></div>}</div>
+    <div className="axiomIntelPanel" role="tabpanel">
+      {!snapshot && <EmptyState title="Waiting for token snapshot" detail={activeMint ? snapshotStatus : 'Load a token to hydrate holders, positions, orders, top traders, dev history, and trade tape.'} />}
+      {snapshot && activeTab === 'Positions' && <PositionsTab rows={positions} flow={backend?.accounting ?? flow} summary={extras?.positions?.summary ?? null} inventory={backend?.wallets?.tokenBalances} />}
+      {snapshot && activeTab === 'Orders' && <OrdersTab orders={orders} execution={backend?.execution?.terminalOrders?.execution} liveTradingEnabled={Boolean(capabilities?.liveTradingEnabled)} />}
+      {snapshot && activeTab === 'Holders' && <HoldersTab holders={holders} rows={filteredHolders} rawRows={holderRows} stats={holderStats} search={holderSearch} filter={holderFilter} sort={holderSort} onSearch={setHolderSearch} onFilter={setHolderFilter} onSort={setHolderSort} />}
+      {snapshot && activeTab === 'Top Traders' && <TopTradersTab rows={topTraders} trades={trades} />}
+      {snapshot && activeTab === 'Dev Tokens' && <DevTokensTab rows={devTokenRows} source={sourceValue(snapshot, 'devSold')} currentToken={extras?.pumpfun?.token ?? null} />}
+      {snapshot && activeTab === 'Only Tracked' && <OnlyTrackedTab positions={trackedPositions} holders={trackedHolders} trades={trackedTrades} orders={trackedOrders} wallets={renderedWallets} />}
+      {activeTab === 'Instant Trade' && <InstantTradeTab activeMint={activeMint} wallets={renderedWallets} selectedWallet={selectedWallet} selectedPosition={selectedWalletPosition} selectedWalletId={selectedWalletId} onSelectWallet={setSelectedWalletId} side={instantSide} onSide={setInstantSide} amount={instantAmount} onAmount={setInstantAmount} slippage={instantSlippage} onSlippage={setInstantSlippage} capabilities={capabilities} quote={quote} quoteStatus={quoteStatus} onPreview={() => void previewQuote()} />}
+      {activeTab === 'Checklist' && <ChecklistTab projectId={projectId} projectName={projectName} activeMint={activeMint} terminalWarning={terminalWarning} liveReadinessStatus={liveReadinessStatus} authConfigured={authConfigured} sessionAuthenticated={sessionAuthenticated} rpcSummary={rpcSummary} checklist={checklist} />}
+    </div>
+  </section>;
+}
+
+function PositionsTab({ rows, flow, summary, inventory }: { rows: PositionRow[]; flow: Flow; summary: Record<string, unknown> | null; inventory?: TerminalBackendShape['wallets'] extends infer W ? W extends { tokenBalances?: infer T } ? T : never : never }) {
+  const nonZero = rows.filter((row) => row.uiAmount > 0);
+  const totalValue = rows.reduce((sum, row) => sum + (row.valueUsd ?? 0), 0);
+  const totalPnl = rows.reduce((sum, row) => sum + (row.totalPnlUsd ?? 0), 0);
+  return <div className="axiomIntelSurface"><div className="axiomIntelChips"><Chip label="Tracked wallets" value={rows.length} /><Chip label="Non-zero" value={nonZero.length || (inventory?.nonZeroWallets ?? 0)} /><Chip label="Total tokens" value={formatNumber(inventory?.totalUiAmount ?? nonZero.reduce((sum, row) => sum + row.uiAmount, 0))} /><Chip label="Value" value={formatUsd(typeof summary?.totalValueUsd === 'number' ? summary.totalValueUsd : (totalValue || null))} /><Chip label="30d net SOL" value={flow ? `${flow.netSol.toFixed(2)} SOL` : '—'} /><Chip label="Total PnL" value={formatUsd(typeof summary?.totalPnlUsd === 'number' ? summary.totalPnlUsd : (totalPnl || null), 'need tape')} tone={totalPnl >= 0 ? 'good' : 'bad'} /></div><DataTable className="positionsIntelTable" head={['Wallet', 'Role', 'Amount', 'Value', 'Avg Entry', 'Avg Exit', 'Realized', 'Unrealized', 'Total PnL', 'Last Seen', 'Source']} rows={rows.map((row) => [compactAddress(row.wallet), row.role ?? 'tracked', formatNumber(row.uiAmount), formatUsd(row.valueUsd), formatUsd(row.avgEntryUsd), formatUsd(row.avgExitUsd), <span className={pnlClass(row.realizedPnlUsd)}>{formatUsd(row.realizedPnlUsd)}</span>, <span className={pnlClass(row.unrealizedPnlUsd)}>{formatUsd(row.unrealizedPnlUsd)}</span>, <span className={pnlClass(row.totalPnlUsd)}>{formatUsd(row.totalPnlUsd, row.status === 'balance-only' ? 'need tape' : '—')}</span>, formatTime(row.lastSeenAt), `${row.status} · ${(row.source ?? []).join(', ') || 'wallet balances'}`])} empty={<EmptyState title="No tracked positions" detail="Load a token or attach tracked wallets with token balances. PnL requires trade tape/provider data." />} /></div>;
+}
+
+function OrdersTab({ orders, execution, liveTradingEnabled }: { orders: TerminalOrder[]; execution?: string; liveTradingEnabled: boolean }) {
+  return <div className="axiomIntelSurface"><div className="axiomIntelChips"><Chip label="Orders" value={orders.length} /><Chip label="Open" value={orders.filter((order) => order.status === 'open').length} /><Chip label="Triggered" value={orders.filter((order) => order.status === 'triggered').length} /><Chip label="Execution" value={execution ?? 'gated/order-monitor'} /><Chip label="Live gate" value={liveTradingEnabled ? 'enabled' : 'disabled'} tone={liveTradingEnabled ? 'warn' : 'good'} /></div><DataTable className="ordersIntelTable" head={['Created', 'Side', 'Kind', 'Wallet', 'Amount', 'Trigger', 'Status', 'Observed', 'Lifecycle']} rows={orders.map((order) => [formatTime(order.createdAt), order.side, order.kind, compactAddress(order.wallet), `${order.amount} ${order.spendAsset}`, order.triggerPriceUsd ? `${order.triggerDirection ?? ''} ${formatUsd(order.triggerPriceUsd)}` : 'market/gated', order.status, typeof order.lastObservedPriceUsd === 'number' ? formatUsd(order.lastObservedPriceUsd) : 'not evaluated', `${order.lifecycleStage ?? 'created'} · ${order.signature ? 'signed tx observed' : 'no signed tx'}`])} empty={<EmptyState title="No orders for this mint" detail="Orders/intents are shown as gated unless execution contracts prove otherwise." />} /></div>;
+}
+
+function HoldersTab({ holders, rows, rawRows, stats, search, filter, sort, onSearch, onFilter, onSort }: { holders: TerminalTokenSnapshot['holders']; rows: UiHolderRow[]; rawRows: UiHolderRow[]; stats: { returned: number; total: number | null; top10: number | null; riskTagged: number; valuedRows: number; pnlRows: number }; search: string; filter: HolderFilter; sort: HolderSort; onSearch: (value: string) => void; onFilter: (value: HolderFilter) => void; onSort: (value: HolderSort) => void }) {
+  const coverage = stats.total ? `${stats.returned}/${stats.total.toLocaleString()} loaded` : `${stats.returned} loaded`;
+  const truncated = Boolean(holders?.isTruncated || (stats.total && stats.returned < stats.total));
+  return <div className="axiomIntelSurface holdersIntelSurface"><div className="axiomIntelChips"><Chip label="Total holders" value={stats.total?.toLocaleString() ?? 'API limited'} /><Chip label="Coverage" value={coverage} tone={truncated ? 'warn' : 'neutral'} /><Chip label="Top 10" value={formatPct(stats.top10)} tone={(stats.top10 ?? 0) >= 40 ? 'bad' : (stats.top10 ?? 0) >= 25 ? 'warn' : 'neutral'} /><Chip label="Risk/dev tags" value={stats.riskTagged} tone={stats.riskTagged ? 'warn' : 'neutral'} /><Chip label="Valued rows" value={stats.valuedRows} /><Chip label="PnL rows" value={stats.pnlRows} /></div><div className="axiomIntelControls"><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search wallet / tag" aria-label="Search holders" /><select value={filter} onChange={(event) => onFilter(event.target.value as HolderFilter)}><option value="all">All holders</option><option value="tagged">Only tagged/risky</option><option value="pnl">Only non-zero PnL data</option><option value="whales">Whales 1%+</option></select><select value={sort} onChange={(event) => onSort(event.target.value as HolderSort)}><option value="rank">Rank</option><option value="amount">Amount</option><option value="pct">% supply</option><option value="value">Value</option><option value="pnl">Total PnL</option><option value="txs">Tx count</option><option value="lastSeen">Last seen</option></select><SourceBadge label="Source" value={`${holders?.source ?? 'snapshot'} · ${holders?.coverageLabel ?? holders?.paginationStatus ?? 'coverage pending'}`} />{truncated && <SourceBadge label="Limit" value="provider-limited/read-only" />}</div><DataTable className="holdersIntelTable" head={['#', 'Owner', 'Token Account', 'Amount', '%', 'Value', 'SOL', 'Bought', 'Sold', 'Net', 'Entry', 'Exit', 'Realized', 'Unrealized', 'Total PnL', 'Txs', 'Seen', 'Tags / Source']} rows={rows.map((row, index) => [row.rank ?? index + 1, compactAddress(row.owner), compactAddress(row.tokenAccount), formatNumber(row.uiAmount), formatPct(row.pctSupply), formatUsd(row.valueUsd), formatNumber(row.ownerSolBalance), formatNumber(row.boughtTokens), formatNumber(row.soldTokens), formatNumber(row.netTokensFromTape ?? ((row.boughtTokens ?? 0) - (row.soldTokens ?? 0))), formatUsd(row.avgEntryUsd), formatUsd(row.avgExitUsd), <span className={pnlClass(row.realizedPnlUsd)}>{formatUsd(row.realizedPnlUsd)}</span>, <span className={pnlClass(row.unrealizedPnlUsd)}>{formatUsd(row.unrealizedPnlUsd)}</span>, <span className={pnlClass(row.totalPnlUsd)}>{formatUsd(row.totalPnlUsd, row.pnlStatus ? '—' : 'need tape')}</span>, row.txCount ?? '—', `${formatTime(row.firstSeenAt)} / ${formatTime(row.lastSeenAt)}`, <span className="tagPillList">{(row.tags?.length ? row.tags : [row.pnlStatus ?? holders?.source ?? 'read-only']).slice(0, 4).map((tag) => <em key={`${row.tokenAccount}-${tag}`}>{tag}</em>)}</span>])} empty={<EmptyState title={rawRows.length ? 'No holders match filters' : 'No holder rows'} detail="Holder coverage depends on token-account/provider access. Trade/PnL columns require wallet-attributed tape." />} /></div>;
+}
+
+function TopTradersTab({ rows, trades }: { rows: UiTopTrader[]; trades: TerminalTradeEvent[] }) {
+  const totalVolume = rows.reduce((sum, row) => sum + (row.totalVolumeUsd ?? 0), 0) || trades.reduce((sum, trade) => sum + Number(trade.volumeUsd ?? 0), 0);
+  const winners = rows.filter((row) => (row.totalPnlUsd ?? 0) > 0).length;
+  const losers = rows.filter((row) => (row.totalPnlUsd ?? 0) < 0).length;
+  const biggest = rows.reduce<UiTopTrader | null>((best, row) => !best || (row.totalPnlUsd ?? -Infinity) > (best.totalPnlUsd ?? -Infinity) ? row : best, null);
+  return <div className="axiomIntelSurface"><div className="axiomIntelChips"><Chip label="Trader rows" value={rows.length} /><Chip label="Tape rows" value={trades.length} /><Chip label="Volume" value={formatUsd(totalVolume || null)} /><Chip label="Winners" value={winners} tone="good" /><Chip label="Losers" value={losers} tone={losers ? 'bad' : 'neutral'} /><Chip label="Biggest PnL" value={biggest ? `${compactAddress(biggest.wallet)} ${formatUsd(biggest.totalPnlUsd)}` : '—'} /></div><DataTable className="tradersIntelTable" head={['Wallet', 'Buys', 'Sells', 'Bought', 'Sold', 'Net', 'Buy Vol', 'Sell Vol', 'Total Vol', 'Entry', 'Exit', 'Realized', 'Unrealized', 'Total PnL', 'Hold', 'Last', 'Tags']} rows={rows.map((row) => [compactAddress(row.wallet), row.buys, row.sells, formatNumber(row.boughtTokens), formatNumber(row.soldTokens), formatNumber(row.netTokens), formatUsd(row.buyVolumeUsd), formatUsd(row.sellVolumeUsd), formatUsd(row.totalVolumeUsd), formatUsd(row.avgEntryUsd), formatUsd(row.avgExitUsd), <span className={pnlClass(row.realizedPnlUsd)}>{formatUsd(row.realizedPnlUsd)}</span>, <span className={pnlClass(row.unrealizedPnlUsd)}>{formatUsd(row.unrealizedPnlUsd)}</span>, <span className={pnlClass(row.totalPnlUsd)}>{formatUsd(row.totalPnlUsd, 'need tape')}</span>, row.holdDurationHours ? `${row.holdDurationHours.toFixed(1)}h` : '—', row.lastTx ? compactAddress(row.lastTx) : formatTime(row.lastSeenAt), <span className="tagPillList">{(row.tags ?? row.sources ?? ['trade-tape']).slice(0, 3).map((tag) => <em key={`${row.wallet}-${tag}`}>{tag}</em>)}</span>])} empty={<EmptyState title="No top traders yet" detail="Wallet-level trader PnL requires a wallet-attributed trade tape provider and enough swap rows." />} /></div>;
+}
+
+function DevTokensTab({ rows, source, currentToken }: { rows: Array<Record<string, unknown>>; source: string; currentToken: Record<string, unknown> | null }) {
+  const allRows = currentToken ? [currentToken, ...rows] : rows;
+  return <div className="axiomIntelSurface"><div className="axiomIntelChips"><Chip label="Dev token rows" value={allRows.length} /><Chip label="Source" value={source} /><Chip label="Mode" value="read-only" tone="good" /></div><DataTable className="devTokensIntelTable" head={['Token', 'Mint', 'Launched', 'ATH / MC', 'Liquidity', 'Migration', 'Status', 'Risk / Source']} rows={allRows.map((row) => [textFromUnknown(row.name ?? row.symbol ?? row.ticker, 'token'), compactAddress(textFromUnknown(row.mint ?? row.address ?? row.tokenAddress, '')), formatTime(textFromUnknown(row.createdAt ?? row.created_at ?? row.launchTime, '')), formatUsd(typeof row.athMarketCapUsd === 'number' ? row.athMarketCapUsd : typeof row.marketCapUsd === 'number' ? row.marketCapUsd : null, textFromUnknown(row.marketCap ?? row.ath, '—')), formatUsd(typeof row.liquidityUsd === 'number' ? row.liquidityUsd : null, textFromUnknown(row.liquidity, '—')), textFromUnknown(row.migrationStatus ?? row.migrated ?? row.poolStatus, '—'), textFromUnknown(row.status ?? row.state, 'observed'), textFromUnknown(row.note ?? row.risk ?? row.source, source)])} empty={<EmptyState title="No dev-token history" detail="Current dev/deployer wallet history is unavailable or clean from configured read-only providers." />} /></div>;
+}
+
+function OnlyTrackedTab({ positions, holders, trades, orders, wallets }: { positions: PositionRow[]; holders: UiHolderRow[]; trades: TerminalTradeEvent[]; orders: TerminalOrder[]; wallets: TerminalWallet[] }) {
+  return <div className="axiomIntelSurface"><div className="axiomIntelChips"><Chip label="Tracked wallets" value={wallets.length} /><Chip label="Positions" value={positions.length} /><Chip label="Holder rows" value={holders.length} /><Chip label="Trade rows" value={trades.length} /><Chip label="Orders" value={orders.length} /></div><DataTable className="trackedIntelTable" head={['Type', 'Wallet', 'Role / Side', 'Amount', 'Value / Price', 'PnL / Status', 'Last / Source']} rows={[...positions.map((row) => ['Position', compactAddress(row.wallet), row.role ?? 'tracked', formatNumber(row.uiAmount), formatUsd(row.valueUsd), <span className={pnlClass(row.totalPnlUsd)}>{formatUsd(row.totalPnlUsd, row.status)}</span>, `${formatTime(row.lastSeenAt)} · ${(row.source ?? []).join(', ')}`]), ...holders.map((row) => ['Holder', compactAddress(row.owner), (row.tags ?? ['tracked']).join(', '), formatNumber(row.uiAmount), `${formatPct(row.pctSupply)} / ${formatUsd(row.valueUsd)}`, <span className={pnlClass(row.totalPnlUsd)}>{formatUsd(row.totalPnlUsd, row.pnlStatus ?? 'need tape')}</span>, `${formatTime(row.lastSeenAt)} · ${row.dataSources?.join(', ') ?? 'holders'}`]), ...trades.map((trade) => ['Trade', compactAddress(trade.wallet), trade.side, formatNumber(trade.amount), formatUsd(Number(trade.priceUsd ?? NaN)), formatUsd(Number(trade.volumeUsd ?? NaN)), `${formatTime(trade.timestamp)} · ${trade.source ?? 'trade tape'}`]), ...orders.map((order) => ['Order', compactAddress(order.wallet), `${order.side} ${order.kind}`, `${order.amount} ${order.spendAsset}`, order.triggerPriceUsd ? formatUsd(order.triggerPriceUsd) : 'market', order.status, `${formatTime(order.lastEvaluationAt ?? order.createdAt)} · gated`])]} empty={<EmptyState title="No tracked activity" detail="Tracked wallets are loaded, but this token has no matched positions, holder rows, trades, or orders yet." />} /></div>;
+}
+
+
+function ChecklistTab({ projectId, projectName, activeMint, terminalWarning, liveReadinessStatus, authConfigured, sessionAuthenticated, rpcSummary, checklist }: { projectId?: string; projectName?: string | null; activeMint: string; terminalWarning?: string | null; liveReadinessStatus?: string; authConfigured?: boolean; sessionAuthenticated?: boolean; rpcSummary?: RpcSummary; checklist?: ChecklistSummary }) {
+  const rpcTone = rpcSummary?.status === 'live' ? 'good' : rpcSummary?.quotaLimited ? 'warn' : 'bad';
+  return <div className="axiomIntelSurface checklistIntelSurface">
+    <div className="axiomSafetyBanner"><strong>Temporary pre-live checklist</strong><span>Keep until Bond.Terminal is fully complete; remove once readiness surfaces are relocated or no longer needed. This tab is read-only and does not sign, swap, fund, broadcast, or launch.</span></div>
+    <div className="axiomIntelChips">
+      <Chip label="Project" value={projectName ?? 'No project selected'} />
+      <Chip label="Mint" value={activeMint ? compactAddress(activeMint) : 'Load token'} />
+      <Chip label="Checklist" value={checklist?.state ?? 'loading'} tone={checklist?.failed?.length ? 'bad' : checklist?.warnings?.length ? 'warn' : 'good'} />
+      <Chip label="Wallet readiness" value={liveReadinessStatus ?? 'loading'} />
+      <Chip label="RPC" value={rpcSummary?.status ?? 'loading'} tone={rpcTone} />
+      <Chip label="Auth" value={authConfigured ? sessionAuthenticated ? 'signed in' : 'configured / login required' : 'missing'} tone={authConfigured ? sessionAuthenticated ? 'good' : 'warn' : 'bad'} />
+      <Chip label="Live signing" value="disabled" tone="good" />
+    </div>
+    <DataTable className="checklistContextTable" head={['Context', 'Value', 'Action / Route']} rows={[
+      ['Terminal note', terminalWarning ?? 'Project, mint, and wallet group context loaded.', 'Main terminal remains uncluttered.'],
+      ['Deployment', projectId ? `/deployment?project=${projectId}` : '/deployment', 'Open Deployment link should route here.'],
+      ['Wallets', projectId ? `/wallets?project=${projectId}` : '/wallets', 'Manage wallets link should route here.'],
+      ['Portfolio', projectId ? `/portfolio?project=${projectId}${activeMint ? `&mint=${activeMint}` : ''}` : '/portfolio', 'Portfolio link should preserve project/mint.'],
+      ['Resolution API', '/api/pre-live-resolution', 'Read-only pre-live matrix.']
+    ]} empty={<EmptyState title="No checklist context" detail="Context props were not supplied." />} />
+    <DataTable className="rpcChecklistTable" head={['RPC Provider', 'Status', 'Latency / Slot']} rows={(rpcSummary?.providers ?? []).map((provider) => [provider.label, `${provider.status}${provider.quotaLimited ? ' / quota' : ''}`, `${provider.latencyMs ?? '—'}ms · slot ${provider.currentSlot ?? '—'}`])} empty={<EmptyState title="No RPC provider rows" detail={rpcSummary?.providerSummary ?? 'RPC summary unavailable.'} />} />
+    <DataTable className="preLiveChecklistTable" head={['Check', 'Status', 'Owner', 'Evidence']} rows={(checklist?.items ?? []).map((item) => [item.label, <span className={item.status === 'pass' ? 'positivePnlCell' : item.status === 'warn' ? 'neutralPnlCell' : 'negativePnlCell'}>{item.status}</span>, item.owner, item.evidence])} empty={<EmptyState title="No checklist rows" detail="Pre-live checklist data is loading or unavailable." />} />
+    <PreLiveDryRunAction projectId={projectId} />
   </div>;
 }
 
-function RiskPanel({ rows, risk, liveReadiness, providerEnvAudit }: { rows: string[][]; risk?: RiskVerdict | null; liveReadiness?: LiveReadiness | null; providerEnvAudit?: ProviderEnvAudit | null }) {
-  const checklistRows = (liveReadiness?.checks ?? []).map((check) => [check.label ?? check.id ?? 'check', check.status ?? 'unknown', check.evidence ?? 'No evidence returned.']);
-  const reasonRows = (risk?.reasons?.length ? risk.reasons : [risk?.note ?? 'No automatic blockers in sampled data.']).map((reason, index) => [`Risk ${index + 1}`, reason, risk?.status ?? 'loading']);
-  const providerRows = Object.entries(providerEnvAudit?.providers ?? {}).map(([name, item]) => [name, item.status ?? 'unknown', item.note ?? item.providerStatus ?? 'provider audit']);
-  return <div className="riskReadinessSurface">
-    <RowsTable head={['Verdict', 'Status', 'Reason']} rows={[[risk?.status ?? 'loading', risk?.liveTradingAllowed ? 'live allowed' : 'live blocked', risk?.note ?? 'Risk verdict is read-only.']]} />
-    <RowsTable head={['Reason', 'Detail', 'Verdict']} rows={reasonRows} />
-    <RowsTable head={['Checklist', 'Status', 'Evidence']} rows={checklistRows.length ? checklistRows : [['Live-readiness', 'loading', 'Waiting for snapshot checklist.']]} />
-    <RowsTable head={['Provider', 'Audit', 'Note']} rows={providerRows.length ? providerRows : [['Provider env audit', 'loading', 'No secrets exposed.']]} />
-    <RowsTable head={['Source', 'Status', 'Route']} rows={rows} />
-  </div>;
-}
-
-function TradeTable({ trades, tradeTape }: { trades: TerminalTradeEvent[]; tradeTape?: TradeTapeState | null }) {
-  const blocker = tradeTape?.blockers?.[0] ?? tradeTape?.optionalProviderGaps?.[0] ?? tradeTape?.note ?? 'No recent trade rows from current providers. Add Helius/Birdeye or load a more active token.';
-  const recommendedFix = tradeTape?.recommendedFixes?.[0] ?? 'Add Helius or Birdeye for wallet-attributed trade tape; use an active memecoin mint instead of USDC for tape testing.';
-  const provider = tradeTape?.primary && tradeTape.primary !== 'none' ? tradeTape.primary : 'no active trade-tape provider';
-  const latency = typeof tradeTape?.latencyMs === 'number' ? `${tradeTape.latencyMs}ms` : 'latency n/a';
-  return (
-    <div className="terminalDataTable indexedTransactionsTable" role="table" aria-label="Indexed transactions from terminal snapshot">
-      <div className="terminalDataRow terminalDataHead" role="row"><span>Time</span><span>Side</span><span>Wallet</span><span>Amount</span><span>Price</span><span>Volume</span><span>Tx</span></div>
-      {trades.map((trade, index) => <div className={`terminalDataRow ${trade.side === 'buy' ? 'buyTransactionRow' : trade.side === 'sell' ? 'sellTransactionRow' : ''}`} role="row" key={`${trade.txHash}-${index}`}><span>{trade.timestamp ? new Date(trade.timestamp).toLocaleTimeString() : '—'}</span><strong>{trade.side}</strong><span>{compactAddress(trade.wallet)}</span><span>{trade.amount ? Number(trade.amount).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—'}</span><span>{trade.priceUsd ? `$${Number(trade.priceUsd).toPrecision(5)}` : '—'}</span><span>{trade.volumeUsd ? `$${Number(trade.volumeUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}</span><span>{trade.txHash ? <a href={`https://solscan.io/tx/${trade.txHash}`} target="_blank" rel="noreferrer">Open</a> : '—'}</span></div>)}
-      {trades.length === 0 && <div className="terminalDataRow" role="row"><strong>No trade rows</strong><span>{provider} · {latency}</span><span>No recent trade rows from current providers. Add Helius/Birdeye or load a more active token.</span><span>{blocker} · {recommendedFix}</span></div>}
-    </div>
-  );
-}
-
-function PositionsPanel({ wallets, tokenRows, positionRows, positionSummary, tokenInventory, flow, mint }: { wallets: TerminalWallet[]; tokenRows: BackendTokenRow[]; positionRows: UiPositionRow[]; positionSummary: Record<string, unknown> | null; tokenInventory?: TerminalBackendShape['wallets'] extends infer W ? W extends { tokenBalances?: infer T } ? T : never : never; flow: Flow; mint: string }) {
-  const rows = positionRows.length ? positionRows : wallets.map((wallet) => { const tokenRow = tokenRows.find((row) => row.id === wallet.id || row.address === wallet.address); return { wallet: wallet.address, role: wallet.role, uiAmount: tokenRow?.uiAmount ?? 0, valueUsd: null, avgEntryUsd: null, avgExitUsd: null, realizedPnlUsd: null, unrealizedPnlUsd: null, totalPnlUsd: null, txCount: null, lastSeenAt: null, source: ['wallet-token-balances'], status: 'balance-only' } satisfies UiPositionRow; });
-  return <div className="positionsTabSurface"><div className="positionSummaryGrid tabInfoGrid"><div><span>SOL spent</span><strong>{flow ? `${flow.buysSol.toFixed(2)} SOL` : '0.00 SOL'}</strong><small>Snapshot accounting.</small></div><div><span>Portfolio value</span><strong>{formatUsd(typeof positionSummary?.totalValueUsd === 'number' ? positionSummary.totalValueUsd : null)}</strong><small>{String(positionSummary?.valuedWallets ?? 0)} valued wallets.</small></div><div><span>Position PnL</span><strong>{formatUsd(typeof positionSummary?.totalPnlUsd === 'number' ? positionSummary.totalPnlUsd : null, 'need tape')}</strong><small>{String(positionSummary?.pnlWallets ?? 0)} wallets with trade tape.</small></div><div><span>Token inventory</span><strong>{mint ? `${tokenInventory?.nonZeroWallets ?? 0}/${tokenInventory?.walletCount ?? wallets.length} wallets` : 'Load token first'}</strong><small>{(tokenInventory?.totalUiAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} tokens</small></div></div>{mint && <div className="terminalDataTable positionIntelTable" role="table" aria-label="Token positions by wallet"><div className="terminalDataRow terminalDataHead" role="row"><span>Wallet</span><span>Role</span><span>Amount</span><span>Value</span><span>Entry</span><span>Exit</span><span>Realized</span><span>Unrealized</span><span>Total PnL</span><span>Txs</span><span>Status</span></div>{rows.map((row, index) => { const pnl = row.totalPnlUsd; const pnlClass = typeof pnl === 'number' ? pnl >= 0 ? 'positivePnlCell' : 'negativePnlCell' : ''; return <div className="terminalDataRow" role="row" key={`position-${row.wallet || index}`}><strong>{compactAddress(row.wallet)}</strong><span>{row.role ?? 'wallet'}</span><span>{formatTokenAmount(row.uiAmount)}</span><span>{formatUsd(row.valueUsd)}</span><span>{formatUsd(row.avgEntryUsd)}</span><span>{formatUsd(row.avgExitUsd)}</span><span>{formatUsd(row.realizedPnlUsd)}</span><span>{formatUsd(row.unrealizedPnlUsd)}</span><span className={pnlClass}>{formatUsd(row.totalPnlUsd, row.status.includes('estimate') ? '—' : 'need tape')}</span><span>{row.txCount ?? '—'}</span><span>{row.status}</span></div>; })}</div>}</div>;
-}
-
-function OrdersPanel({ orders, openCount, triggeredCount, execution, onEvaluate, onCancel, loading }: { orders: TerminalOrder[]; openCount: number; triggeredCount: number; execution?: string; onEvaluate: () => void; onCancel: (id: string) => void; loading: boolean }) {
-  return <div className="ordersTabSurface"><div className="terminalTabActionBar"><strong>Order monitor</strong><span>{execution ?? `${openCount} open · ${triggeredCount} triggered`}</span><button type="button" onClick={onEvaluate} disabled={loading}>Evaluate orders</button></div>{orders.length > 0 ? <div className="terminalDataTable terminalOrdersLifecycleTable" role="table" aria-label="Terminal order lifecycle from snapshot"><div className="terminalDataRow terminalDataHead" role="row"><span>Created</span><span>Side</span><span>Kind</span><span>Amount</span><span>Trigger</span><span>Observed</span><span>Status</span><span>Stage</span><span>Last event</span><span>Tx</span><span>Actions</span></div>{orders.map((order) => { const lastEvent = order.lifecycle && order.lifecycle.length ? order.lifecycle[order.lifecycle.length - 1] : undefined; return <div className={`terminalDataRow orderStatus-${order.status}`} role="row" key={order.id}><span>{new Date(order.createdAt).toLocaleTimeString()}</span><strong>{order.side}</strong><span>{order.kind}</span><span>{order.amount} {order.spendAsset}</span><span>{order.triggerPriceUsd ? `${order.triggerDirection ?? ''} $${order.triggerPriceUsd}` : 'market'}</span><span>{typeof order.lastObservedPriceUsd === 'number' ? `$${order.lastObservedPriceUsd.toPrecision(5)}` : 'not evaluated'}</span><span>{order.status}</span><span>{order.lifecycleStage ?? 'created'}</span><span>{lastEvent?.note ?? (order.lastEvaluationAt ? `evaluated ${new Date(order.lastEvaluationAt).toLocaleTimeString()}` : 'created')}</span><span>{order.signature ? <a href={`https://solscan.io/tx/${order.signature}`} target="_blank" rel="noreferrer">Open</a> : 'not built'}</span><div className="terminalRowActions"><button type="button" onClick={() => onCancel(order.id)} disabled={order.status !== 'open' || loading}>Cancel</button></div></div>; })}</div> : <RowsTable head={['Metric', 'Value', 'Source']} rows={[[ 'Open orders', String(openCount), 'Order book' ], [ 'Triggered orders', String(triggeredCount), 'Execution queue' ], [ 'Lifecycle', 'created → evaluated → triggered → built → signed → sent → confirmed/failed', 'Order monitor' ], [ 'Evaluation', execution ?? 'ready', 'Live checks' ]]} />}</div>;
-}
-
-function HoldersPanel({ holders, rows, providerEnvAudit }: { holders: TerminalTokenSnapshot['holders']; rows: UiHolderRow[]; providerEnvAudit?: ProviderEnvAudit | null }) {
-  const source = holders?.source ?? 'snapshot';
-  const valuedRows = rows.filter((row) => typeof row.valueUsd === 'number').length;
-  const lifecycleRows = rows.filter((row) => row.lifecycleStatus === 'ok' || row.pnlStatus === 'trade-tape-priced' || row.pnlStatus === 'transfer-only').length;
-  const topHolderPct = rows.reduce((max, row) => Math.max(max, typeof row.pctSupply === 'number' ? row.pctSupply : 0), 0);
-  const concentrationWarnings = [topHolderPct >= 20 ? `Top holder concentration ${topHolderPct.toFixed(2)}%` : '', rows.filter((row) => (row.pctSupply ?? 0) >= 5).length >= 3 ? 'Multiple 5%+ holder wallets' : ''].filter(Boolean);
-  const holderProvider = providerEnvAudit?.providers?.helius?.status ?? providerEnvAudit?.providers?.birdeye?.status ?? holders?.status ?? 'loading';
-  return <div className="holdersTabSurface holderTabSingleSource">
-    <div className="holderSummaryPanel tabInfoGrid">
-      <div><span>Total rows</span><strong>{rows.length}</strong><small>{source}</small></div>
-      <div><span>Value coverage</span><strong>{valuedRows}/{rows.length}</strong><small>price × holder balance</small></div>
-      <div><span>Lifecycle / PnL</span><strong>{lifecycleRows}/{rows.length}</strong><small>Helius/Birdeye wallet history</small></div>
-      <div><span>Top holder %</span><strong>{topHolderPct ? `${topHolderPct.toFixed(2)}%` : '—'}</strong><small>largest returned holder row</small></div>
-      <div><span>Warnings</span><strong>{concentrationWarnings.length ? concentrationWarnings.length : 'None'}</strong><small>{concentrationWarnings.join(' · ') || 'No concentration warning in returned rows'}</small></div>
-      <div><span>Provider status</span><strong>{holderProvider}</strong><small>{holders?.note ?? 'Holder snapshot provider'}</small></div>
-    </div>
-    <div className="terminalDataTable holderAccountsTable holderIntelTable holderTabFullWidthTable" role="table" aria-label="Token holders enriched with wallet analytics">
-      <div className="terminalDataRow terminalDataHead" role="row"><span>#</span><span>Wallet</span><span>SOL balance</span><span>Token amount</span><span>% supply</span><span>USD value</span><span>Bought</span><span>Sold</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Lifecycle / PnL</span><span>Tags / source</span></div>
-      {rows.map((row, index) => { const pnl = row.totalPnlUsd; const pnlClass = typeof pnl === 'number' ? pnl >= 0 ? 'positivePnlCell' : 'negativePnlCell' : ''; const partialLabel = row.pnlStatus === 'provider-limited' || row.lifecycleStatus === 'not-configured' || row.lifecycleStatus === 'unavailable' ? 'Provider limited' : row.pnlStatus === 'transfer-only' ? 'Transfer only' : row.pnlStatus === 'balance-only' || row.lifecycleStatus === 'empty' ? 'Balance only' : 'Partial history'; const lifecycleLabel = `${row.lifecycleStatus ?? 'unknown'} / ${row.pnlStatus ?? 'balance-only'}`; return <div className="terminalDataRow holderIntelRow" role="row" key={row.tokenAccount}><span>{row.rank ?? index + 1}</span><strong><a href={row.owner ? `https://solscan.io/account/${row.owner}` : undefined} target="_blank" rel="noreferrer">{compactAddress(row.owner)}</a><small>{compactAddress(row.tokenAccount)}</small></strong><span>{typeof row.ownerSolBalance === 'number' ? `${row.ownerSolBalance.toFixed(3)} SOL` : '—'}</span><span>{formatTokenAmount(row.uiAmount)}</span><span>{formatPct(row.pctSupply, '—')}</span><span>{formatUsd(row.valueUsd)}</span><span>{formatTokenAmount(row.boughtTokens, partialLabel)}</span><span>{formatTokenAmount(row.soldTokens, partialLabel)}</span><span>{formatPriceOrTime(row.avgEntryUsd, row.entryAt, partialLabel)}</span><span>{formatPriceOrTime(row.avgExitUsd, row.exitAt, partialLabel)}</span><span className={pnlClass}>{formatUsd(row.totalPnlUsd, row.pnlStatus !== 'trade-tape-priced' ? partialLabel : '—')}</span><span>{lifecycleLabel}</span><span>{row.tags?.length ? row.tags.join(' · ') : row.lifecycleSource ?? source}</span></div>; })}
-      {rows.length === 0 && <div className="terminalDataRow holderEmptyState" role="row"><strong>No holder rows</strong><span>{holders?.status ?? 'loading'}</span><span>{holders?.note ?? 'Snapshot did not return holder rows yet.'}</span><span>Try refresh after token snapshot finishes.</span></div>}
-    </div>
-  </div>;
-}
-
-function TopTradersPanel({ rows, fallbackTrades }: { rows: UiTopTrader[]; fallbackTrades: TerminalTradeEvent[] }) {
-  const fallback = Array.from(fallbackTrades.reduce((map, trade) => { if (!trade.wallet) return map; const row = map.get(trade.wallet) ?? { wallet: trade.wallet, buys: 0, sells: 0, boughtTokens: 0, soldTokens: 0, netTokens: 0, buyVolumeUsd: 0, sellVolumeUsd: 0, totalVolumeUsd: 0, netVolumeUsd: 0, avgEntryUsd: null, avgExitUsd: null, realizedPnlUsd: null, unrealizedPnlUsd: null, totalPnlUsd: null, txCount: 0, firstSeenAt: null, lastTx: null as string | null, lastSeenAt: null, holdDurationHours: null, sources: [] as string[], tags: [] as string[] }; const amount = Number(trade.amount ?? 0) || 0; const volume = Number(trade.volumeUsd ?? 0) || 0; if (trade.side === 'buy') { row.buys += 1; row.boughtTokens += amount; row.buyVolumeUsd += volume; } if (trade.side === 'sell') { row.sells += 1; row.soldTokens += amount; row.sellVolumeUsd += volume; } row.netTokens = row.boughtTokens - row.soldTokens; row.netVolumeUsd = row.buyVolumeUsd - row.sellVolumeUsd; row.totalVolumeUsd += volume; row.txCount += 1; row.lastTx = trade.txHash ?? row.lastTx; row.lastSeenAt = trade.timestamp ?? row.lastSeenAt; map.set(trade.wallet, row); return map; }, new Map<string, UiTopTrader>()).values());
-  const rendered = rows.length ? rows : fallback;
-  return <div className="topTradersTabSurface"><RowsTable head={['Metric', 'Value', 'Source']} rows={[[ 'Trader wallets', String(rendered.length), 'Ranked wallets' ], [ 'Matched trades', String(fallbackTrades.length), 'Market tape' ], [ 'PnL model', 'entry/exit from trades', 'Trade history' ]]} /><div className="terminalDataTable topTradersTable traderIntelTable" role="table" aria-label="Top traders from snapshot"><div className="terminalDataRow terminalDataHead" role="row"><span>Wallet</span><span>Txs</span><span>Buys/Sells</span><span>Buy vol</span><span>Sell vol</span><span>Net tokens</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Hold window</span><span>Last tx</span><span>Tags</span></div>{rendered.map((row) => { const pnl = row.totalPnlUsd; const pnlClass = typeof pnl === 'number' ? pnl >= 0 ? 'positivePnlCell' : 'negativePnlCell' : ''; return <div className="terminalDataRow traderIntelRow" role="row" key={row.wallet}><strong><a href={`https://solscan.io/account/${row.wallet}`} target="_blank" rel="noreferrer">{compactAddress(row.wallet)}</a></strong><span>{row.txCount}</span><span>{row.buys}/{row.sells}</span><span>{formatUsd(row.buyVolumeUsd, 'amount-only')}</span><span>{formatUsd(row.sellVolumeUsd, 'amount-only')}</span><span>{formatTokenAmount(row.netTokens)}</span><span>{formatUsd(row.avgEntryUsd)}</span><span>{formatUsd(row.avgExitUsd)}</span><span className={pnlClass}>{formatUsd(row.totalPnlUsd, 'need tape')}</span><span>{typeof row.holdDurationHours === 'number' ? `${row.holdDurationHours}h` : '—'}</span><span>{row.lastTx ? <a href={`https://solscan.io/tx/${row.lastTx}`} target="_blank" rel="noreferrer">Open</a> : '—'}</span><span>{row.tags?.length ? row.tags.join(' · ') : row.sources?.join(' · ') || 'trade-tape'}</span></div>; })}{rendered.length === 0 && <div className="terminalDataRow" role="row"><strong>No trader rows</strong><span>Top traders</span><span>Waiting for trade history</span><span>—</span></div>}</div></div>;
-}
-
-function DevTokensPanel({ rows, tokenRows, pumpfunTokens, pumpfunStatus, pumpfunToken, devSource }: { rows: Array<Record<string, unknown>>; tokenRows: BackendTokenRow[]; pumpfunTokens: Array<Record<string, unknown>>; pumpfunStatus: string; pumpfunToken?: Record<string, unknown>; devSource: string }) {
-  const creator = String(pumpfunToken?.creator ?? '');
-  const migration = (pumpfunToken?.migration ?? {}) as Record<string, unknown>;
-  return <div className="devTokensTabSurface"><RowsTable head={['Metric', 'Value', 'Source']} rows={[[ 'Creator', creator ? compactAddress(creator) : 'not returned', 'Pump.fun token profile' ], [ 'Dev sold rows', String(rows.length), devSource ], [ 'Pump.fun creator tokens', `${pumpfunTokens.length} rows · ${pumpfunStatus}`, 'Creator history' ], [ 'Current migration', migration.complete ? 'complete' : 'not complete / unknown', String(migration.raydiumPool ?? 'Pump.fun metadata') ]]} /><div className="terminalDataTable devWalletIntelTable" role="table" aria-label="Dev wallet token status"><div className="terminalDataRow terminalDataHead" role="row"><span>Wallet</span><span>Holding</span><span>Incoming</span><span>Outgoing</span><span>Sold</span><span>Provider</span><span>Last out</span></div>{rows.map((row, index) => { const wallet = String(row.wallet ?? row.address ?? ''); const tokenRow = tokenRows.find((token) => token.address === wallet); const outgoing = Array.isArray(row.outgoing) ? row.outgoing[0] as Record<string, unknown> | undefined : undefined; return <div className="terminalDataRow" role="row" key={`dev-${wallet || index}`}><strong>{compactAddress(wallet)}</strong><span>{formatTokenAmount(tokenRow?.uiAmount ?? Number(row.amount ?? 0))}</span><span>{formatTokenAmount(typeof row.incomingAmount === 'number' ? row.incomingAmount : null)}</span><span>{formatTokenAmount(typeof row.outgoingAmount === 'number' ? row.outgoingAmount : null)}</span><span>{row.soldLikely ? 'yes' : 'not seen'}</span><span>{String(row.providerStatus ?? row.source ?? devSource)}</span><span>{outgoing?.signature ? <a href={`https://solscan.io/tx/${String(outgoing.signature)}`} target="_blank" rel="noreferrer">{compactAddress(String(outgoing.signature))}</a> : '—'}</span></div>; })}{rows.length === 0 && <div className="terminalDataRow" role="row"><strong>No dev wallet rows</strong><span>{devSource}</span><span>Add team wallets to monitor movement.</span><span>—</span></div>}</div><div className="terminalDataTable pumpfunCreatorTokenTable" role="table" aria-label="Pump.fun creator token history"><div className="terminalDataRow terminalDataHead" role="row"><span>Mint</span><span>Name</span><span>Symbol</span><span>Market cap</span><span>Migration</span><span>Created</span><span>Source</span></div>{pumpfunTokens.slice(0, 30).map((token, index) => { const mint = String(token.mint ?? token.address ?? token.ca ?? ''); const complete = Boolean(token.complete ?? token.graduated ?? token.raydium_pool); return <div className="terminalDataRow" role="row" key={`pump-token-${mint || index}`}><strong>{mint ? compactAddress(mint) : `creator token ${index + 1}`}</strong><span>{String(token.name ?? '—')}</span><span>{String(token.symbol ?? token.ticker ?? '—')}</span><span>{formatUsd(typeof token.usd_market_cap === 'number' ? token.usd_market_cap : typeof token.market_cap === 'number' ? token.market_cap : null)}</span><span>{complete ? 'migrated' : 'bonding'}</span><span>{String(token.created_timestamp ?? token.createdAt ?? token.created_at ?? '—')}</span><span>pumpfun</span></div>; })}{pumpfunTokens.length === 0 && <div className="terminalDataRow" role="row"><strong>No creator tokens</strong><span>{pumpfunStatus}</span><span>No creator history loaded.</span><span>—</span></div>}</div></div>;
-}
-
-function MigrationPanel({ poolSummary, pumpfunToken, pumpfunMigrations, pumpfunMigrationStatus, bundleWalletCount }: { poolSummary?: Record<string, unknown>; pumpfunToken?: Record<string, unknown>; pumpfunMigrations: Array<Record<string, unknown>>; pumpfunMigrationStatus: string; bundleWalletCount: number }) {
-  const migration = (pumpfunToken?.migration ?? {}) as Record<string, unknown>;
-  return <div className="migrationIntelSurface"><RowsTable head={['Metric', 'Value', 'Source']} rows={[[ 'Pool age', String(poolSummary?.firstSeenAt ?? poolSummary?.pairCreatedAt ?? 'waiting'), String(poolSummary?.poolAgeSource ?? 'pool-index') ], [ 'Best venue', String(poolSummary?.bestDex ?? 'loading'), 'Pool index' ], [ 'Current migration', migration.complete ? 'complete' : 'not complete / unknown', 'Pump.fun token profile' ], [ 'Raydium pool', String(migration.raydiumPool ?? poolSummary?.bestPairAddress ?? 'not returned'), 'Pump.fun / DexScreener' ], [ 'Bundle on migration', `${bundleWalletCount} wallets`, 'Bundle preflight' ]]} /><div className="terminalDataTable migrationIntelTable" role="table" aria-label="Pump.fun migration rows"><div className="terminalDataRow terminalDataHead" role="row"><span>Mint</span><span>Name</span><span>Symbol</span><span>Market cap</span><span>Pool</span><span>Created</span><span>Status</span></div>{pumpfunMigrations.slice(0, 30).map((token, index) => { const mint = String(token.mint ?? token.address ?? token.ca ?? ''); return <div className="terminalDataRow" role="row" key={`migration-${mint || index}`}><strong>{mint ? compactAddress(mint) : `migration ${index + 1}`}</strong><span>{String(token.name ?? '—')}</span><span>{String(token.symbol ?? token.ticker ?? '—')}</span><span>{formatUsd(typeof token.usd_market_cap === 'number' ? token.usd_market_cap : typeof token.market_cap === 'number' ? token.market_cap : null)}</span><span>{compactAddress(String(token.raydium_pool ?? token.raydiumPool ?? token.pool ?? ''))}</span><span>{String(token.created_timestamp ?? token.createdAt ?? token.created_at ?? '—')}</span><span>{String(token.complete ?? token.graduated ?? 'migrated')}</span></div>; })}{pumpfunMigrations.length === 0 && <div className="terminalDataRow" role="row"><strong>No migration rows</strong><span>{pumpfunMigrationStatus}</span><span>No migration feed loaded.</span><span>—</span></div>}</div></div>;
-}
-
-function WalletsPanel({ wallets, selectedWalletId, bundleWalletIds, tokenRows, onSelect, onToggleBundle, onOpenPositions }: { wallets: TerminalWallet[]; selectedWalletId: string; bundleWalletIds: string[]; tokenRows: BackendTokenRow[]; onSelect: (id: string) => void; onToggleBundle: (id: string) => void; onOpenPositions: () => void }) {
-  return <div className="terminalDataTable walletOpsTable selectableWalletTable" role="table" aria-label="Trading wallets"><div className="terminalDataRow terminalDataHead" role="row"><span>Bundle</span><span>Wallet</span><span>Role</span><span>SOL</span><span>Token holding</span><span>Project use</span><span>Actions</span></div>{wallets.map((wallet) => { const isSelected = selectedWalletId === wallet.id; const inBundle = bundleWalletIds.includes(wallet.id); const tokenRow = tokenRows.find((row) => row.id === wallet.id || row.address === wallet.address); return <div className={`terminalDataRow ${isSelected ? 'selectedWalletRow' : ''}`} role="row" key={wallet.id}><span><input type="checkbox" checked={inBundle} onChange={() => onToggleBundle(wallet.id)} aria-label={`Add ${wallet.role} to bundle`} /></span><strong>{compactAddress(wallet.address)}</strong><span>{wallet.role}</span><span>{wallet.balanceSol.toFixed(4)} SOL</span><span>{(tokenRow?.uiAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span><span>{wallet.purpose}</span><div className="terminalRowActions"><button type="button" onClick={() => onSelect(wallet.id)}>{isSelected ? 'Selected' : 'Select'}</button><button type="button" onClick={() => onToggleBundle(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><button type="button" onClick={onOpenPositions}>Open positions</button></div></div>; })}</div>;
-}
-
-
-function SignalsPanel({ freshRows, bundleRows, topTraders, holderRows, holderValuedRows, holderPnlRows, traderPnlRows, pumpfunRows, liquidityUsd, sourceFresh, sourceBundles }: { freshRows: Array<Record<string, unknown>>; bundleRows: Array<Record<string, unknown>>; topTraders: UiTopTrader[]; holderRows: UiHolderRow[]; holderValuedRows: number; holderPnlRows: number; traderPnlRows: number; pumpfunRows: string; liquidityUsd: unknown; sourceFresh: string; sourceBundles: string }) {
-  return <div className="signalsIntelSurface"><RowsTable head={['Signal', 'Value', 'Source']} rows={[[ 'Fresh/snipers', `${freshRows.length} rows`, sourceFresh ], [ 'Bundles', `${bundleRows.length} clusters`, sourceBundles ], [ 'Top traders', `${topTraders.length} rows`, 'Ranked wallets' ], [ 'Pump.fun trades', pumpfunRows, 'Pump.fun tape' ], [ 'Holder value coverage', `${holderValuedRows}/${holderRows.length}`, 'DexScreener price × holders' ], [ 'Holder PnL coverage', `${holderPnlRows}/${holderRows.length}`, 'holder wallet × trade tape' ], [ 'Trader PnL coverage', `${traderPnlRows}/${topTraders.length}`, 'top traders × current price' ], [ 'Liquidity', String(liquidityUsd ?? 'loading'), 'Pool index' ]]} /><div className="signalTablesGrid"><div><h4>Fresh / sniper wallets</h4><div className="terminalDataTable freshWalletIntelTable" role="table" aria-label="Fresh wallet classifier rows"><div className="terminalDataRow terminalDataHead" role="row"><span>Wallet</span><span>Fresh</span><span>Age</span><span>Txs</span><span>Buys/Sells</span><span>Net tokens</span><span>Funding</span><span>Hold</span><span>Tags</span></div>{freshRows.slice(0, 16).map((row, index) => { const wallet = String(row.wallet ?? ''); return <div className="terminalDataRow" role="row" key={`fresh-${wallet || index}`}><strong>{compactAddress(wallet)}</strong><span>{String(row.fresh ?? 'unknown')}</span><span>{typeof row.ageDays === 'number' ? `${row.ageDays}d` : '—'}</span><span>{String(row.txCountSampled ?? '—')}</span><span>{String(row.buys ?? 0)}/{String(row.sells ?? 0)}</span><span>{formatTokenAmount(typeof row.netTokens === 'number' ? row.netTokens : null)}</span><span>{row.fundingFrom ? compactAddress(String(row.fundingFrom)) : String(row.fundingSource ?? 'history')}</span><span>{typeof row.holdWindowHours === 'number' ? `${row.holdWindowHours}h` : '—'}</span><span>{Array.isArray(row.tags) ? row.tags.join(' · ') : String(row.reason ?? 'classified')}</span></div>; })}{freshRows.length === 0 && <div className="terminalDataRow" role="row"><strong>No fresh rows</strong><span>{sourceFresh}</span><span>Need trade tape wallets</span><span>—</span></div>}</div></div><div><h4>Bundle clusters</h4><div className="terminalDataTable bundleClusterIntelTable" role="table" aria-label="Bundle cluster rows"><div className="terminalDataRow terminalDataHead" role="row"><span>Cluster</span><span>Slot/time</span><span>Wallets</span><span>Txs</span><span>Amount</span><span>Suspicion</span><span>Signatures</span></div>{bundleRows.slice(0, 16).map((row, index) => <div className="terminalDataRow" role="row" key={`cluster-${String(row.key ?? index)}`}><strong>{String(row.key ?? `cluster ${index + 1}`)}</strong><span>{String(row.slot ?? row.timestamp ?? '—')}</span><span>{String(row.walletCount ?? '—')}</span><span>{String(row.transactionCount ?? '—')}</span><span>{formatTokenAmount(typeof row.tokenTransferAmount === 'number' ? row.tokenTransferAmount : null)}</span><span>{row.suspectedBundle ? 'suspected' : 'normal'}</span><span>{Array.isArray(row.signatures) && row.signatures[0] ? compactAddress(String(row.signatures[0])) : '—'}</span></div>)}{bundleRows.length === 0 && <div className="terminalDataRow" role="row"><strong>No clusters</strong><span>{sourceBundles}</span><span>No wallet-level clusters detected.</span><span>—</span></div>}</div></div></div></div>;
-}
-
-function BundlePanel({ wallets, bundleRows, execution, onPreflight, loading }: { wallets: TerminalWallet[]; bundleRows: Array<Record<string, unknown>>; execution?: string; onPreflight: () => void; loading: boolean }) {
-  const suspected = bundleRows.filter((row) => Boolean(row.suspectedBundle)).length;
-  return <div className="bundleTabSurface"><div className="terminalTabActionBar"><strong>Bundle preflight</strong><span>{execution ?? `${bundleRows.length} indexed clusters · ${suspected} suspected`}</span><button type="button" onClick={onPreflight} disabled={loading}>Preflight selected wallets</button></div><div className="bundlePreviewGrid tabBundleGrid">{wallets.map((wallet, index) => <div className="bundleWalletCard" key={wallet.id}><label><input type="checkbox" checked readOnly /> Wallet {index + 1}</label><strong>{compactAddress(wallet.address)}</strong><span>{wallet.role} · {wallet.balanceSol.toFixed(4)} SOL</span><small>Leg: Buy 0.01 SOL · signer required</small></div>)}{wallets.length === 0 && <div className="bundleWalletCard emptyBundleCard"><strong>No wallets selected</strong><span>Select wallets in the Wallets tab.</span></div>}</div><div className="terminalDataTable bundleIntelTable" role="table" aria-label="Indexed token bundle clusters"><div className="terminalDataRow terminalDataHead" role="row"><span>Cluster</span><span>Slot/time</span><span>Wallets</span><span>Txs</span><span>Token amount</span><span>Suspicion</span><span>First signatures</span></div>{bundleRows.slice(0, 24).map((row, index) => { const signatures = Array.isArray(row.signatures) ? row.signatures.map(String).slice(0, 2) : []; return <div className="terminalDataRow" role="row" key={`bundle-tab-${String(row.key ?? index)}`}><strong>{String(row.key ?? `cluster ${index + 1}`)}</strong><span>{String(row.slot ?? row.timestamp ?? '—')}</span><span>{String(row.walletCount ?? '—')}</span><span>{String(row.transactionCount ?? '—')}</span><span>{formatTokenAmount(typeof row.tokenTransferAmount === 'number' ? row.tokenTransferAmount : null)}</span><span>{row.suspectedBundle ? 'suspected bundle' : 'normal slot'}</span><span>{signatures.length ? signatures.map((signature) => <a href={`https://solscan.io/tx/${signature}`} target="_blank" rel="noreferrer" key={signature}>{compactAddress(signature)}</a>) : '—'}</span></div>; })}{bundleRows.length === 0 && <div className="terminalDataRow" role="row"><strong>No indexed clusters</strong><span>No bundle clusters detected</span><span>Load an active market for deeper grouping</span><span>—</span></div>}</div></div>;
-}
-
-function RowsTable({ head, rows }: { head: string[]; rows: string[][] }) {
-  return <div className="terminalDataTable tabRowsTable" role="table"><div className="terminalDataRow terminalDataHead" role="row">{head.map((cell) => <span key={cell}>{cell}</span>)}</div>{rows.map((row) => <div className="terminalDataRow" role="row" key={row.join('-')}>{row.map((cell, index) => index === 0 ? <strong key={`${cell}-${index}`}>{cell}</strong> : <span key={`${cell}-${index}`}>{cell}</span>)}</div>)}</div>;
+function InstantTradeTab({ activeMint, wallets, selectedWallet, selectedPosition, selectedWalletId, onSelectWallet, side, onSide, amount, onAmount, slippage, onSlippage, capabilities, quote, quoteStatus, onPreview }: { activeMint: string; wallets: TerminalWallet[]; selectedWallet: TerminalWallet | null; selectedPosition: PositionRow | null; selectedWalletId: string; onSelectWallet: (value: string) => void; side: 'Buy' | 'Sell'; onSide: (value: 'Buy' | 'Sell') => void; amount: string; onAmount: (value: string) => void; slippage: string; onSlippage: (value: string) => void; capabilities: ExecutionCapabilities | null; quote: QuotePayload | null; quoteStatus: string; onPreview: () => void }) {
+  const live = Boolean(capabilities?.liveTradingEnabled);
+  const routeLabels = quote?.quote?.routeLabels?.length ? quote.quote.routeLabels.join(' / ') : 'quote required';
+  return <div className="axiomIntelSurface instantTradeIntelSurface"><div className="axiomSafetyBanner"><strong>{live ? 'Live gate reports enabled — browser wallet still required' : 'Live execution disabled'}</strong><span>{capabilities?.disabledReason ?? 'Quote previews only. No signing, no swap build, no broadcast from this tab.'}</span></div><div className="instantTradeGrid"><label><span>Wallet</span><select value={selectedWalletId} onChange={(event) => onSelectWallet(event.target.value)}>{wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.role} · {compactAddress(wallet.address)}</option>)}</select></label><label><span>Side</span><select value={side} onChange={(event) => onSide(event.target.value as 'Buy' | 'Sell')}><option>Buy</option><option>Sell</option></select></label><label><span>Amount SOL</span><input value={amount} onChange={(event) => onAmount(event.target.value)} /></label><label><span>Slippage bps</span><input value={slippage} onChange={(event) => onSlippage(event.target.value)} /></label><button type="button" onClick={onPreview} disabled={!activeMint || quoteStatus === 'quoting'}>{quoteStatus === 'quoting' ? 'Quoting…' : 'Preview quote only'}</button></div><div className="axiomIntelChips"><Chip label="Mint" value={activeMint ? compactAddress(activeMint) : 'load token'} /><Chip label="Wallet" value={selectedWallet ? `${selectedWallet.role} · ${compactAddress(selectedWallet.address)}` : 'none'} /><Chip label="SOL bal" value={selectedWallet ? `${formatNumber(selectedWallet.balanceSol)} SOL` : '—'} /><Chip label="Token bal" value={selectedPosition ? formatNumber(selectedPosition.uiAmount) : '0'} /><Chip label="Token value" value={formatUsd(selectedPosition?.valueUsd)} /><Chip label="Balance src" value={selectedPosition?.status ?? (selectedWallet ? 'tracked-empty' : 'no-wallet')} /><Chip label="Signer" value={capabilities?.signer ?? 'browser-wallet required'} /><Chip label="Broadcaster" value={capabilities?.broadcaster ?? 'disabled until signed payload'} /><Chip label="Safety" value={quote?.safety ?? quoteStatus} tone={quote?.status === 'error' ? 'bad' : 'neutral'} /></div><DataTable head={['Quote field', 'Value', 'Source']} rows={quote ? [['Status', quote.status ?? quoteStatus, quote.execution ?? 'quote-preview'], ['Expected out', quote.quote?.outAmount ?? '—', 'Jupiter quote-only'], ['Impact', quote.quote?.priceImpactPct ?? '—', 'Jupiter quote-only'], ['Route', routeLabels, 'route plan'], ['Request', `${quote.request?.side ?? side} ${quote.request?.amount ?? amount}`, 'no transaction built here']] : []} empty={<EmptyState title="No quote yet" detail="Preview quote calls `/api/execution-quote` only. This tab does not sign, swap, or broadcast." />} /></div>;
 }

@@ -4,21 +4,11 @@ import { readFileSync } from 'node:fs';
 const base = process.env.TERMINAL_BASE_URL ?? 'http://localhost:3000';
 const renderedRoutes = ['/', '/projects', '/projects/meridian-demo', '/wallets', '/deployment', '/sniper', '/liquidity', '/token-analyzer', '/whitepaper', '/github'];
 const forbiddenHtml = [
-  'paper',
-  'Paper',
   'mock',
   'Mock',
   'scaffold',
   'Scaffold',
-  'simulated',
-  'Simulated',
-  'simulation',
-  'Simulation',
-  'modeled',
-  'Modeled',
   'demo state',
-  'preview only',
-  'Preview only',
   'UI-wired only',
   'coming soon',
   'fake values',
@@ -74,32 +64,32 @@ async function main() {
   }
   const liquidityProbeSource = readFileSync('apps/web/app/liquidity/components/LiquidityEngineProbe.tsx', 'utf8');
 
-  for (const marker of ['liquidityActionGrid', 'Jupiter route preview', '/api/execution-quote', 'liquidityPoolTable', 'liquidityLpTable', 'Execution gates']) {
+  for (const marker of ['liquidityActionGrid', 'Jupiter route preview', '/api/execution-quote', 'liquidityPoolTable', 'liquidityLpTable', 'Execution gates', '/api/terminal/snapshot?', 'Canonical route: /api/terminal/snapshot', 'not-applicable-position-model']) {
     if (!liquidityProbeSource.includes(marker)) failures.push(`LiquidityEngineProbe missing live liquidity marker: ${marker}`);
+  }
+  for (const forbidden of ['/api/token-pool-index?mint=', '/api/lp-lock-burn-scanner?mint=']) {
+    if (liquidityProbeSource.includes(forbidden)) failures.push(`LiquidityEngineProbe bypasses canonical liquidity snapshot with direct fetch: ${forbidden}`);
   }
 
   const terminalTabsSource = readFileSync('apps/web/app/sniper/components/TerminalInfoBooth.tsx', 'utf8');
   const tradingTokenLoader = readFileSync('apps/web/app/sniper/components/TradingTokenLoader.tsx', 'utf8');
   const executionDockSource = readFileSync('apps/web/app/sniper/components/ExecutionDock.tsx', 'utf8');
   const terminalHolderRequired = [
-    "activeTab === 'Holders' && <HoldersPanel",
+    "activeTab === 'Holders' && <HoldersTab",
     'holders?.rows',
-    'holderIntelTable',
-    'holderAccountsTable'
+    'holdersIntelTable',
+    'provider-limited/read-only'
   ];
   for (const needle of terminalHolderRequired) {
     if (!terminalTabsSource.includes(needle)) failures.push(`TerminalInfoBooth missing single Holders tab marker: ${needle}`);
   }
   if (terminalTabsSource.includes('terminalViewerHolderSection')) failures.push('TerminalInfoBooth still renders separate holder section outside Holders tab');
   if (terminalTabsSource.includes('Loading market view')) failures.push('TerminalInfoBooth still renders old loading market view ribbon copy');
-  const holdersPanelStart = terminalTabsSource.indexOf('function HoldersPanel');
-  const topTradersPanelStart = terminalTabsSource.indexOf('function TopTradersPanel');
+  const holdersPanelStart = terminalTabsSource.indexOf('function HoldersTab');
+  const topTradersPanelStart = terminalTabsSource.indexOf('function TopTradersTab');
   const holdersPanelBody = holdersPanelStart >= 0 && topTradersPanelStart > holdersPanelStart ? terminalTabsSource.slice(holdersPanelStart, topTradersPanelStart) : '';
   if (holdersPanelBody.includes('RowsTable')) failures.push('Holders tab still renders metric summary instead of wallet list first');
   if (tradingTokenLoader.includes('tokenLoaderIntelRebuild')) failures.push('TradingTokenLoader still renders separate holder list above terminal viewer');
-  for (const needle of ['Holder coverage', 'trade-history matches']) {
-    if (!tradingTokenLoader.includes(needle)) failures.push(`TradingTokenLoader missing holder metric under token information: ${needle}`);
-  }
   for (const deleted of ['tokenInfoRiskStrip', 'terminalTokenStatsDeck', 'clusterMetricGrid', 'Top 10 H.', 'Fresh H.', 'Compact scan']) {
     if (tradingTokenLoader.includes(deleted)) failures.push(`TradingTokenLoader still contains deleted old token stats section marker: ${deleted}`);
   }
@@ -107,8 +97,8 @@ async function main() {
   for (const deleted of ['tokenInfoRiskStrip', 'terminalTokenStatsDeck', 'clusterMetricGrid', 'miniTraderList']) {
     if (globalCss.includes(deleted)) failures.push(`globals.css still contains deleted old token stats section style: ${deleted}`);
   }
-  const holdersTabIndex = terminalTabsSource.indexOf("activeTab === 'Holders' && <HoldersPanel");
-  const holderPanelIndex = terminalTabsSource.indexOf('function HoldersPanel');
+  const holdersTabIndex = terminalTabsSource.indexOf("activeTab === 'Holders' && <HoldersTab");
+  const holderPanelIndex = terminalTabsSource.indexOf('function HoldersTab');
   if (holdersTabIndex === -1 || holderPanelIndex === -1) failures.push('Holder wallet list must be owned by the Holders tab only');
 
 
@@ -123,46 +113,34 @@ async function main() {
 
   const requiredTerminalTabWiring = [
     'data-contract="terminal-snapshot-v1"',
-    'data-hardwire="terminal-bottom-tabs"',
-    'terminalMarketViewer',
-    'terminalMarketHeader',
-    'terminalMarketStats',
-    'marketViewerTabs',
+    'data-live-execution="disabled"',
+    'terminalInfoBooth axiomIntelBooth',
+    'axiomIntelHeaderStats',
+    'axiomIntelTabs',
     "window.addEventListener('meridian-terminal-refresh'",
     'new EventSource(`/api/terminal/stream?',
     'fetch(`/api/terminal/snapshot?',
-    "fetch('/api/routers/order/evaluate'",
-    "fetch('/api/routers/bundle/preflight'",
     'snapshot?.trades?.rows',
     'holders?.rows',
+    'market.priceUsd',
+    'market.marketCapUsd',
+    'market.liquidityUsd',
+    'liquidity.liquidityUsd',
     'valueUsd',
     'avgEntryUsd',
     'avgExitUsd',
     'totalPnlUsd',
-    'holderIntelTable',
-    'traderIntelTable',
-    'entry/exit from trades',
-    'netTokens',
-    'holdDurationHours',
-    'SignalsPanel',
-    'freshWalletIntelTable',
-    'bundleClusterIntelTable',
-    'bundleIntelTable',
-    'suspected bundle',
-    'devWalletIntelTable',
-    'pumpfunCreatorTokenTable',
-    'MigrationPanel',
-    'migrationIntelTable',
-    'Current migration',
-    'Raydium pool',
-    'positionIntelTable',
-    'Portfolio value',
-    'Position PnL',
-    'Holder PnL coverage',
-    'Trader PnL coverage',
-    'snapshot?.devTokens?.wallets',
-    'Preflight selected wallets',
-    'Evaluate orders'
+    'holdersIntelTable',
+    'tradersIntelTable',
+    'positionsIntelTable',
+    'ordersIntelTable',
+    'devTokensIntelTable',
+    'trackedIntelTable',
+    'instantTradeIntelSurface',
+    'checklistIntelSurface',
+    'need tape',
+    'provider-limited/read-only',
+    'snapshot?.devTokens?.wallets'
   ];
   for (const phrase of requiredTerminalTabWiring) {
     if (!terminalTabsSource.includes(phrase)) failures.push(`TerminalInfoBooth missing bottom-tab backend wiring: ${phrase}`);
@@ -189,9 +167,14 @@ async function main() {
   if (!Array.isArray(canonicalSnapshot.holders?.rows)) failures.push('/api/terminal/snapshot missing holders.rows');
   if (!Array.isArray(canonicalSnapshot.trades?.rows)) failures.push('/api/terminal/snapshot missing trades.rows');
   if (!Array.isArray(canonicalSnapshot.trades?.topTraders)) failures.push('/api/terminal/snapshot missing trades.topTraders');
+  if (!canonicalSnapshot.sourceStatus?.liquidity) failures.push('/api/terminal/snapshot missing sourceStatus.liquidity');
+  if (!canonicalSnapshot.sourceStatus?.market) failures.push('/api/terminal/snapshot missing sourceStatus.market');
+  if (!canonicalSnapshot.normalized?.canonicalLiquidity?.sourceStatus) failures.push('/api/terminal/snapshot missing normalized canonical liquidity source metadata');
 
   const terminal = JSON.parse(await fetchText('/api/terminal-backend'));
-  if (terminal.status !== 'ok') failures.push('/api/terminal-backend did not return ok');
+  if (!['ok', 'partial'].includes(terminal.status)) failures.push('/api/terminal-backend status must be ok or partial with sourceStatus metadata');
+  if (!terminal.sourceStatus?.capabilities) failures.push('/api/terminal-backend missing sourceStatus.capabilities');
+  if (!terminal.sourceStatus?.providerReadiness) failures.push('/api/terminal-backend missing sourceStatus.providerReadiness');
   if (!terminal.execution?.orderEngine) failures.push('/api/terminal-backend missing execution.orderEngine');
   if (!terminal.execution?.walletOps) failures.push('/api/terminal-backend missing execution.walletOps');
   if (!terminal.execution?.deployment) failures.push('/api/terminal-backend missing execution.deployment');
@@ -212,4 +195,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

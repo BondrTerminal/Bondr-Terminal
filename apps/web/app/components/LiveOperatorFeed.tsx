@@ -140,7 +140,7 @@ export function LiveOperatorFeed({ initialFeed }: { initialFeed: OperatorFeedRes
     : strategy?.engineState ?? (risk.label === 'halt' ? 'halted' : (report?.totals.finalOpenOrderCount ?? 0) > 0 ? 'waiting-for-fills' : 'observing');
 
   return (
-    <section className="terminalBoard meridianBoard" aria-label="Meridian liquidity command system">
+    <section className="terminalBoard meridianBoard" aria-label="Bond.Terminal liquidity command system">
       <header className="terminalStatusBar">
         <div>
           <div className="terminalPair">{market.pair}</div>

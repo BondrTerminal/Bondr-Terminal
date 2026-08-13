@@ -1,13 +1,22 @@
 import { createHash } from 'node:crypto';
 import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
-import { getIntent, type TerminalIntent } from './live-store';
+type TerminalIntent = {
+  id: string;
+  expectedSigner: string;
+  expectedMint: string;
+  status: string;
+  expiresAt: string;
+  allowedPrograms: string[];
+  requiredAccounts: string[];
+  transactionMessageHash: string | null;
+};
 
 export const DEFAULT_ALLOWED_SWAP_PROGRAMS = [
   'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
   'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB',
   '11111111111111111111111111111111',
   'ComputeBudget111111111111111111111111111111',
-  'TokenkegQfeZyiNwAJbNbLqPFXCWuBvf9Ss623VQ5DA',
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
   'TokenzQdBNbLqP5VEhdkAS6EP1rH4D9Lr6VY7UG6w',
   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 ];
@@ -18,6 +27,7 @@ export type DecodedTransactionPolicy = {
   accountKeys: string[];
   programs: string[];
   messageHash: string;
+  usesAddressLookupTables?: boolean;
 };
 
 export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
@@ -30,7 +40,8 @@ export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
       signerKeys: tx.message.staticAccountKeys.slice(0, tx.signatures.length).map((key) => key.toBase58()),
       accountKeys,
       programs,
-      messageHash: createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex')
+      messageHash: createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex'),
+      usesAddressLookupTables: 'addressTableLookups' in tx.message && Array.isArray(tx.message.addressTableLookups) && tx.message.addressTableLookups.length > 0
     };
   } catch {
     const tx = Transaction.from(raw);
@@ -61,7 +72,7 @@ export function policyCheck(params: {
   requiredAccounts?: string[] | null;
   transactionMessageHash?: string | null;
 }) {
-  const intent = params.intentId && !params.intent ? getIntent(params.intentId) : params.intent ?? null;
+  const intent = params.intent ?? null;
   const expectedSigner = params.expectedSigner ?? intent?.expectedSigner ?? null;
   const expectedMint = params.expectedMint ?? intent?.expectedMint ?? null;
   const allowedPrograms = params.allowedPrograms ?? intent?.allowedPrograms ?? DEFAULT_ALLOWED_SWAP_PROGRAMS;
@@ -84,6 +95,7 @@ export function policyCheck(params: {
   for (const account of requiredAccounts) if (!params.decoded.accountKeys.includes(account)) blockers.push(`Required account missing: ${account}`);
   for (const program of params.decoded.programs) if (!allowedPrograms.includes(program)) blockers.push(`Program not allowed by intent policy: ${program}`);
   if (messageHash && params.decoded.messageHash !== messageHash) blockers.push('Transaction message hash does not match intent.');
+  if (params.decoded.usesAddressLookupTables) blockers.push('Address lookup table resolution required before broadcast policy can pass.');
 
   return {
     intent,

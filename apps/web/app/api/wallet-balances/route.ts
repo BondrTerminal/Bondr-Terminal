@@ -1,4 +1,4 @@
-import { getMeridianStore } from '../../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { hydrateWalletBalances } from '../../../lib/chain-hydration';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const group = searchParams.get('group')?.trim();
   const includeArchived = searchParams.get('includeArchived') === 'true';
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const wallets = store.wallets.filter((wallet) => (!group || wallet.groupId === group) && (includeArchived || !wallet.archived));
   const hydrated = await hydrateWalletBalances(wallets);
 

@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { getMeridianStore } from '../../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
+import { isProviderLimitedError, providerLimitedNote } from '../../../lib/provider-truth';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,9 +55,27 @@ export async function GET(request: Request) {
   }
 
   const rpc = configuredSolanaRpc();
-  const connection = new Connection(rpc.url, 'confirmed');
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const wallets = store.wallets.filter((wallet) => (!group || wallet.groupId === group) && (includeArchived || !wallet.archived));
+
+  if (!rpc.configured) {
+    return Response.json({
+      status: 'ok',
+      observedAt: new Date().toISOString(),
+      mint: mint.toBase58(),
+      provider: rpc.provider,
+      confidence: 'low',
+      historyCoverage: 'modeled',
+      missingProviders: ['dedicated-solana-rpc'],
+      note: 'Dedicated Solana RPC is not configured; SPL token balances are unavailable, not zero.',
+      configured: false,
+      wallets: wallets.map((wallet) => ({ id: wallet.id, wallet: wallet.address, role: wallet.role, address: wallet.address, groupId: wallet.groupId, scope: wallet.scope, mint: mint.toBase58(), tokenAccounts: [], tokenAccountCount: 0, uiAmount: null, uiAmountString: 'unavailable', source: 'unavailable', status: 'unavailable', balanceStatus: 'unavailable', note: 'Set SOLANA_RPC_URL, HELIUS_RPC_URL, QUICKNODE_RPC_URL, or TRITON_RPC_URL for live token holdings.' })),
+      totals: { walletCount: wallets.length, tokenAccountCount: 0, uiAmount: null },
+      execution: 'read-only-modeled-no-dedicated-rpc'
+    });
+  }
+
+  const connection = new Connection(rpc.url, 'confirmed');
 
   const indexed = await Promise.all(wallets.map(async (wallet) => {
     try {
@@ -69,29 +88,37 @@ export async function GET(request: Request) {
       const uiAmount = accounts.reduce((sum, account) => sum + (account.uiAmount ?? (Number(account.uiAmountString) || 0)), 0);
       return {
         id: wallet.id,
+        wallet: wallet.address,
         role: wallet.role,
         address: wallet.address,
         groupId: wallet.groupId,
         scope: wallet.scope,
+        mint: mint.toBase58(),
         tokenAccounts: accounts,
         tokenAccountCount: accounts.length,
         uiAmount,
         uiAmountString: String(uiAmount),
-        status: 'ok'
+        source: 'solana-rpc-getParsedTokenAccountsByOwner',
+        status: 'ok',
+        balanceStatus: accounts.length ? 'live-token-account' : 'live-zero-balance'
       };
     } catch (error) {
       return {
         id: wallet.id,
+        wallet: wallet.address,
         role: wallet.role,
         address: wallet.address,
         groupId: wallet.groupId,
         scope: wallet.scope,
+        mint: mint.toBase58(),
         tokenAccounts: [],
         tokenAccountCount: 0,
-        uiAmount: 0,
-        uiAmountString: '0',
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Token balance read failed.'
+        uiAmount: null,
+        uiAmountString: 'provider-limited',
+        source: 'solana-rpc-getParsedTokenAccountsByOwner',
+        status: isProviderLimitedError(error) ? 'provider-limited' : 'unavailable',
+        balanceStatus: isProviderLimitedError(error) ? 'provider-limited' : 'unavailable',
+        error: isProviderLimitedError(error) ? providerLimitedNote(error, 'token balance read') : error instanceof Error ? error.message : 'Token balance read failed.'
       };
     }
   }));
@@ -110,7 +137,7 @@ export async function GET(request: Request) {
     totals: {
       walletCount: indexed.length,
       tokenAccountCount: indexed.reduce((sum, wallet) => sum + wallet.tokenAccountCount, 0),
-      uiAmount: indexed.reduce((sum, wallet) => sum + wallet.uiAmount, 0)
+      uiAmount: indexed.every((wallet) => wallet.uiAmount === null) ? null : indexed.reduce((sum, wallet) => sum + (wallet.uiAmount ?? 0), 0)
     },
     execution: 'live-index-read'
   });

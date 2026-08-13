@@ -1,76 +1,10 @@
-import { meridianObligationMatrix } from '../lib/obligation-matrix';
-
 const modules = [
-  {
-    href: '/liquidity',
-    label: 'Flagship module',
-    title: 'Autonomous Liquidity Engine',
-    body: 'Live-wired cockpit for observed capital, exposure, inventory drift, wallet flow, quote cadence, risk, and engine state.',
-    state: 'Live operations'
-  },
-  {
-    href: '/sniper',
-    label: 'Trading module',
-    title: 'Trading Terminal',
-    body: 'Read-only terminal for token context, wallet selection, route previews, holdings context, and disabled action surfaces.',
-    state: 'Obligation: analyze, not trade' 
-  },
-  {
-    href: '/token-analyzer',
-    label: 'Analysis module',
-    title: 'Token Analyzer',
-    body: 'Dedicated token scan workspace for pair/liquidity graphing, supply/authority checks, holder-risk labels, transaction feed, and parser-pending rows.',
-    state: 'Obligation: label source truth' 
-  },
-  {
-    href: '/deployment',
-    label: 'Launch module',
-    title: 'Token Deployment Hub',
-    body: 'Read-only launch workspace that stores metadata, launch path, funding plan, wallet readiness, liquidity policy, and blocked execution gates.',
-    state: 'Obligation: preflight only'
-  },
-  {
-    href: '/projects',
-    label: 'Management module',
-    title: 'Project Management',
-    body: 'Data-backed workspace for project objects, pending launches, deployed tokens, CTO states, readiness, next actions, and cockpit links.',
-    state: 'Obligation: coordinate state'
-  },
-  {
-    href: '/project-dashboard',
-    label: 'Accounting module',
-    title: 'Project Dashboard',
-    body: 'Read-only accounting dashboard for today/30-day net SOL flow. Tracks sells minus buys and explicitly excludes tokens still held.',
-    state: 'Obligation: account, not execute'
-  },
-  {
-    href: '/wallets',
-    label: 'Operator module',
-    title: 'Wallet Operations',
-    body: 'Live wallet dashboard with groups, live balance labels, readiness, funding/collection gates, and wallet-ops engine status.',
-    state: 'Obligation: inspect wallets'
-  }
-];
-
-const infoLinks = [
-  { href: '/whitebackend-wired', label: 'Technical Brief', detail: 'Product thesis, module roadmap, and safety doctrine.' },
-  { href: '/github', label: 'GitHub', detail: 'Repository/status surface for code, issues, releases, and docs.' },
-  { href: '/profile', label: 'Profile', detail: 'Read-only Turnkey identity surface. Signing disabled.' }
-];
-
-const socialLinks = [
-  { label: 'X / Twitter', href: '#', detail: 'external link not configured' },
-  { label: 'Discord', href: '#', detail: 'external link not configured' },
-  { label: 'Telegram', href: '#', detail: 'external link not configured' },
-  { label: 'Docs', href: '/whitebackend-wired', detail: 'local' }
-];
-
-
-const disclosures = [
-  'Meridian is now a backend-wired Solana command hub. The product obligation is live data, explicit gates, and browser-wallet signed execution paths.',
-  'Each section must show its backend route, live data source, and execution gate state.',
-  'Live execution, swaps, sends, wallet creation, funding, token deployment, LP actions, private-key flows, and signing remain disabled.',
-  'Funded execution stays behind server live gates, wallet signatures, risk caps, confirmation paths, and audit logs.'
+  { href: '/projects', label: 'Projects', title: 'Project Dashboard', body: 'Create real project records, inspect stored launch state, and route into Deployment, Terminal, Wallets, and Portfolio.', state: 'Real records only' },
+  { href: '/deployment', label: 'Deployment', title: 'Launch Configuration', body: 'Configure metadata, launch path, and wallet roles. Deployment execution, funding, signing, and broadcast are disabled.', state: 'Configure only' },
+  { href: '/sniper', label: 'Terminal', title: 'Trading Terminal', body: 'Token context, active wallet, quote, unsigned transaction build, simulation, and browser-wallet signing eligibility.', state: 'Simulation first' },
+  { href: '/wallets', label: 'Wallets', title: 'Wallet Ops', body: 'Connect a browser wallet, set the active wallet, and save public watch-only addresses for matching and balance reads.', state: 'Browser wallet signs' },
+  { href: '/portfolio', label: 'Portfolio', title: 'Portfolio', body: 'Read provider-backed wallet balances, holdings, stored flow events, and PnL when data is available.', state: 'Read-only accounting' },
+  { href: '/liquidity', label: 'Liquidity', title: 'Liquidity Probe', body: 'Inspect token pool, route, liquidity, price, and quote context. LP actions remain disabled.', state: 'Read-only probe' }
 ];
 
 export const dynamic = 'force-dynamic';
@@ -78,45 +12,31 @@ export const dynamic = 'force-dynamic';
 export default function Home() {
   return (
     <main>
-      <div className="mainWebsiteShell">
+      <div className="mainWebsiteShell cleanProductShell">
         <section className="mainHero">
           <div className="heroCopy">
-            <div className="eyebrow">Meridian</div>
-            <h1>Solana command hub for liquidity, trading, and operator workflows.</h1>
-            <p>
-              Meridian is being built as a premium operating layer for developers and project operators:
-              autonomous liquidity first, then coordinated project management, deployment prep, trading intelligence, accounting, and wallet operations.
-            </p>
+            <div className="eyebrow">BONDR</div>
+            <h1>Solana launch operating system.</h1>
+            <p>One active-wallet model across Projects, Wallet Ops, Terminal, Deployment, Portfolio, and Liquidity. A-profile supports simulation-gated browser-wallet signing only; broadcast, deployment execution, funding, claims, and payouts stay disabled.</p>
             <div className="heroActions">
-              <a className="button" href="/liquidity">Open Liquidity Engine</a>
-              <a className="button secondary" href="/whitebackend-wired">Read Technical Brief</a>
-              <a className="button secondary" href="/github">GitHub</a>
+              <a className="button" href="/wallets">Connect Wallet</a>
+              <a className="button secondary" href="/sniper">Open Terminal</a>
+              <a className="button secondary" href="/deployment">Configure Deployment</a>
             </div>
           </div>
-          <div className="heroSignalCard" aria-label="Meridian current product status">
-            <span>Current focus</span>
-            <strong>Autonomous Liquidity Engine</strong>
-            <p>Live scalping / market-making cockpit with capital, exposure, inventory, risk, wallet flow, and engine state.</p>
+          <div className="heroSignalCard" aria-label="BONDR current product status">
+            <span>A-profile</span>
+            <strong>Simulation-gated signing</strong>
+            <p>Browser wallet signs only after quote, unsigned build, and simulation. Broadcast and deployment execution are separate gates and are off.</p>
             <div className="signalRows">
-              <div><span>Status</span><strong>Live wired</strong></div>
-              <div><span>Execution</span><strong>Live gated</strong></div>
-              <div><span>Live funds</span><strong>Disabled</strong></div>
+              <div><span>Wallet</span><strong>Browser signer</strong></div>
+              <div><span>Terminal</span><strong>Quote/build/simulate</strong></div>
+              <div><span>Broadcast</span><strong>Disabled</strong></div>
             </div>
           </div>
         </section>
 
-        <section className="websiteSection">
-          <div className="sectionIntro">
-            <span>What Meridian is</span>
-            <h2>A hub, not a single dashboard.</h2>
-            <p>
-              Meridian houses multiple Solana operator tools around a shared project object. The flagship product remains the automated
-              market-maker/scalper, while Projects, Deployment, Wallet Ops, Sniper, and Project Dashboard now coordinate as supporting surfaces.
-            </p>
-          </div>
-        </section>
-
-        <section className="moduleGrid websiteModules" aria-label="Meridian modules">
+        <section className="moduleGrid websiteModules" aria-label="BONDR modules">
           {modules.map((module) => (
             <a className="moduleCard" href={module.href} key={module.href}>
               <span>{module.label}</span>
@@ -127,71 +47,15 @@ export default function Home() {
           ))}
         </section>
 
-
         <section className="websiteSection">
           <div className="sectionIntro">
-            <span>Read-only obligation matrix</span>
-            <h2>What each section is responsible for right now.</h2>
-            <p>
-              This is Meridian’s current contract: every module must be honest about whether it is reading live chain data,
-              showing backend route state, live indexer data, wallet-signing requirements, or execution gates.
-            </p>
+            <span>Safety contract</span>
+            <h2>Real data only. No hidden execution.</h2>
+            <p>Empty project and wallet states are intentional. If a provider is limited, BONDR says provider-limited instead of showing invented balances or seeded rows.</p>
           </div>
-          <div className="projectTable" role="table" aria-label="Meridian read-only obligation matrix">
-            <div className="projectRow whitebackend-wiredMatrixRow projectHead" role="row">
-              <span>Section</span><span>Current obligation</span><span>Source of truth</span><span>Blocked / not implied</span>
-            </div>
-            {meridianObligationMatrix.map((row) => (
-              <div className="projectRow whitebackend-wiredMatrixRow" role="row" key={row.section}>
-                <strong>{row.section}</strong>
-                <span>{row.obligation}</span>
-                <em>{row.source}</em>
-                <small>{row.blocked}</small>
-              </div>
-            ))}
+          <div className="disclosureList">
+            {['No server custody or private-key requests.', 'No live swaps, sends, funding, deployment execution, LP actions, claims, payouts, or broadcast in A-profile.', 'Signing eligibility requires a connected browser signer that matches the selected wallet and a successful simulation first.'].map((item) => <p key={item}>{item}</p>)}
           </div>
-        </section>
-
-        <section className="websiteSplit">
-          <div className="documentCard websiteInfoCard">
-            <div className="sectionIntro compactIntro">
-              <span>Information</span>
-              <h2>Project links</h2>
-            </div>
-            <div className="linkStack">
-              {infoLinks.map((link) => (
-                <a href={link.href} key={link.href}>
-                  <strong>{link.label}</strong>
-                  <span>{link.detail}</span>
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div className="documentCard websiteInfoCard">
-            <div className="sectionIntro compactIntro">
-              <span>Community</span>
-              <h2>Community links</h2>
-            </div>
-            <div className="socialGrid">
-              {socialLinks.map((link) => (
-                <a href={link.href} key={link.label} aria-disabled={link.href === '#'}>
-                  <strong>{link.label}</strong>
-                  <span>{link.detail}</span>
-                </a>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="disclosurePanel" aria-label="Product disclosure">
-          <div>
-            <span>Disclosure</span>
-            <h2>Development-stage product.</h2>
-          </div>
-          <ul>
-            {disclosures.map((item) => <li key={item}>{item}</li>)}
-          </ul>
         </section>
       </div>
     </main>

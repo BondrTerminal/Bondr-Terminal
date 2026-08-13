@@ -1,6 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 import { mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../lib/mutation-safety';
 import { appendOrderLifecycle, createTerminalOrder, listTerminalOrders, updateTerminalOrder, type TerminalOrder, type TerminalOrderKind, type TerminalOrderSide, type TerminalOrderStatus } from '../../../lib/terminal-order-store';
+import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,8 +46,11 @@ function parseAmount(value: unknown) {
 }
 function parseSlippage(value: unknown) {
   const n = Number(value ?? 100);
-  if (!Number.isFinite(n) || n <= 0) return 100;
-  return Math.min(Math.round(n), MAX_SLIPPAGE_BPS);
+  if (!Number.isFinite(n)) return 100;
+  const rounded = Math.round(n);
+  if (rounded <= 0) throw new Error('Order slippage must be at least 1 bps.');
+  if (rounded > MAX_SLIPPAGE_BPS) throw new Error(`Order slippage ${rounded} bps exceeds LIVE_MAX_SLIPPAGE_BPS (${MAX_SLIPPAGE_BPS}).`);
+  return rounded;
 }
 function triggerDirection(kind: TerminalOrderKind, side: TerminalOrderSide): 'above' | 'below' | null {
   if (kind === 'market') return null;
@@ -98,6 +102,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authBlocked = await meridianAuthRequiredResponse(request);
+  if (authBlocked) return authBlocked;
   const { origin } = new URL(request.url);
   const requestOrigin = sameOriginAllowed(request);
   if (!requestOrigin.allowed) return mutationBlockedResponse(requestOrigin.note);

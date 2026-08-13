@@ -80,6 +80,15 @@ export type TerminalHolderAccount = {
 };
 
 export type TerminalHoldersSnapshot = {
+  requestedLimit?: number;
+  returnedRows?: number;
+  walletCountReturned?: number;
+  walletLimit?: number;
+  isTruncated?: boolean;
+  nextCursor?: string | null;
+  paginationStatus?: string;
+  coverageLabel?: string;
+  providerLimitSuspected?: boolean;
   tokenAccountCount?: number | null;
   nonZeroTokenAccounts?: number | null;
   uniqueOwnerCount?: number | null;
@@ -90,6 +99,25 @@ export type TerminalHoldersSnapshot = {
   rows?: TerminalHolderAccount[];
 };
 
+export type TerminalWalletTokenBalanceRow = {
+  id?: string | null;
+  wallet?: string | null;
+  address?: string | null;
+  role?: string | null;
+  groupId?: string | null;
+  scope?: string | null;
+  tokenAccount?: string | null;
+  tokenAccounts?: Array<Record<string, unknown>>;
+  tokenAccountCount?: number;
+  rawAmount?: string;
+  uiAmount: number;
+  uiAmountString?: string;
+  valueUsd?: number | null;
+  source?: string | string[];
+  status?: string;
+  balanceStatus?: string;
+  note?: string | null;
+};
 
 export type TerminalPositionRow = {
   wallet: string;
@@ -102,12 +130,46 @@ export type TerminalPositionRow = {
   unrealizedPnlUsd: number | null;
   totalPnlUsd: number | null;
   txCount: number | null;
+  firstSeenAt?: string | null;
+  entryAt?: string | null;
+  exitAt?: string | null;
   lastSeenAt: string | null;
+  pnlStatus?: string | null;
+  dataSources?: string[];
   source: string[];
   status: string;
 };
 
-export type TerminalTokenSnapshot = {
+
+export type TerminalSectionSource = {
+  status?: string;
+  source?: string | null;
+  observedAt?: string | null;
+  latencyMs?: number | null;
+  coverageLabel?: string | null;
+  isTruncated?: boolean;
+  blockers?: string[];
+  nextCredentialNeeded?: string | null;
+};
+
+export type CanonicalTerminalSnapshotSections = {
+  tokenIdentity?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  pairIdentity?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  market?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  chart?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  tradeTape?: Record<string, unknown>;
+  holderCoverage?: TerminalSectionSource & { walletCountReturned?: number; walletLimit?: number; nextCursor?: string | null; paginationStatus?: string | null };
+  security?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  liquidity?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  migration?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  wallets?: Record<string, unknown>;
+  paperTrading?: Record<string, unknown>;
+  discovery?: Record<string, unknown> & { sourceStatus?: TerminalSectionSource };
+  providerHealth?: Record<string, unknown> | null;
+  sourceStatus?: Record<string, TerminalSectionSource>;
+};
+
+export type TerminalTokenSnapshot = CanonicalTerminalSnapshotSections & {
   status: string;
   observedAt: string;
   mint: string;
@@ -129,4 +191,28 @@ export type TerminalTokenSnapshot = {
   orders?: Record<string, unknown> | null;
   positions?: { rows?: TerminalPositionRow[]; summary?: Record<string, unknown> | null; source?: string };
   execution?: string;
+};
+
+
+export type TokenWalletPosition = {
+  wallet: string;
+  tokenAccount?: string | null;
+  tokenBalance: number;
+  pctSupply?: number | null;
+  valueUsd?: number | null;
+  solBalance?: number | null;
+  boughtTokens?: number | null;
+  soldTokens?: number | null;
+  netTokens?: number | null;
+  avgEntryUsd?: number | null;
+  avgExitUsd?: number | null;
+  realizedPnlUsd?: number | null;
+  unrealizedPnlUsd?: number | null;
+  totalPnlUsd?: number | null;
+  txCount?: number | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+  source: string[];
+  status: string;
+  tags?: string[];
 };

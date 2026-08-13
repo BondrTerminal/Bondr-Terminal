@@ -9,6 +9,7 @@ type TerminalWallet = {
   scope: string;
   balanceSol: number;
   purpose: string;
+  balanceStatus?: string;
 };
 
 type TerminalBackend = {
@@ -16,6 +17,12 @@ type TerminalBackend = {
   wallets?: { totalSol?: number; liveBalanceCount?: number; count?: number; rows?: Array<{ id: string; address: string; role: string; solBalance: number; purpose: string; balanceStatus: string }> };
   bundle?: { selectedWalletCount?: number; solAvailable?: number; engineStatus?: string };
 };
+
+function walletSolDisplay(wallet?: TerminalWallet | null) {
+  if (!wallet) return '—';
+  if (wallet.balanceStatus && wallet.balanceStatus !== 'live') return wallet.balanceStatus === 'unavailable' ? 'provider-limited' : wallet.balanceStatus;
+  return `${wallet.balanceSol.toFixed(4)} SOL`;
+}
 
 export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) {
   const [selectedWalletId, setSelectedWalletId] = useState(wallets[0]?.id ?? '');
@@ -32,7 +39,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
   }, []);
 
   const renderedWallets = backend?.wallets?.rows?.length
-    ? backend.wallets.rows.map((wallet) => ({ id: wallet.id, address: wallet.address, role: wallet.role, scope: 'global', balanceSol: wallet.solBalance, purpose: wallet.purpose })) as TerminalWallet[]
+    ? backend.wallets.rows.map((wallet) => ({ id: wallet.id, address: wallet.address, role: wallet.role, scope: 'global', balanceSol: wallet.solBalance, purpose: wallet.purpose, balanceStatus: wallet.balanceStatus })) as TerminalWallet[]
     : wallets;
   const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0];
   const bundleWallets = useMemo(() => renderedWallets.filter((wallet) => bundleWalletIds.includes(wallet.id)), [renderedWallets, bundleWalletIds]);
@@ -46,7 +53,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
   return (
     <>
       <section className="premiumControlStrip walletSelectionStrip interactiveWalletStrip">
-        <div><span>Selected wallet</span><strong>{selectedWallet ? selectedWallet.role : 'Not selected'}</strong><small>{selectedWallet ? `${selectedWallet.address.slice(0, 8)}…${selectedWallet.address.slice(-6)} · ${selectedWallet.balanceSol.toFixed(4)} SOL` : 'Pick a wallet from the desk.'}</small></div>
+        <div><span>Selected wallet</span><strong>{selectedWallet ? selectedWallet.role : 'Not selected'}</strong><small>{selectedWallet ? `${selectedWallet.address.slice(0, 8)}…${selectedWallet.address.slice(-6)} · ${walletSolDisplay(selectedWallet)}` : 'Pick a wallet from the desk.'}</small></div>
         <div><span>Multi-select bundle</span><strong>{backend?.bundle?.selectedWalletCount ?? bundleWallets.length} wallet{(backend?.bundle?.selectedWalletCount ?? bundleWallets.length) === 1 ? '' : 's'}</strong><small>{bundleSolAvailable.toFixed(4)} SOL available across selected wallets.</small></div>
         <div><span>Bundle mode</span><strong>{bundleEngineStatus}</strong><small>Multi-wallet readiness.</small></div>
         <div><span>Execution guard</span><strong>{backend?.execution?.liveTradingEnabled ? 'Live enabled' : 'Live gated'}</strong><small>Route builder + browser-wallet signer required.</small></div>
@@ -59,7 +66,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
             <div className="bundleWalletCard" key={wallet.id}>
               <label><input type="checkbox" checked readOnly /> Wallet {index + 1}</label>
               <strong>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</strong>
-              <span>{wallet.role} · {wallet.balanceSol.toFixed(4)} SOL</span>
+              <span>{wallet.role} · {walletSolDisplay(wallet)}</span>
               <small>{bundleEngineStatus}</small>
             </div>
           ))}
@@ -80,8 +87,8 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
                 <span><input type="checkbox" checked={inBundle} onChange={() => toggleBundleWallet(wallet.id)} aria-label={`Add ${wallet.role} to bundle`} /></span>
                 <strong>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</strong>
                 <span>{wallet.role}</span>
-                <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                <span>{backendRow?.balanceStatus ?? 'checking'}</span>
+                <span>{walletSolDisplay({ ...wallet, balanceStatus: backendRow?.balanceStatus ?? wallet.balanceStatus })}</span>
+                <span>{(backendRow?.balanceStatus ?? wallet.balanceStatus ?? 'checking').replace('unavailable', 'provider-limited')}</span>
                 <span>{wallet.purpose}</span>
                 <div className="terminalRowActions"><button type="button" onClick={() => setSelectedWalletId(wallet.id)}>{isSelected ? 'Selected' : 'Select'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><a href="/wallets">Wallet ops</a><a href="/sniper">Trade</a></div>
               </div>

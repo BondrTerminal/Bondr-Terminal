@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { getMeridianStore } from '../../../lib/meridian-store';
+import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { getHeliusApiKey, configuredSolanaRpc } from '../../../lib/solana-rpc';
 
 export const dynamic = 'force-dynamic';
@@ -79,13 +79,13 @@ export async function GET(request: Request) {
   const wallet = searchParams.get('wallet')?.trim();
   const group = searchParams.get('group')?.trim();
   const limit = Number(searchParams.get('limit') ?? '50');
-  const store = getMeridianStore();
+  const store = await getMeridianWalletStore();
   const addresses = wallet
     ? [wallet]
     : store.wallets.filter((item) => !group || item.groupId === group).map((item) => item.address);
 
   const valid = addresses.filter((address) => ADDRESS_RE.test(address));
-  if (!valid.length) return Response.json({ error: 'Pass a valid wallet address or use stored Meridian wallets.' }, { status: 400 });
+  if (!valid.length) return Response.json({ error: 'Pass a valid wallet address or use stored Bond.Terminal wallets.' }, { status: 400 });
 
   const rows = await Promise.all(valid.slice(0, 25).map(async (address) => {
     const helius = await heliusHistory(address, limit).catch((error) => ({ status: 'unavailable', note: error instanceof Error ? error.message : 'Helius unavailable.', rows: [] as unknown[] }));

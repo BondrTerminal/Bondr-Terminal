@@ -1,6 +1,7 @@
 import { getHeliusApiKey } from '../../../lib/solana-rpc';
 import { normalizePumpTrade, pumpfunFetch } from '../../../lib/indexers/pumpfun';
 import { sameMint, sortMainLiquidityPairs } from '../../../lib/dex-pair-priority';
+import { arrayFromUnknown, getSolanaTrackerTrades, numberFrom as trackerNumberFrom, objectRecord as trackerObjectRecord } from '../../../lib/solana-tracker';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -34,8 +35,8 @@ type IndexedTrade = {
   priceUsd: number | null;
   volumeUsd: number | null;
   txHash: string | null;
-  source: 'geckoterminal' | 'birdeye' | 'helius' | 'solscan' | 'pumpfun';
-  provider: 'geckoterminal' | 'birdeye' | 'helius' | 'solscan' | 'pumpfun';
+  source: 'solanatracker' | 'geckoterminal' | 'birdeye' | 'helius' | 'solscan' | 'pumpfun';
+  provider: 'solanatracker' | 'geckoterminal' | 'birdeye' | 'helius' | 'solscan' | 'pumpfun';
   confidence: TradeConfidence;
   attributionStatus: TradeAttributionStatus;
 };
@@ -206,7 +207,7 @@ function withTradeMeta<T extends Omit<IndexedTrade, 'provider' | 'confidence' | 
       ? 'transfer-inferred'
       : provider === 'geckoterminal' && wallet
         ? 'pool-sender-only'
-        : provider === 'pumpfun' && wallet
+        : (provider === 'pumpfun' || provider === 'solanatracker') && wallet
           ? 'wallet-attributed'
           : 'unattributed';
   const confidence: TradeConfidence = attributionStatus === 'wallet-attributed' && trade.priceUsd !== null
@@ -223,6 +224,34 @@ async function findBestDexPair(mint: string): Promise<DexPair | null> {
   const payload = await response.json() as { pairs?: DexPair[] };
   const pairs = (payload.pairs ?? []).filter((pair) => pair.chainId === 'solana' && pair.pairAddress && (sameMint(pair.baseToken?.address, mint) || sameMint(pair.quoteToken?.address, mint)));
   return sortMainLiquidityPairs(pairs, mint)[0] ?? null;
+}
+
+async function fetchSolanaTrackerTradeRows(mint: string, limit: number): Promise<ProviderResult<IndexedTrade>> {
+  return timedProvider(async () => {
+    const result = await getSolanaTrackerTrades(mint, Math.min(Math.max(limit, 1), 100));
+    if (result.status === 'not-configured') return { rows: [], status: 'not-configured', note: result.note ?? 'Solana Tracker not configured.' };
+    if (result.status === 'rate-limited') return { rows: [], status: 'rate-limited', note: result.note ?? 'Solana Tracker rate limited trade request.' };
+    if (result.status !== 'ok') return { rows: [], status: 'unavailable', note: result.note ?? `Solana Tracker ${result.status}.` };
+    const rows = arrayFromUnknown(result.data).map((raw): IndexedTrade => {
+      const row = trackerObjectRecord(raw);
+      const token = trackerObjectRecord(row.token);
+      const tx = trackerObjectRecord(row.transaction ?? row.tx);
+      const amount = trackerNumberFrom(row.amount, row.tokenAmount, row.token_amount, row.baseAmount, row.tokens, token.amount);
+      const priceUsd = trackerNumberFrom(row.priceUsd, row.price_usd, row.price, row.tokenPrice, token.priceUsd, token.price);
+      const volumeUsd = trackerNumberFrom(row.volumeUsd, row.volume_usd, row.valueUsd, row.usdValue, row.amountUsd, row.totalUsd, row.volume, row.usd, token.volumeUsd);
+      return withTradeMeta({
+        timestamp: typeof row.time === 'number' ? new Date(row.time * 1000).toISOString() : typeof row.timestamp === 'number' ? new Date(row.timestamp * 1000).toISOString() : typeof row.date === 'string' ? row.date : typeof row.timestamp === 'string' ? row.timestamp : null,
+        side: normalizeSide(String(row.side ?? row.type ?? row.event ?? row.action ?? '')),
+        wallet: typeof row.wallet === 'string' ? row.wallet : typeof row.owner === 'string' ? row.owner : typeof row.signer === 'string' ? row.signer : typeof tx.signer === 'string' ? tx.signer : null,
+        amount,
+        priceUsd,
+        volumeUsd: volumeUsd ?? (amount !== null && priceUsd !== null ? Math.abs(amount * priceUsd) : null),
+        txHash: typeof row.tx === 'string' ? row.tx : typeof row.txHash === 'string' ? row.txHash : typeof row.signature === 'string' ? row.signature : typeof tx.signature === 'string' ? tx.signature : null,
+        source: 'solanatracker'
+      });
+    }).filter((trade) => trade.wallet || trade.txHash).slice(0, Math.min(Math.max(limit, 1), 100));
+    return { rows, status: rows.length ? 'ok' : 'empty', note: rows.length ? result.note ?? null : result.note ?? 'Solana Tracker returned no recent trade rows.' };
+  }, 'Solana Tracker unavailable.');
 }
 
 async function fetchGeckoTrades(pairAddress: string | null, limit: number): Promise<ProviderResult<IndexedTrade>> {
@@ -369,7 +398,7 @@ function summarize(trades: IndexedTrade[]) {
 }
 
 function choosePrimary(results: Record<string, ProviderResult<IndexedTrade>>) {
-  const priority = ['birdeye', 'helius', 'solscan', 'pumpfun', 'geckoterminal'] as const;
+  const priority = ['solanatracker', 'birdeye', 'helius', 'solscan', 'pumpfun', 'geckoterminal'] as const;
   for (const key of priority) if (results[key].rows.length) return key;
   return 'none';
 }
@@ -379,6 +408,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mint = searchParams.get('mint')?.trim();
   const limit = Number(searchParams.get('limit') ?? '40');
+  const fast = searchParams.get('fast') === '1';
   if (!mint || !MINT_RE.test(mint)) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: 'Missing or invalid mint query parameter.', execution: 'live-index-read' }, { status: 400 });
 
   const pairResult = await timedProvider<DexPair>(async () => {
@@ -387,7 +417,8 @@ export async function GET(request: Request) {
   }, 'DexScreener pair lookup unavailable.');
   const pair = pairResult.rows[0] ?? null;
 
-  const [birdeye, helius, solscan, pumpfun, gecko] = await Promise.all([
+  const [solanaTracker, birdeye, helius, solscan, pumpfun, gecko] = await Promise.all([
+    fetchSolanaTrackerTradeRows(mint, limit),
     fetchBirdeyeTrades(mint, limit),
     fetchHeliusTrades(mint, limit),
     fetchSolscanTrades(),
@@ -395,7 +426,7 @@ export async function GET(request: Request) {
     fetchGeckoTrades(pair?.pairAddress ?? null, limit)
   ]);
 
-  const providers = { birdeye, helius, solscan, pumpfun, geckoterminal: gecko };
+  const providers = { solanatracker: solanaTracker, birdeye, helius, solscan, pumpfun, geckoterminal: gecko };
   const primary = choosePrimary(providers);
   const liveTrades = primary === 'none' ? [] : providers[primary].rows;
   if (liveTrades.length) writeTradeCache(mint, primary, liveTrades);
@@ -404,9 +435,10 @@ export async function GET(request: Request) {
   const effectivePrimary = liveTrades.length ? primary : cached?.primary ? `${cached.primary}-cache` : primary;
   const blockers = Object.entries(providers).filter(([, result]) => result.status !== 'ok').map(([provider, result]) => `${provider}: ${result.status}${result.note ? ` — ${result.note}` : ''}`);
   const optionalProviderGaps = [
+    solanaTracker.status === 'not-configured' ? 'Solana Tracker not configured: preferred trade tape unavailable.' : null,
     birdeye.status === 'not-configured' ? 'Birdeye not configured: wallet-attributed token tx history unavailable.' : null,
-    helius.status === 'not-configured' ? 'Helius not configured: parsed token-transfer fallback unavailable.' : null
-    , solscan.status === 'not-configured' ? 'Solscan not configured: Solscan trade fallback unavailable.' : null
+    helius.status === 'not-configured' ? 'Helius not configured: parsed token-transfer fallback unavailable.' : null,
+    solscan.status === 'not-configured' ? 'Solscan not configured: Solscan trade fallback unavailable.' : null
   ].filter((item): item is string => Boolean(item));
   const latencyMs = Date.now() - started;
 
@@ -419,6 +451,7 @@ export async function GET(request: Request) {
     latencyMs,
     providerLatencyMs: {
       dexscreenerPair: pairResult.latencyMs,
+      solanatracker: solanaTracker.latencyMs,
       birdeye: birdeye.latencyMs,
       helius: helius.latencyMs,
       solscan: solscan.latencyMs,
@@ -455,6 +488,7 @@ export async function GET(request: Request) {
       },
       providers: {
         dexscreenerPair: { status: pairResult.status, latencyMs: pairResult.latencyMs, note: pairResult.note ?? null, pairAddress: pair?.pairAddress ?? null, dex: pair?.dexId ?? null },
+        solanatracker: { status: solanaTracker.status, latencyMs: solanaTracker.latencyMs, note: solanaTracker.note ?? null, rows: solanaTracker.rows.length },
         birdeye: { status: birdeye.status, latencyMs: birdeye.latencyMs, note: birdeye.note ?? null, rows: birdeye.rows.length },
         helius: { status: helius.status, latencyMs: helius.latencyMs, note: helius.note ?? null, rows: helius.rows.length },
         solscan: { status: solscan.status, latencyMs: solscan.latencyMs, note: solscan.note ?? null, rows: solscan.rows.length },

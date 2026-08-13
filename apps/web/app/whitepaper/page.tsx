@@ -1,7 +1,7 @@
 const briefSections = [
   {
     title: 'Product state',
-    body: 'Meridian is a backend-wired Solana project command center. Surfaces expose route state, live RPC/indexer reads, browser-wallet signing requirements, and server-side execution gates.'
+    body: 'Bond.Terminal is a backend-wired Solana project command center. Surfaces expose route state, live RPC/indexer reads, browser-wallet signing requirements, and server-side execution gates.'
   },
   {
     title: 'Liquidity engine',
@@ -39,7 +39,7 @@ export default function TechnicalBriefPage() {
       <div className="contentShell routeContextShell">
         <section className="documentHero oceanHero">
           <div className="eyebrow">Technical Brief</div>
-          <h1>Meridian backend wiring doctrine.</h1>
+          <h1>Bond.Terminal backend wiring doctrine.</h1>
           <p>Each module must connect visible UI state to a backend route, live data source, browser-wallet signer, or explicit execution gate.</p>
         </section>
 

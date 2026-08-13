@@ -86,7 +86,7 @@ export function ProfileLogin() {
   return (
     <section className="profileGrid">
       <div className="documentCard profileCard">
-        <div className="profileAvatar">{profile.connected ? 'OP' : 'M'}</div>
+        <div className="profileAvatar">{profile.connected ? 'OP' : 'B'}</div>
         <div>
           <div className="eyebrow">User profile</div>
           <h1>{profile.connected ? profile.displayName : 'Connect wallet'}</h1>

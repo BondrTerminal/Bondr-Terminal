@@ -1,7 +1,9 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
-import { createIntent, hashJson, updateIntent } from '../../../lib/live-store';
+import { createIntentAsync, hashJson, updateIntentAsync } from '../../../lib/live-store';
 import { DEFAULT_ALLOWED_SWAP_PROGRAMS, decodeTransactionPolicy } from '../../../lib/transaction-policy';
+import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
+import { buildTransactionPreview, liveDisabledPreview } from '../../../lib/transaction-preview';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,11 +59,14 @@ function parsePositiveAmount(raw: unknown): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function parseSlippageBps(raw: unknown): number {
-  if (raw === null || raw === undefined || raw === '' || raw === 'Auto') return 100;
+function parseSlippageBps(raw: unknown): { ok: true; value: number } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === '' || raw === 'Auto') return { ok: true, value: 100 };
   const value = typeof raw === 'number' ? raw : Number(String(raw).replace(/bps/i, '').trim());
-  if (!Number.isFinite(value)) return 100;
-  return Math.max(1, Math.min(MAX_SLIPPAGE_BPS, Math.round(value)));
+  if (!Number.isFinite(value)) return { ok: true, value: 100 };
+  const rounded = Math.round(value);
+  if (rounded < 1) return { ok: false, error: 'Slippage must be at least 1 bps.' };
+  if (rounded > MAX_SLIPPAGE_BPS) return { ok: false, error: `Requested slippage ${rounded} bps exceeds LIVE_MAX_SLIPPAGE_BPS (${MAX_SLIPPAGE_BPS}).` };
+  return { ok: true, value: rounded };
 }
 
 function decimalToRawUnits(amount: number, decimals: number): string {
@@ -106,14 +111,20 @@ function rejectIfLiveDisabled() {
     error: 'Live trading is disabled. Set LIVE_TRADING_ENABLED=true only after approving signer custody, preflight, wallet funding, max-size, slippage, and kill-switch rules.',
     execution: 'live-disabled',
     liveTradingEnabled: false,
+    signingEnabled: false,
+    broadcastEnabled: false,
+    deploymentEnabled: false,
     signer: 'browser-wallet-required',
-    serverSigning: false
+    serverSigning: false,
+    transactionPreview: liveDisabledPreview('swap', '/api/execution-swap')
   }, { status: 403 });
 }
 
 export async function POST(request: Request) {
   const disabled = rejectIfLiveDisabled();
   if (disabled) return disabled;
+  const authBlocked = await meridianAuthRequiredResponse(request);
+  if (authBlocked) return authBlocked;
 
   let body: SwapRequest;
   try {
@@ -145,7 +156,9 @@ export async function POST(request: Request) {
   const quoteMint = spendAsset === 'USDC' ? USDC_MINT : SOL_MINT;
   const inputMint = side === 'buy' ? quoteMint : mint;
   const outputMint = side === 'buy' ? mint : quoteMint;
-  const slippageBps = parseSlippageBps(body.slippageBps);
+  const slippage = parseSlippageBps(body.slippageBps);
+  if (!slippage.ok) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: slippage.error, execution: 'swap-build-rejected', blocker: 'slippage-out-of-bounds' }, { status: 400 });
+  const slippageBps = slippage.value;
 
   try {
     const decimals = await fetchMintDecimals(inputMint);
@@ -178,7 +191,7 @@ export async function POST(request: Request) {
 
     const decoded = decodeTransactionPolicy(Buffer.from(swap.swapTransaction, 'base64'));
     const requiredAccounts = Array.from(new Set([userPublicKey, mint, inputMint, outputMint].filter(Boolean)));
-    const intent = createIntent({
+    const intent = await createIntentAsync({
       expectedSigner: userPublicKey,
       expectedMint: mint,
       expectedSide: side,
@@ -195,13 +208,16 @@ export async function POST(request: Request) {
       note: 'Unsigned swap transaction built; browser wallet signing and explicit broadcast required.',
       status: 'transaction_built'
     });
-    updateIntent(intent.id, { status: 'transaction_built' });
+    await updateIntentAsync(intent.id, { status: 'transaction_built' });
 
     return Response.json({
       status: 'ok',
       observedAt: new Date().toISOString(),
       execution: 'unsigned-transaction-built',
       liveTradingEnabled: true,
+      signingEnabled: process.env.LIVE_BETA_SIGNING_ENABLED === 'true',
+      broadcastEnabled: process.env.LIVE_BETA_BROADCAST_ENABLED === 'true',
+      deploymentEnabled: process.env.LIVE_DEPLOYMENT_ENABLED === 'true',
       signer: 'browser-wallet-required',
       safety: 'Unsigned Jupiter swap transaction only. The server did not sign or send it.',
       serverSigning: false,
@@ -221,6 +237,23 @@ export async function POST(request: Request) {
         routePlanLength: quote.routePlan?.length ?? 0,
         contextSlot: quote.contextSlot ?? null
       },
+      transactionPreview: buildTransactionPreview({
+        status: 'ok',
+        mode: 'unsigned-build',
+        action: 'swap',
+        tokenMint: mint,
+        wallet: userPublicKey,
+        provider: 'Jupiter',
+        route: '/api/execution-swap',
+        inputAmount: String(amount),
+        outputEstimate: quote.outAmount ?? undefined,
+        slippageBps,
+        priorityFeeLamports: swap.prioritizationFeeLamports ?? undefined,
+        simulationStatus: swap.simulationError ? 'failed' : 'ready',
+        unsignedTransaction: swap.swapTransaction,
+        blockers: ['Browser wallet signature still required.', 'Broadcast remains disabled until explicit live activation and policy pass.'],
+        warnings: ['Unsigned transaction preview only. The server did not sign or send this transaction.']
+      }),
       swap: {
         swapTransaction: swap.swapTransaction,
         lastValidBlockHeight: swap.lastValidBlockHeight ?? null,

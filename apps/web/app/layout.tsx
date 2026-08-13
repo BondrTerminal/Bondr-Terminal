@@ -1,49 +1,51 @@
 import type { Metadata } from 'next';
 import '@turnkey/react-wallet-kit/styles.css';
 import './globals.css';
+import { GlobalCreateProjectAction } from './components/GlobalCreateProjectAction';
+import { HeaderWalletChip } from './components/HeaderWalletChip';
 
 export const metadata: Metadata = {
-  title: 'Meridian',
-  description: 'Meridian is a Solana liquidity and trading command hub for autonomous market making, sniper workflows, wallet operations, and developer tooling.'
+  title: 'Bond.Terminal',
+  description: 'Bond.Terminal is a Solana launch operating system with browser-wallet signing, wallet operations, project configuration, portfolio reads, and gated execution.'
 };
 
 const navItems = [
   { href: '/', label: 'Hub' },
-  { href: '/liquidity', label: 'Liquidity Engine' },
-  { href: '/sniper', label: 'Trading Terminal' },
-  { href: '/portfolio', label: 'Portfolio' },
-  { href: '/token-analyzer', label: 'Token Analyzer' },
-  { href: '/deployment', label: 'Deployment' },
+  { href: '/deployment', label: 'Deploy' },
+  { href: '/sniper', label: 'Terminal' },
+  { href: '/wallets', label: 'Wallets' },
   { href: '/projects', label: 'Projects' },
-  { href: '/project-dashboard', label: 'Project Dashboard' },
-  { href: '/wallets', label: 'Wallet Ops' },
-  { href: '/github', label: 'GitHub' },
-  { href: '/profile', label: 'Profile' }
+  { href: '/portfolio', label: 'Portfolio' },
+  { href: '/token-analyzer', label: 'Analyzer' },
+  { href: '/github', label: 'GitHub' }
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
-        <div className="appFrame">
-          <aside className="sideToolbar" aria-label="Meridian navigation">
-            <a className="brandMark sideBrand" href="/" aria-label="Meridian home">
-              <span className="brandGlyph">M</span>
-              <span>
-                <strong>Meridian</strong>
-                <small>Solana command hub</small>
+        <div className="bondrAppFrame">
+          <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
+            <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
+              <span className="bondrLogoText" aria-label="BONDR">
+                <span>B</span><span className="bondrScopeO">O</span><span>N</span><span>D</span><span>R</span>
               </span>
             </a>
-            <nav aria-label="Main navigation">
+            <nav className="bondrHeaderNav" aria-label="Main navigation">
               {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
             </nav>
-            <div className="sideStatus">
-              <span>Flagship</span>
-              <strong>Liquidity Engine</strong>
-              <small>Backend-wired mode</small>
+            <div className="bondrHeaderActions" aria-label="Account and watch controls">
+              <HeaderWalletChip />
+              <GlobalCreateProjectAction />
+              <a className="bondrHeaderAction" href="/wallets">Wallet Ops</a>
+              <a className="bondrProfileOrb" href="/profile" aria-label="Open profile and account">B</a>
             </div>
-          </aside>
-          <div className="appContent">
+          </header>
+          <div className="preBetaGlobalStrip" role="status" aria-label="BONDR pre-beta execution status">
+            <strong>Live beta A-profile active</strong>
+            <span>Signing + simulation are enabled behind operator auth and browser-wallet confirmation. Broadcast, deployment, wallet funding, claims, and payouts remain disabled.</span>
+          </div>
+          <div className="bondrAppContent">
             {children}
           </div>
         </div>
