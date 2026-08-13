@@ -16,18 +16,18 @@ const PUBLIC_PATHS = new Set(['/whitepaper']);
 
 const primaryNavItems = [
   { href: '/', label: 'Hub' },
-  { href: '/liquidity', label: 'Liquidity Engine' },
   { href: '/sniper', label: 'Terminal' },
-  { href: '/wallets', label: 'Wallets' },
+  { href: '/liquidity', label: 'Liquidity' },
+  { href: '/deployment', label: 'Launch Prep' },
+  { href: '/wallets', label: 'Wallet Ops' },
   { href: '/projects', label: 'Projects' },
-  { href: '/portfolio', label: 'Portfolio' },
-  { href: '/deployment', label: 'Deployment' }
+  { href: '/portfolio', label: 'Portfolio' }
 ];
 
 const toolItems = [
-  { href: '/liquidity', label: 'Market Maker / Scalper' },
   { href: '/token-analyzer', label: 'Token Analyzer' },
-  { href: '/project-dashboard', label: 'Project Dashboard' }
+  { href: '/project-dashboard', label: 'Project Dashboard' },
+  { href: '/whitepaper', label: 'Whitepaper' }
 ];
 
 function currentPath(pathname: string, search: string) {
@@ -74,7 +74,7 @@ function AppHeader() {
       <div className="bondrHeaderActions" aria-label="Account and watch controls">
         <HeaderWalletChip />
         <GlobalCreateProjectAction />
-        <a className="bondrHeaderAction" href="/wallets">Wallet Ops</a>
+        <a className="bondrHeaderAction" href="/deployment">Launch Prep</a>
         <AccountNavButton />
       </div>
     </header>

@@ -208,6 +208,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
       : 'No selected wallet for this browser/page.';
   const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'live-beta-test' ? 'Live Beta wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
   const badge = connectedSigner ? 'Browser wallet connected' : providerReady ? 'Provider ready' : 'Connect browser wallet';
+  const compactRail = compact || surface !== 'live-beta-test';
 
   const rows = useMemo(() => [
     ['Connected signer', short(connectedSigner), connectedSigner ? 'Browser wallet connected in this tab.' : 'Browser wallet not connected in this tab.'],
@@ -224,9 +225,10 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
     ['Wallet mode', rail?.walletMode ?? 'checking', connectedSigner ? 'A-profile primary mode is browser-wallet.' : 'No signer connected.'],
     ['Active wallet', short(effectiveSelectedWallet), effectiveSelectedWallet ? 'Used by this browser for Terminal/Deployment selection.' : 'Use connected wallet to set active wallet.']
   ], [activeMint, connectedInventoryLabel, connectedSigner, connectedToken, effectiveSelectedWallet, loading, rail, selectedInventoryDetail, selectedInventoryLabel, selectedToken]);
+  const visibleRows = compactRail ? rows.filter(([label]) => ['Connected signer', 'Selected wallet', 'Connected SOL balance', 'Balance status'].includes(label)) : rows;
 
   return (
-    <section className={`walletRailStatusCard ${compact ? 'compactWalletRail' : ''}`} aria-label={`${title} status`}>
+    <section className={`walletRailStatusCard ${compactRail ? 'compactWalletRail' : ''}`} aria-label={`${title} status`}>
       <div className="walletRailHeader">
         <div><span>{title}</span><strong>{badge}</strong><small>{message}</small></div>
         <div className="walletRailActions">
@@ -236,12 +238,12 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
           <button className="button secondary" type="button" onClick={() => void disconnect()} disabled={!connectedSigner}>Disconnect</button>
         </div>
       </div>
-      <div className="walletRailHelperCopy">
+      {!compactRail && <div className="walletRailHelperCopy">
         <strong>Add connected signer as watch-only wallet</strong>
         <p>Watch-only adds the public address for matching and balance display. Browser wallet still signs; no private key, funding, fund movement, deployment, claims, or broadcast is created.</p>
-      </div>
+      </div>}
       <div className="walletRailGrid">
-        {rows.map(([label, value, detail]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}
+        {visibleRows.map(([label, value, detail]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}
       </div>
       {connectedSigner && !rail?.inventoryMatch && <div className="walletRailWatchOnlyCta">
         <strong>Add connected signer as watch-only wallet</strong>
@@ -252,7 +254,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
         {blockers.map((item) => <p key={item}><strong>Blocked:</strong> {item}</p>)}
         {warnings.map((item) => <p key={item}><strong>Note:</strong> {item}</p>)}
       </div>}
-      <p className="walletRailFooter">Broadcast disabled in A-profile. This rail reads balances and signer state only; it never requests private keys, server-signs, funds wallets, deploys, claims, or broadcasts.</p>
+      <p className="walletRailFooter">A-profile: browser-wallet checks only. No private keys, server signing, funding, deployment, claims, payouts, or broadcast.</p>
     </section>
   );
 }

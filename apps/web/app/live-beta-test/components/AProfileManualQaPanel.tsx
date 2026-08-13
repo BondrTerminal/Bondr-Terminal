@@ -435,7 +435,7 @@ export function AProfileManualQaPanel() {
       '',
       '## Test input',
       `preset: ${preset}`,
-      `mint: ${mint}`,                             
+      `mint: ${mint}`,
       `side: ${side}`,
       `amount: ${amount}`,
       `spendAsset: ${spendAsset}`,
@@ -527,7 +527,7 @@ export function AProfileManualQaPanel() {
         <button className="button" type="button" onClick={() => void runQuote()} disabled={loading !== null || quoteBlocked}>{loading === 'quote' ? 'Quoting…' : 'Quote preview only'}</button>
         <button className="button" type="button" onClick={() => void runBuild()} disabled={loading !== null || buildBlocked}>{loading === 'build' ? 'Building…' : 'Build unsigned tx only'}</button>
         <button className="button" type="button" onClick={() => void runSimulation()} disabled={loading !== null || !build?.swap?.swapTransaction}>{loading === 'simulation' ? 'Simulating…' : 'Simulate unsigned tx only'}</button>
-        <button className="button" type="button" onClick={() => void runSign()} disabled={loading !== null || !canSign}>{loading === 'sign' ? 'Signing…' : 'Sign in wallet'}</button>
+        <button className="button" type="button" onClick={() => void runSign()} disabled={loading !== null || !canSign}>{loading === 'sign' ? 'Signing…' : 'Local sign test'}</button>
         <button className="button secondary" type="button" disabled onClick={() => setMessage('Broadcast disabled in A-profile.')}>Broadcast disabled in A-profile</button>
         <button className="button secondary" type="button" onClick={() => void copyQaReport()}>Copy QA Report</button>
         <button className="button secondary" type="button" onClick={resetQaSession}>Reset QA Session</button>

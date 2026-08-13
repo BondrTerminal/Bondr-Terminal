@@ -37,12 +37,12 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           <div className="eyebrow">Projects</div>
           <h1>{selectedProject ? `${selectedProject.name} command view.` : 'Real project command center.'}</h1>
           <p>Track real project records, launch configuration, stored flow events, and routing into Deployment, Terminal, Wallets, and Portfolio. Empty state is intentional until you create a project.</p>
-          <div className="projectHeroActions"><a href="/deployment">Open Deployment</a><a href="/sniper">Open Terminal</a><a href="/portfolio">Open Portfolio</a></div>
+          <div className="projectHeroActions"><a href="/deployment">Open Launch Prep</a><a href="/sniper">Open Terminal</a><a href="/portfolio">Open Portfolio</a></div>
         </section>
 
         <section className="projectDashboardKpiGrid" aria-label="Project dashboard KPIs">
           <div className={`projectStat heroMetric ${totalFlow.netSol >= 0 ? 'positiveFlow' : 'negativeFlow'}`}><span>Total net flow</span><strong>{formatSol(totalFlow.netSol)}</strong><small>stored buys/sells only</small></div>
-          <div className="projectStat heroMetric"><span>Realized PnL</span><strong>{formatSol(totalFlow.netSol)}</strong><small>from stored flow events</small></div>
+          <div className="projectStat heroMetric"><span>Stored net SOL</span><strong>{formatSol(totalFlow.netSol)}</strong><small>from stored flow events</small></div>
           <div className="projectStat heroMetric"><span>Unrealized PnL</span><strong>Provider-limited</strong><small>requires live mark-to-market data</small></div>
           <div className="projectStat heroMetric"><span>Deployed capital</span><strong>{totalBuys.toFixed(2)} SOL</strong><small>stored buy flow</small></div>
           <div className="projectStat heroMetric"><span>Total routed flow</span><strong>{totalVolume.toFixed(2)} SOL</strong><small>buys + sells</small></div>
@@ -57,9 +57,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
         <CreateProjectForm />
 
         <section className="documentCard projectTablePanel projectHistoryPanel">
-          <div className="sectionIntro compactIntro"><span>Projects</span><h2>Stored project records</h2><p>Click any project to inspect it, or route directly into Terminal/Deployment/Portfolio.</p></div>
+          <div className="sectionIntro compactIntro"><span>Projects</span><h2>Stored project records</h2><p>Click any project to inspect it, or route directly into Terminal/Launch Prep/Portfolio.</p></div>
           <div className="projectTable projectDashboardTable" role="table" aria-label="Stored project records">
-            <div className="projectRow projectDashboardRow projectHead" role="row"><span>Project</span><span>Status</span><span>Path</span><span>Mint</span><span>Pool</span><span>Realized PnL</span><span>Flow</span><span>Readiness</span><span>Actions</span></div>
+            <div className="projectRow projectDashboardRow projectHead" role="row"><span>Project</span><span>Status</span><span>Path</span><span>Mint</span><span>Pool</span><span>Stored net SOL</span><span>Flow</span><span>Readiness</span><span>Actions</span></div>
             {projects.length ? projects.map((project) => {
               const flow = projectFlow(project.id, store);
               const readiness = readinessScore(project, store);
@@ -68,7 +68,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                 <a href={`/projects/${project.id}`}><strong>{project.name}</strong><small>{project.ticker}</small></a>
                 <span>{project.status}</span><span>{project.launchPath}</span><span>{project.tokenMint ? `${project.tokenMint.slice(0, 6)}…${project.tokenMint.slice(-5)}` : 'Not launched'}</span><span>{project.pool ? `${project.pool.slice(0, 6)}…${project.pool.slice(-5)}` : 'Not created'}</span>
                 <span className={flow.netSol >= 0 ? 'profitText' : 'dangerText'}>{formatSol(flow.netSol)}</span><span>{(flow.buysSol + flow.sellsSol).toFixed(2)} SOL</span><span>{readiness.score}%</span>
-                <span className="inlineActionStack"><a href={`/projects/${project.id}`}>Inspect</a><a href={terminalHref}>Terminal</a><a href={`/deployment?project=${project.id}`}>Deploy</a><a href={`/portfolio?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`}>Portfolio</a></span>
+                <span className="inlineActionStack"><a href={`/projects/${project.id}`}>Inspect</a><a href={terminalHref}>Terminal</a><a href={`/deployment?project=${project.id}`}>Launch Prep</a><a href={`/portfolio?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`}>Portfolio</a></span>
               </div>;
             }) : <div className="emptyPortfolioState">No projects yet. Create a project to start configuring launch state.</div>}
           </div>

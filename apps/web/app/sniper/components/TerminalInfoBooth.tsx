@@ -6,7 +6,7 @@ import { PreLiveDryRunAction } from './PreLiveDryRunAction';
 
 type TerminalWallet = { id: string; address: string; role: string; scope: string; balanceSol: number; purpose: string };
 type Flow = { buysSol: number; sellsSol: number; netSol: number } | null;
-type IntelTab = 'Positions' | 'Orders' | 'Holders' | 'Top Traders' | 'Dev Tokens' | 'Only Tracked' | 'Instant Trade' | 'Checklist';
+type IntelTab = 'Positions' | 'Orders' | 'Holders' | 'Top Traders' | 'Dev Tokens' | 'Only Tracked' | 'Quote Preview' | 'Checklist';
 type HolderFilter = 'all' | 'tagged' | 'pnl' | 'whales';
 type HolderSort = 'rank' | 'amount' | 'pct' | 'value' | 'pnl' | 'txs' | 'lastSeen';
 type ChecklistItem = { id: string; label: string; status: 'pass' | 'warn' | 'fail'; evidence: string; owner: string };
@@ -88,7 +88,7 @@ type UiHolderRow = TerminalHolderAccount & {
 
 type UiTopTrader = TerminalTopTrader & { tags?: string[]; sources?: string[] };
 
-const tabs: IntelTab[] = ['Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Only Tracked', 'Instant Trade', 'Checklist'];
+const tabs: IntelTab[] = ['Positions', 'Orders', 'Holders', 'Top Traders', 'Dev Tokens', 'Only Tracked', 'Quote Preview', 'Checklist'];
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function compactAddress(address: string | null | undefined) {
@@ -320,7 +320,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId, projectName,
     'Top Traders': String(topTraders.length),
     'Dev Tokens': `(${devTokenRows.length})`,
     'Only Tracked': String(trackedPositions.length + trackedOrders.length + trackedTrades.length),
-    'Instant Trade': capabilities?.liveTradingEnabled ? 'LIVE' : 'GATED',
+    'Quote Preview': capabilities?.liveTradingEnabled ? 'LIVE' : 'GATED',
     Checklist: checklist?.state ?? 'TEMP'
   };
 
@@ -370,7 +370,7 @@ export function TerminalInfoBooth({ wallets, flow, mint, projectId, projectName,
       {snapshot && activeTab === 'Top Traders' && <TopTradersTab rows={topTraders} trades={trades} />}
       {snapshot && activeTab === 'Dev Tokens' && <DevTokensTab rows={devTokenRows} source={sourceValue(snapshot, 'devSold')} currentToken={extras?.pumpfun?.token ?? null} />}
       {snapshot && activeTab === 'Only Tracked' && <OnlyTrackedTab positions={trackedPositions} holders={trackedHolders} trades={trackedTrades} orders={trackedOrders} wallets={renderedWallets} />}
-      {activeTab === 'Instant Trade' && <InstantTradeTab activeMint={activeMint} wallets={renderedWallets} selectedWallet={selectedWallet} selectedPosition={selectedWalletPosition} selectedWalletId={selectedWalletId} onSelectWallet={setSelectedWalletId} side={instantSide} onSide={setInstantSide} amount={instantAmount} onAmount={setInstantAmount} slippage={instantSlippage} onSlippage={setInstantSlippage} capabilities={capabilities} quote={quote} quoteStatus={quoteStatus} onPreview={() => void previewQuote()} />}
+      {activeTab === 'Quote Preview' && <InstantTradeTab activeMint={activeMint} wallets={renderedWallets} selectedWallet={selectedWallet} selectedPosition={selectedWalletPosition} selectedWalletId={selectedWalletId} onSelectWallet={setSelectedWalletId} side={instantSide} onSide={setInstantSide} amount={instantAmount} onAmount={setInstantAmount} slippage={instantSlippage} onSlippage={setInstantSlippage} capabilities={capabilities} quote={quote} quoteStatus={quoteStatus} onPreview={() => void previewQuote()} />}
       {activeTab === 'Checklist' && <ChecklistTab projectId={projectId} projectName={projectName} activeMint={activeMint} terminalWarning={terminalWarning} liveReadinessStatus={liveReadinessStatus} authConfigured={authConfigured} sessionAuthenticated={sessionAuthenticated} rpcSummary={rpcSummary} checklist={checklist} />}
     </div>
   </section>;

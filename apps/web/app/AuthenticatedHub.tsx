@@ -5,34 +5,34 @@ const modules = [
     href: '/liquidity',
     label: 'Flagship module',
     title: 'Autonomous Liquidity Engine',
-    body: 'Live-wired cockpit for observed capital, exposure, inventory drift, wallet flow, quote cadence, risk, and engine state.',
-    state: 'Live operations'
+    body: 'Live-data cockpit for observed capital, exposure, inventory drift, wallet flow, quote cadence, risk, and gated engine state.',
+    state: 'Live data, execution gated'
   },
   {
     href: '/sniper',
     label: 'Trading module',
     title: 'Trading Terminal',
     body: 'Read-only terminal for token context, wallet selection, route previews, holdings context, and disabled action surfaces.',
-    state: 'Obligation: analyze, not trade' 
+    state: 'Preview and simulate only'
   },
   {
     href: '/token-analyzer',
     label: 'Analysis module',
     title: 'Token Analyzer',
     body: 'Dedicated token scan workspace for pair/liquidity graphing, supply/authority checks, holder-risk labels, transaction feed, and parser-pending rows.',
-    state: 'Obligation: label source truth' 
+    state: 'Obligation: label source truth'
   },
   {
     href: '/deployment',
     label: 'Launch module',
-    title: 'Token Deployment Hub',
+    title: 'Launch Prep',
     body: 'Read-only launch workspace that stores metadata, launch path, funding plan, wallet readiness, liquidity policy, and blocked execution gates.',
-    state: 'Obligation: preflight only'
+    state: 'Launch prep only'
   },
   {
     href: '/projects',
     label: 'Management module',
-    title: 'Project Management',
+    title: 'Projects',
     body: 'Data-backed workspace for project objects, pending launches, deployed tokens, CTO states, readiness, next actions, and cockpit links.',
     state: 'Obligation: coordinate state'
   },
@@ -47,8 +47,8 @@ const modules = [
     href: '/wallets',
     label: 'Operator module',
     title: 'Wallet Operations',
-    body: 'Live wallet dashboard with groups, live balance labels, readiness, funding/collection gates, and wallet-ops engine status.',
-    state: 'Obligation: inspect wallets'
+    body: 'Browser-wallet and watch-only workspace for signer matching, labels, balances, and wallet readiness. No custody or funding actions.',
+    state: 'Browser-wallet only'
   }
 ];
 
@@ -59,10 +59,9 @@ const infoLinks = [
 ];
 
 const socialLinks = [
-  { label: 'X / Twitter', href: '#', detail: 'external link not configured' },
-  { label: 'Discord', href: '#', detail: 'external link not configured' },
-  { label: 'Telegram', href: '#', detail: 'external link not configured' },
-  { label: 'Docs', href: '/whitepaper', detail: 'local' }
+  { label: 'Whitepaper', href: '/whitepaper', detail: 'product doctrine' },
+  { label: 'GitHub', href: '/github', detail: 'repository status' },
+  { label: 'Profile', href: '/profile', detail: 'account/session' }
 ];
 
 
@@ -96,9 +95,9 @@ export function AuthenticatedHub() {
           <div className="heroSignalCard" aria-label="Bond.Terminal current product status">
             <span>Current focus</span>
             <strong>Autonomous Liquidity Engine</strong>
-            <p>Live scalping / market-making cockpit with capital, exposure, inventory, risk, wallet flow, and engine state.</p>
+            <p>Liquidity intelligence cockpit with capital, exposure, inventory, risk, wallet flow, and gated engine state.</p>
             <div className="signalRows">
-              <div><span>Status</span><strong>Live wired</strong></div>
+              <div><span>Status</span><strong>Data wired</strong></div>
               <div><span>Execution</span><strong>Live gated</strong></div>
               <div><span>Live funds</span><strong>Disabled</strong></div>
             </div>
@@ -110,13 +109,13 @@ export function AuthenticatedHub() {
             <span>What Bond.Terminal is</span>
             <h2>A hub, not a single dashboard.</h2>
             <p>
-              Bond.Terminal houses multiple Solana operator tools around a shared project object. The flagship product remains the automated
-              market-maker/scalper, while Projects, Deployment, Wallet Ops, Sniper, and Project Dashboard now coordinate as supporting surfaces.
+              Bond.Terminal houses multiple Solana operator tools around a shared project object. Terminal, Liquidity, Launch Prep,
+              Wallet Ops, Projects, Portfolio, and analysis surfaces now coordinate as one operator workflow.
             </p>
           </div>
         </section>
 
-        <section className="moduleGrid websiteModules" aria-label="Bond.Terminal modules">
+        <section className="moduleGrid websiteModules" aria-label="Bond.Terminal terminal modules">
           {modules.map((module) => (
             <a className="moduleCard" href={module.href} key={module.href}>
               <span>{module.label}</span>
@@ -171,7 +170,7 @@ export function AuthenticatedHub() {
           <div className="documentCard websiteInfoCard">
             <div className="sectionIntro compactIntro">
               <span>Community</span>
-              <h2>Community links</h2>
+              <h2>Useful links</h2>
             </div>
             <div className="socialGrid">
               {socialLinks.map((link) => (

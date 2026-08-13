@@ -25,8 +25,8 @@ export default async function WalletsPage({ searchParams }: WalletsPageProps) {
         <section className="launchStationHero documentHero oceanHero">
           <div>
             <div className="eyebrow">Wallet Ops</div>
-            <h1>Connect and select a real wallet.</h1>
-            <p>A-profile uses your browser wallet for signing. Wallet Ops stores public watch-only records only for matching, labels, and balance display.</p>
+            <h1>Connect a signing wallet. Track public addresses.</h1>
+            <p>A-profile keeps custody simple: Turnkey is account login, Phantom/Solflare signs in-browser, and Wallet Ops stores public watch-only records for matching, labels, and balances.</p>
           </div>
           <div className="launchHeroStatus">
             <span>Saved wallets</span>
@@ -50,7 +50,7 @@ export default async function WalletsPage({ searchParams }: WalletsPageProps) {
                 <div className="walletListRow" role="row" key={wallet.id}>
                   <strong>{wallet.role}</strong>
                   <code>{shortAddress(wallet.address)}</code>
-                  <span>{wallet.custodyMode === 'managed-local' ? 'managed unavailable' : 'watch-only'}</span>
+                  <span>{wallet.custodyMode === 'managed-local' ? 'legacy hidden' : 'watch-only'}</span>
                   <span>{wallet.balanceStatus === 'live' ? `${displayWalletSol(wallet).toFixed(5)} SOL` : wallet.balanceStatus === 'provider-limited' ? 'provider-limited' : wallet.balanceStatus === 'modeled' ? 'modeled · SOL not live' : 'unavailable'}</span>
                   <small>{wallet.balanceSource} · {wallet.balanceStatus}</small>
                   <em>{wallet.status}</em>
@@ -64,9 +64,9 @@ export default async function WalletsPage({ searchParams }: WalletsPageProps) {
         <section className="walletBoardSafetyFooter cleanActionFooter">
           <strong>A-profile wallet rules</strong>
           <span>Signable means the connected browser signer equals the selected/saved public address. No private keys, sends, funding, deployment, claims, payouts, or broadcast are available from Wallet Ops.</span>
-          <a href={selectedProject ? `/deployment?project=${selectedProject.id}` : '/deployment'}>Open Deployment</a>
+          <a href={selectedProject ? `/deployment?project=${selectedProject.id}` : '/deployment'}>Open Launch Prep</a>
           <a href={selectedProject ? `/sniper?project=${selectedProject.id}` : '/sniper'}>Open Terminal</a>
-          <a href="/live-beta-test">Open Live Beta Test</a>
+          <a href="/profile">Open Profile</a>
         </section>
       </div>
     </main>
