@@ -161,6 +161,8 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
             <span>hasSessionUserOrg: {String(account.debug.hasSessionUserOrg)}</span>
             <span>lastErrorCode: {account.debug.lastErrorCode ?? 'none'}</span>
             <span>lastErrorMessage: {account.debug.lastErrorMessage ?? 'none'}</span>
+            <span>timeline:</span>
+            {account.debug.timeline.length ? account.debug.timeline.map((item) => <span key={item}>• {item}</span>) : <span>• none</span>}
           </div>
         ) : null}
       </>

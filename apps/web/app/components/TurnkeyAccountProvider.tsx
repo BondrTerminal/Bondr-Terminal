@@ -39,6 +39,7 @@ export type BondrTurnkeyAccount = {
     lastErrorMessage: string | null;
     hasTurnkeySession: boolean;
     hasSessionUserOrg: boolean;
+    timeline: string[];
   };
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -75,7 +76,8 @@ const defaultAccount: BondrTurnkeyAccount = {
     lastErrorCode: null,
     lastErrorMessage: null,
     hasTurnkeySession: false,
-    hasSessionUserOrg: false
+    hasSessionUserOrg: false,
+    timeline: []
   },
   login: noop,
   logout: noop,
@@ -106,7 +108,8 @@ const defaultDebugState: AuthDebugState = {
   lastErrorCode: null,
   lastErrorMessage: null,
   hasTurnkeySession: false,
-  hasSessionUserOrg: false
+  hasSessionUserOrg: false,
+  timeline: []
 };
 
 function normalizeVerifiedSession(session: TurnkeyAuthSessionLike | undefined): VerifiedTurnkeySession | null {
@@ -136,6 +139,11 @@ function safeErrorCode(value: unknown) {
     return typeof code === 'string' ? code.slice(0, 80) : null;
   }
   return null;
+}
+
+function addTimeline(current: AuthDebugState, event: string) {
+  const stamp = new Date().toISOString().slice(11, 19);
+  return [`${stamp} ${event}`, ...current.timeline].slice(0, 8);
 }
 
 
@@ -196,7 +204,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     if (!verified) return;
     if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
     setVerifiedSession(verified);
-    setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true }));
+    setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'session observed') }));
     sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
     if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
       sessionStorage.removeItem(PENDING_LOGIN_KEY);
@@ -229,7 +237,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     },
     login: async () => {
       sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
-      setDebug((current) => ({ ...current, lastEvent: 'login-modal-opened', lastErrorCode: null, lastErrorMessage: null }));
+      setDebug((current) => ({ ...current, lastEvent: 'login-modal-opened', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, 'login modal opened') }));
       await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
@@ -271,7 +279,8 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
             callbackHadSession: Boolean(session),
             callbackHadUserOrg: Boolean(verified),
             lastErrorCode: null,
-            lastErrorMessage: null
+            lastErrorMessage: null,
+            timeline: addTimeline(current, `auth success method=${String(method)} action=${String(action)} session=${String(Boolean(session))}`)
           }));
           if (!verified) return;
           setVerifiedSession(verified);
@@ -288,7 +297,8 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
             ...current,
             lastEvent: 'turnkey-error',
             lastErrorCode: safeErrorCode(error),
-            lastErrorMessage: safeErrorMessage(error)
+            lastErrorMessage: safeErrorMessage(error),
+            timeline: addTimeline(current, `error code=${safeErrorCode(error) ?? 'none'}`)
           }));
           console.error('Turnkey account error:', error);
         }
