@@ -13172,3 +13172,68 @@ body > .createProjectModal .professionalCreateProjectShell {
     min-height: auto;
   }
 }
+
+/* Restored top navigation bar with Tools menu after final-shell recovery. */
+.bondrToolsMenu {
+  position: relative;
+}
+.bondrToolsMenu summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.bondrToolsMenu summary::-webkit-details-marker {
+  display: none;
+}
+.bondrToolsMenu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 2px solid rgba(249,235,224,.24);
+  border-radius: 999px;
+  padding: 0.72rem 0.95rem;
+  color: rgba(249,235,224,.86);
+  font-size: .95rem;
+  font-weight: 900;
+  text-decoration: none;
+  background: rgba(255,255,255,.035);
+}
+.bondrToolsMenu summary::after {
+  content: '▾';
+  font-size: 0.68rem;
+  opacity: 0.72;
+}
+.bondrToolsMenu[open] summary,
+.bondrToolsMenu summary:hover,
+.bondrToolsMenu summary:focus-visible {
+  border-color: var(--bondr-tangerine);
+  color: var(--bondr-linen);
+  background: rgba(255,127,17,.18);
+  outline: none;
+}
+.bondrToolsMenuPanel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.55rem);
+  z-index: 80;
+  display: grid;
+  gap: 0.4rem;
+  width: min(260px, 86vw);
+  padding: 0.65rem;
+  border: 1px solid rgba(255,127,17,.35);
+  border-radius: 18px;
+  background: rgba(8, 7, 6, 0.96);
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+}
+.bondrHeaderNav .bondrToolsMenuPanel a {
+  border-radius: 12px;
+  justify-content: flex-start;
+  white-space: normal;
+}
+@media (max-width: 880px) {
+  .bondrToolsMenuPanel {
+    position: static;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+}

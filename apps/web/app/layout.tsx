@@ -9,21 +9,20 @@ export const metadata: Metadata = {
   description: 'Bond.Terminal is a Solana command hub for autonomous liquidity, market making, scalper workflows, launch operations, wallet operations, portfolio reads, and gated browser-wallet execution.'
 };
 
-const navItems = [
+const primaryNavItems = [
   { href: '/', label: 'Hub' },
   { href: '/liquidity', label: 'Liquidity Engine' },
   { href: '/sniper', label: 'Terminal' },
-  { href: '/portfolio', label: 'Portfolio' },
-  { href: '/deployment', label: 'Deployment' },
+  { href: '/wallets', label: 'Wallets' },
   { href: '/projects', label: 'Projects' },
-  { href: '/project-dashboard', label: 'Project Dashboard' },
-  { href: '/wallets', label: 'Wallet Ops' },
-  { href: '/profile', label: 'Profile' }
+  { href: '/portfolio', label: 'Portfolio' },
+  { href: '/deployment', label: 'Deployment' }
 ];
 
 const toolItems = [
   { href: '/liquidity', label: 'Market Maker / Scalper' },
   { href: '/token-analyzer', label: 'Token Analyzer' },
+  { href: '/project-dashboard', label: 'Project Dashboard' },
   { href: '/github', label: 'GitHub / Ops' },
   { href: '/live-beta-test', label: 'Signing Harness' }
 ];
@@ -32,33 +31,30 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <div className="appFrame bondrFinalShell">
-          <aside className="sideToolbar" aria-label="Bond.Terminal navigation">
-            <a className="brandMark sideBrand" href="/" aria-label="Bond.Terminal home">
-              <span className="brandGlyph">B</span>
-              <span>
-                <strong>Bond.Terminal</strong>
-                <small>Solana command hub</small>
+        <div className="bondrAppFrame bondrFinalShell">
+          <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
+            <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
+              <span className="bondrLogoText" aria-label="BONDR">
+                <span>B</span><span className="bondrScopeO">O</span><span>N</span><span>D</span><span>R</span>
               </span>
             </a>
-            <nav aria-label="Main navigation">
-              {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+            <nav className="bondrHeaderNav" aria-label="Main navigation">
+              {primaryNavItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+              <details className="bondrToolsMenu">
+                <summary>Tools</summary>
+                <div className="bondrToolsMenuPanel">
+                  {toolItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+                </div>
+              </details>
             </nav>
-            <div className="sideTools" aria-label="Tools navigation">
-              <span>Tools</span>
-              {toolItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
-            </div>
-            <div className="sideStatus">
-              <span>Flagship</span>
-              <strong>Liquidity Engine</strong>
-              <small>Market maker / scalper cockpit</small>
-            </div>
-            <div className="sideSessionRail" aria-label="Wallet and project controls">
+            <div className="bondrHeaderActions" aria-label="Account and watch controls">
               <HeaderWalletChip />
               <GlobalCreateProjectAction />
+              <a className="bondrHeaderAction" href="/wallets">Wallet Ops</a>
+              <a className="bondrProfileOrb" href="/profile" aria-label="Open profile and account">B</a>
             </div>
-          </aside>
-          <div className="appContent">
+          </header>
+          <div className="bondrAppContent">
             {children}
           </div>
         </div>
