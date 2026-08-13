@@ -5,3 +5,32 @@ out/
 !.env.example
 .vercel/
 .vercel
+
+# Local provider-backed portfolio fill cache
+apps/web/data/portfolio-fills-cache.json
+apps/web/data/portfolio-fills-cache.json.tmp-*
+data/portfolio-fills-cache.json
+data/portfolio-fills-cache.json.tmp-*
+
+# BONDR local-only / secret scratch artifacts
+*.rtf
+*.pem
+*.key
+*.secret
+*API_KEY*
+*RPC_URL*
+*QUICKNODE*
+*BIRDEYE*
+*GMGN*
+*SOLANA_RPC*
+.neon
+.vercel.deleted-project-backup-*/
+tmp-*
+.DS_Store
+*.tsbuildinfo
+runtime/
+apps/web/data/trade-tape-cache/
+apps/web/data/terminal-paper-ledger.json
+
+# Local/runtime uploads; promote specific fixtures explicitly if needed
+public/uploads/

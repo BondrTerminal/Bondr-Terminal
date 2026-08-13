@@ -1,0 +1,41 @@
+# Local dependencies/build outputs
+node_modules
+.next
+apps/web/.next
+out
+dist
+
+# Env/secrets/local auth
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.crt
+*.rtf
+BIRDEYE_API_KEY.rtf
+GMGN_API_KEY.rtf
+SOLANA_RPC_URL.rtf
+tmp-gmgn-api-key-url.txt
+tmp-gmgn-public-key.pem
+apps/web/SOLANA_RPC_URL.rtf
+
+# Local data/caches/vaults
+keys
+.wallets
+.neon
+.agents
+runtime/*.local.json
+apps/web/data/meridian-wallet-vault.local.json
+apps/web/data/portfolio-fills-cache.json
+apps/web/data/portfolio-fills-cache.json.tmp-*
+data/portfolio-fills-cache.json
+data/portfolio-fills-cache.json.tmp-*
+apps/web/data/trade-tape-cache
+
+# Local backups / logs / OS
+.vercel.deleted-project-backup-*
+logs
+.DS_Store
