@@ -13237,3 +13237,63 @@ body > .createProjectModal .professionalCreateProjectShell {
     margin-top: 0.5rem;
   }
 }
+
+/* Bondr global Turnkey account layer */
+.accountNavMenu { position: relative; }
+.accountNavMenu summary { list-style: none; }
+.accountNavMenu summary::-webkit-details-marker { display: none; }
+.accountNavSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(86,164,255,0.22);
+  border-radius: 999px;
+  padding: 6px 10px 6px 7px;
+  background: linear-gradient(180deg, rgba(8,20,38,0.92), rgba(3,8,18,0.86));
+  color: #edf7ff;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.055), 0 12px 34px rgba(0,0,0,0.16);
+}
+.accountNavSummary.authenticated { border-color: rgba(102,230,188,0.34); background: linear-gradient(180deg, rgba(8,35,35,0.9), rgba(3,12,20,0.88)); }
+.accountNavOrb { width: 31px; height: 31px; border-radius: 999px; display: grid; place-items: center; background: linear-gradient(135deg, var(--ocean), var(--royal)); color: #f6fbff; font-size: 11px; font-weight: 950; letter-spacing: -0.04em; }
+.accountNavSummary span:last-child { display: grid; gap: 1px; min-width: 0; }
+.accountNavSummary strong { font-size: 12px; max-width: 112px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.accountNavSummary em { font-size: 10px; font-style: normal; color: #9eb6d5; white-space: nowrap; }
+.accountNavPanel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 24px));
+  border: 1px solid rgba(86,164,255,0.24);
+  border-radius: 20px;
+  padding: 15px;
+  background: radial-gradient(circle at 20% 0%, rgba(0,169,214,0.20), transparent 14rem), linear-gradient(180deg, rgba(6,16,32,0.98), rgba(2,6,14,0.98));
+  box-shadow: 0 30px 90px rgba(0,0,0,0.42);
+}
+.accountNavPanelHead { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid rgba(86,164,255,0.16); padding-bottom: 12px; margin-bottom: 12px; }
+.accountNavPanelHead span, .accountNavMeta span { color: #7dc7ff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 900; }
+.accountNavPanelHead strong { font-size: 16px; text-align: right; }
+.accountNavMeta { display: grid; gap: 8px; }
+.accountNavMeta div { display: flex; justify-content: space-between; gap: 12px; border: 1px solid rgba(86,164,255,0.14); border-radius: 12px; padding: 9px 10px; background: rgba(47,128,255,0.055); }
+.accountNavMeta strong { overflow-wrap: anywhere; text-align: right; }
+.accountNavPanel p { margin: 12px 0; font-size: 12px; line-height: 1.5; }
+.accountNavActions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+.accountNavActions button, .accountNavActions a { border: 1px solid rgba(86,164,255,0.22); border-radius: 12px; background: rgba(47,128,255,0.075); color: #edf7ff; text-decoration: none; padding: 9px 10px; font-weight: 900; font-size: 12px; text-align: center; }
+.accountNavActions button:first-child { background: linear-gradient(135deg, var(--ocean), var(--royal)); }
+.accountNavActions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.accountProfileGrid { align-items: stretch; }
+.accountHeroCard { position: relative; overflow: hidden; background: radial-gradient(circle at 5% 0%, rgba(0,169,214,0.20), transparent 20rem), linear-gradient(180deg, rgba(8,20,38,0.96), rgba(3,8,18,0.90)); }
+.accountHeroCard::after { content: ''; position: absolute; inset: auto -20% -40% 10%; height: 160px; background: radial-gradient(circle, rgba(47,128,255,0.23), transparent 68%); pointer-events: none; }
+.accountHeroTopline { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; position: relative; z-index: 1; }
+.accountGlassCard { background: linear-gradient(180deg, rgba(8,20,38,0.92), rgba(3,8,18,0.86)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
+.accountFlowList li { margin-bottom: 5px; }
+.accountGateBackdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 18px; background: rgba(1,4,10,0.72); backdrop-filter: blur(12px); }
+.accountGateCard { position: relative; width: min(480px, 100%); overflow: hidden; border: 1px solid rgba(86,164,255,0.26); border-radius: 24px; padding: 24px; background: linear-gradient(180deg, rgba(8,20,38,0.98), rgba(3,8,18,0.96)); box-shadow: 0 30px 100px rgba(0,0,0,0.5); }
+.accountGateGlow { position: absolute; inset: -40% -20% auto auto; width: 260px; height: 260px; border-radius: 999px; background: rgba(47,128,255,0.25); filter: blur(8px); pointer-events: none; }
+.accountGateAvatar { position: relative; z-index: 1; margin-bottom: 16px; }
+.accountGateCard h2 { position: relative; z-index: 1; font-size: clamp(32px, 5vw, 48px); letter-spacing: -0.05em; margin: 6px 0; }
+.accountGateCard p { position: relative; z-index: 1; }
+.accountGateChecklist { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.accountGateChecklist span { border: 1px solid rgba(102,230,188,0.22); border-radius: 999px; padding: 7px 9px; color: #b8f6df; background: rgba(102,230,188,0.06); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; }
+@media (max-width: 980px) { .accountNavPanel { right: auto; left: 0; } .accountNavActions { grid-template-columns: 1fr; } }

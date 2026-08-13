@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AccountGatePrompt, useRequireTurnkeyAccount } from './RequireAccountAction';
 
 type Step = 'basics' | 'launch' | 'wallet' | 'budget' | 'review';
 type LauncherMode = 'modal' | 'inline' | 'compact';
@@ -55,6 +56,7 @@ export function CreateProjectLauncher({
   className = ''
 }: Props) {
   const [open, setOpen] = useState(defaultOpen || mode === 'inline');
+  const accountGate = useRequireTurnkeyAccount();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const [step, setStep] = useState<Step>('basics');
@@ -105,10 +107,12 @@ export function CreateProjectLauncher({
     ]);
   }, [open]);
 
+  async function openLauncher() { await accountGate.requireAccount(() => setOpen(true)); }
   function next() { setStep(steps[Math.min(currentIndex + 1, steps.length - 1)][0]); }
   function back() { setStep(steps[Math.max(currentIndex - 1, 0)][0]); }
 
   async function createProject() {
+    if (!accountGate.account.authenticated) { await accountGate.requireAccount(); return; }
     if (!canCreate) { setError('Project name and ticker are required.'); return; }
     setSubmitting(true);
     setStatus('Creating durable project record. No chain action will run.');
@@ -147,7 +151,7 @@ export function CreateProjectLauncher({
     <section className={`documentCard createProjectPanel guidedCreateProjectPanel ${mode === 'inline' ? 'inlineCreateProjectPanel' : ''} ${className}`}>
       <div className="sectionIntro compactIntro createProjectHeaderRow">
         <div><span>Create Project</span><h2>{title}</h2><p>{copy}</p></div>
-        <div className="createProjectHeaderActions"><button className="button" type="button" onClick={() => setOpen(true)}>{label}</button>{mode === 'inline' && <><a href="/projects">Projects</a><a href="/deployment">Deployment</a></>}</div>
+        <div className="createProjectHeaderActions"><button className="button" type="button" onClick={() => void openLauncher()}>{label}</button>{mode === 'inline' && <><a href="/projects">Projects</a><a href="/deployment">Deployment</a></>}</div>
       </div>
       {status && <p className="profitText">{status}</p>}{error && <p className="dangerText">{error}</p>}
       {mode === 'inline' && open && wizard(false)}
@@ -155,8 +159,8 @@ export function CreateProjectLauncher({
   );
 
   const modalWizard = mounted && open && mode !== 'inline' ? createPortal(wizard(true), document.body) : null;
-  if (mode === 'modal') return <><button className="bondrHeaderAction createProjectHeaderButton" type="button" onClick={() => setOpen(true)}>{label}</button>{modalWizard}</>;
-  return <>{launcherCard}{modalWizard}</>;
+  if (mode === 'modal') return <><button className="bondrHeaderAction createProjectHeaderButton" type="button" onClick={() => void openLauncher()}>{label}</button>{modalWizard}<AccountGatePrompt open={accountGate.promptOpen} onClose={() => accountGate.setPromptOpen(false)} intent="create a project" /></>;
+  return <>{launcherCard}{modalWizard}<AccountGatePrompt open={accountGate.promptOpen} onClose={() => accountGate.setPromptOpen(false)} intent="create a project" /></>;
 
   function wizard(isModal: boolean) {
     const shell = <div className="createProjectModalShell professionalCreateProjectShell">

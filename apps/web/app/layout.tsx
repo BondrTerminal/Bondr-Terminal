@@ -3,6 +3,8 @@ import '@turnkey/react-wallet-kit/styles.css';
 import './globals.css';
 import { GlobalCreateProjectAction } from './components/GlobalCreateProjectAction';
 import { HeaderWalletChip } from './components/HeaderWalletChip';
+import { TurnkeyAccountProvider } from './components/TurnkeyAccountProvider';
+import { AccountNavButton } from './components/AccountNavButton';
 
 export const metadata: Metadata = {
   title: 'Bond.Terminal',
@@ -31,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
+        <TurnkeyAccountProvider>
         <div className="bondrAppFrame bondrFinalShell">
           <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
             <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
@@ -51,13 +54,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <HeaderWalletChip />
               <GlobalCreateProjectAction />
               <a className="bondrHeaderAction" href="/wallets">Wallet Ops</a>
-              <a className="bondrProfileOrb" href="/profile" aria-label="Open profile and account">B</a>
+              <AccountNavButton />
             </div>
           </header>
           <div className="bondrAppContent">
             {children}
           </div>
         </div>
+        </TurnkeyAccountProvider>
       </body>
     </html>
   );
