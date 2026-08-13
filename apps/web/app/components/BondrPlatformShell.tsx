@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 import { BondrLandingPage } from './BondrLandingPage';
@@ -86,6 +86,12 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const redirectedRef = useRef(false);
+  const [debugAuth, setDebugAuth] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setDebugAuth(new URLSearchParams(window.location.search).get('debugAuth') === '1');
+  }, [pathname]);
 
 
   useEffect(() => {
@@ -129,7 +135,23 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
   }, [account.authenticated, pathname, router]);
 
   if (!account.authenticated && !PUBLIC_PATHS.has(pathname)) {
-    return <BondrLandingPage />;
+    return (
+      <>
+        <BondrLandingPage />
+        {debugAuth ? (
+          <div className="bondrAuthDebug" aria-label="BONDR auth debug">
+            <strong>Auth debug</strong>
+            <span>authState: {account.authState}</span>
+            <span>clientState: {account.clientState}</span>
+            <span>authenticated: {String(account.authenticated)}</span>
+            <span>hasUser: {String(Boolean(account.userId))}</span>
+            <span>hasOrg: {String(Boolean(account.organizationId))}</span>
+            <span>hasSessionJwt: {String(Boolean(account.sessionJwt))}</span>
+            <span>walletCount: {account.walletCount}</span>
+          </div>
+        ) : null}
+      </>
+    );
   }
 
   return (

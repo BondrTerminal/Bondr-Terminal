@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AuthState, ClientState, TurnkeyProvider, type TurnkeyProviderConfig, useTurnkey } from '@turnkey/react-wallet-kit';
 
 const organizationId = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ?? process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? '';
@@ -105,7 +105,7 @@ function configuredTurnkeyConfig(): TurnkeyProviderConfig {
   };
 }
 
-function TurnkeyAccountBridge({ children, verifiedSession, clearVerifiedSession }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; clearVerifiedSession: () => void }) {
+function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, clearVerifiedSession }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; setVerifiedSession: (session: VerifiedTurnkeySession) => void; clearVerifiedSession: () => void }) {
   const turnkey = useTurnkey();
   const clientReady = turnkey.clientState === ClientState.Ready;
   const session = turnkey.session as Record<string, unknown> | undefined;
@@ -115,6 +115,15 @@ function TurnkeyAccountBridge({ children, verifiedSession, clearVerifiedSession 
   const user = turnkey.user as Record<string, unknown> | undefined;
   const firstWallet = turnkey.wallets[0] as (typeof turnkey.wallets)[number] | undefined;
   const firstAccount = firstWallet?.accounts?.[0];
+
+  useEffect(() => {
+    const verified = normalizeVerifiedSession(turnkey.session as TurnkeyAuthSessionLike | undefined);
+    if (!verified) return;
+    if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
+    setVerifiedSession(verified);
+    sessionStorage.setItem('bondr_verified_auth', 'true');
+    window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
+  }, [setVerifiedSession, turnkey.session, verifiedSession?.organizationId, verifiedSession?.userId]);
 
   const value = useMemo<BondrTurnkeyAccount>(() => ({
     configured: true,
@@ -171,7 +180,7 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
         onError: (error) => console.error('Turnkey account error:', error)
       }}
     >
-      <TurnkeyAccountBridge verifiedSession={verifiedSession} clearVerifiedSession={() => setVerifiedSession(null)}>{children}</TurnkeyAccountBridge>
+      <TurnkeyAccountBridge verifiedSession={verifiedSession} setVerifiedSession={setVerifiedSession} clearVerifiedSession={() => setVerifiedSession(null)}>{children}</TurnkeyAccountBridge>
     </TurnkeyProvider>
   );
 }
