@@ -148,6 +148,9 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
             <span>hasOrg: {String(Boolean(account.organizationId))}</span>
             <span>hasSessionJwt: {String(Boolean(account.sessionJwt))}</span>
             <span>walletCount: {account.walletCount}</span>
+            <span>walletProvidersCount: {account.walletProvidersCount}</span>
+            <span>walletProviders: {account.walletProviderNames.join(', ') || 'none'}</span>
+            <span>walletNamespaces: {account.walletProviderNamespaces.join(', ') || 'none'}</span>
             <span>lastEvent: {account.debug.lastEvent}</span>
             <span>callbackFired: {String(account.debug.callbackFired)}</span>
             <span>callbackMethod: {account.debug.callbackMethod ?? 'none'}</span>

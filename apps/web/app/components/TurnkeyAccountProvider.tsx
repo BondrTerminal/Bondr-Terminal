@@ -21,6 +21,9 @@ export type BondrTurnkeyAccount = {
   email: string | null;
   organizationId: string | null;
   walletCount: number;
+  walletProvidersCount: number;
+  walletProviderNames: string[];
+  walletProviderNamespaces: string[];
   firstWalletId: string | null;
   firstAccountAddress: string | null;
   sessionExpiresAt: string | null;
@@ -55,6 +58,9 @@ const defaultAccount: BondrTurnkeyAccount = {
   email: null,
   organizationId: null,
   walletCount: 0,
+  walletProvidersCount: 0,
+  walletProviderNames: [],
+  walletProviderNamespaces: [],
   firstWalletId: null,
   firstAccountAddress: null,
   sessionExpiresAt: null,
@@ -150,10 +156,23 @@ function configuredTurnkeyConfig(): TurnkeyProviderConfig {
         methods: {
           emailOtpAuthEnabled: true,
           passkeyAuthEnabled: true,
-          walletAuthEnabled: true,
           smsOtpAuthEnabled: false
         },
         methodOrder: ['email', 'passkey', 'wallet']
+      }
+    },
+    walletConfig: {
+      features: {
+        auth: true,
+        connecting: true
+      },
+      chains: {
+        solana: {
+          native: true
+        },
+        ethereum: {
+          native: false
+        }
       }
     }
   };
@@ -169,6 +188,8 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
   const user = turnkey.user as Record<string, unknown> | undefined;
   const firstWallet = turnkey.wallets[0] as (typeof turnkey.wallets)[number] | undefined;
   const firstAccount = firstWallet?.accounts?.[0];
+  const walletProviderNames = turnkey.walletProviders.map((provider) => provider.info.name).filter(Boolean).slice(0, 8);
+  const walletProviderNamespaces = Array.from(new Set(turnkey.walletProviders.map((provider) => provider.chainInfo.namespace).filter(Boolean))).slice(0, 8);
 
   useEffect(() => {
     const verified = normalizeVerifiedSession(turnkey.session as TurnkeyAuthSessionLike | undefined);
@@ -194,6 +215,9 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     email: maybeString(user?.email),
     organizationId: sessionOrganizationId ?? verifiedSession?.organizationId ?? organizationId,
     walletCount: turnkey.wallets.length,
+    walletProvidersCount: turnkey.walletProviders.length,
+    walletProviderNames,
+    walletProviderNamespaces,
     firstWalletId: firstWallet?.walletId ?? null,
     firstAccountAddress: firstAccount?.address ?? null,
     sessionExpiresAt: sessionExpiryIso(session?.expiry) ?? maybeString(session?.expiresAt) ?? sessionExpiryIso(verifiedSession?.expiry),
@@ -219,7 +243,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     refresh: async () => {
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     }
-  }), [authenticated, clearVerifiedSession, clientReady, debug, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedSession]);
+  }), [authenticated, clearVerifiedSession, clientReady, debug, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedSession, walletProviderNames, walletProviderNamespaces]);
 
   return <TurnkeyAccountContext.Provider value={value}>{children}</TurnkeyAccountContext.Provider>;
 }
