@@ -4,14 +4,44 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 
-const safety = ['Turnkey identity', 'Browser-wallet signer', 'No server key custody'];
+type LoginIntent = 'deploy' | 'signup' | 'login';
+
+const intentCopy: Record<LoginIntent, { title: string; body: string }> = {
+  deploy: {
+    title: 'Start deploying with BONDR',
+    body: 'Your BONDR profile unlocks the terminal. Your browser wallet remains the signer.'
+  },
+  signup: {
+    title: 'Create your BONDR account',
+    body: 'Turnkey secures your identity. BONDR never asks for seed phrases.'
+  },
+  login: {
+    title: 'Log in to BONDR',
+    body: 'Continue to your secured operator terminal.'
+  }
+};
+
+const productCards = [
+  ['Deployment prep', 'Configure launch metadata, readiness, and execution gates before anything goes live.'],
+  ['Wallet operations', 'Organize operator wallets and signer readiness without exposing the terminal before auth.'],
+  ['Liquidity planning', 'Prepare liquidity and market-making workflows behind the secured command layer.'],
+  ['Terminal intelligence', 'Analyze tokens, routes, portfolios, and policy state from the private operator surface.']
+] as const;
+
+const safetyCards = ['Turnkey identity', 'Browser-wallet signing', 'Simulation required', 'Broadcast/deployment gated'];
 
 export function BondrLandingPage() {
   const account = useBondrTurnkeyAccount();
+  const [intent, setIntent] = useState<LoginIntent | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
-  async function login() {
+  function openLogin(nextIntent: LoginIntent) {
+    setIntent(nextIntent);
+    setMessage('');
+  }
+
+  async function continueWithTurnkey() {
     if (!account.configured || !account.clientReady) {
       setMessage('Turnkey login is not fully configured yet.');
       return;
@@ -21,7 +51,7 @@ export function BondrLandingPage() {
     setMessage('Opening Turnkey secure login…');
     try {
       await account.login();
-      setMessage('');
+      setMessage('Unlocking BONDR terminal…');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Turnkey login did not complete.');
     } finally {
@@ -29,38 +59,68 @@ export function BondrLandingPage() {
     }
   }
 
+  const modalCopy = intent ? intentCopy[intent] : null;
+
   return (
-    <main className="bondrLoginShell" aria-label="BONDR login">
-      <div className="bondrLoginBackdropGlow" />
-      <section className="bondrLoginCard">
-        <div className="bondrLoginWordmarkWrap">
+    <main className="bondrPublicShell" aria-label="BONDR public entry">
+      <header className="bondrPublicHeader">
+        <a className="bondrPublicBrand" href="/" aria-label="BONDR home">
           <Image src="/brand/bondr-wordmark.svg" alt="BONDR" width={720} height={180} priority />
+        </a>
+        <div className="bondrPublicActions">
+          <button type="button" onClick={() => openLogin('login')}>Log In</button>
+          <button type="button" onClick={() => openLogin('signup')}>Sign Up</button>
         </div>
+      </header>
 
-        <div className="bondrLoginContent">
-          <div className="bondrLoginEyebrow">Turnkey secured access</div>
-          <h1>Log in to BONDR.</h1>
-          <p>
-            Authenticate your operator profile with Turnkey. Execution remains separate:
-            browser-wallet signing, simulation, and policy gates still control any transaction flow.
-          </p>
+      <section className="bondrPublicHero">
+        <div className="bondrPublicEyebrow">Solana operator terminal</div>
+        <h1>Deploy and operate Solana launches from one secured terminal.</h1>
+        <p>BONDR brings deployment prep, wallet operations, liquidity planning, token intelligence, and browser-wallet execution gates into one private command layer.</p>
+        <div className="bondrHeroActions">
+          <button type="button" onClick={() => openLogin('deploy')}>Start Deploying</button>
+          <span>Already have an account? <button type="button" onClick={() => openLogin('login')}>Log in</button></span>
         </div>
+        <div className="bondrHeroSafety">Turnkey-secured identity. Browser-wallet signing. No server-side seed phrase custody.</div>
+      </section>
 
-        <button
-          type="button"
-          className="bondrLoginButton"
-          onClick={() => void login()}
-          disabled={!account.configured || !account.clientReady || busy}
-        >
-          {busy ? 'Opening Turnkey…' : account.configured ? 'Continue with Turnkey' : 'Turnkey unavailable'}
-        </button>
-
-        {message && <p className="bondrLoginMessage">{message}</p>}
-
-        <div className="bondrLoginSafety" aria-label="Login safety notes">
-          {safety.map((item) => <span key={item}>{item}</span>)}
+      <section className="bondrPublicInfo" aria-label="What BONDR does">
+        <div className="bondrPublicSectionHead">
+          <span>What BONDR does</span>
+          <h2>Launch operations, organized before the first transaction.</h2>
+        </div>
+        <div className="bondrPublicCardGrid">
+          {productCards.map(([title, body]) => <article key={title}><strong>{title}</strong><p>{body}</p></article>)}
         </div>
       </section>
+
+      <section className="bondrPublicSecurity" aria-label="Secured by design">
+        <div><span>Secured by design</span><h2>Authenticate first. Sign separately.</h2></div>
+        <div className="bondrSecurityPills">{safetyCards.map((item) => <span key={item}>{item}</span>)}</div>
+      </section>
+
+      <section className="bondrPublicDocs">
+        <span>Docs</span>
+        <h2>Read the BONDR operating doctrine.</h2>
+        <a href="/whitepaper">Open whitepaper</a>
+      </section>
+
+      {modalCopy && (
+        <div className="bondrAuthBackdrop" role="dialog" aria-modal="true" aria-label={modalCopy.title}>
+          <section className="bondrAuthModal">
+            <button className="bondrAuthClose" type="button" onClick={() => setIntent(null)} aria-label="Close login">×</button>
+            <Image className="bondrAuthWordmark" src="/brand/bondr-wordmark.svg" alt="BONDR" width={360} height={90} />
+            <div className="bondrPublicEyebrow">Turnkey secured access</div>
+            <h2>{modalCopy.title}</h2>
+            <p>{modalCopy.body}</p>
+            <button className="bondrAuthPrimary" type="button" onClick={() => void continueWithTurnkey()} disabled={!account.configured || !account.clientReady || busy}>
+              {busy ? 'Opening Turnkey…' : account.configured ? 'Continue with Turnkey' : 'Turnkey unavailable'}
+            </button>
+            <small>Your BONDR profile unlocks the terminal. Your browser wallet remains the signer.</small>
+            {message && <p className="bondrLoginMessage">{message}</p>}
+          </section>
+        </div>
+      )}
     </main>
   );
 }

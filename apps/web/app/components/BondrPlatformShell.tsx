@@ -1,11 +1,16 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 import { BondrLandingPage } from './BondrLandingPage';
 import { GlobalCreateProjectAction } from './GlobalCreateProjectAction';
 import { HeaderWalletChip } from './HeaderWalletChip';
 import { AccountNavButton } from './AccountNavButton';
+
+const NEXT_KEY = 'bondr_next_path';
+const PUBLIC_PATHS = new Set(['/whitepaper']);
 
 const primaryNavItems = [
   { href: '/', label: 'Hub' },
@@ -22,6 +27,22 @@ const toolItems = [
   { href: '/token-analyzer', label: 'Token Analyzer' },
   { href: '/project-dashboard', label: 'Project Dashboard' }
 ];
+
+function currentPath(pathname: string, search: string) {
+  return `${pathname}${search ? `?${search}` : ''}`;
+}
+
+function safeNextPath(value: string | null | undefined) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
+  if (value.startsWith('/api/')) return '/';
+  try {
+    const parsed = new URL(value, 'https://bondr.local');
+    if (parsed.origin !== 'https://bondr.local') return '/';
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return '/';
+  }
+}
 
 function AppHeader() {
   return (
@@ -52,8 +73,29 @@ function AppHeader() {
 
 export function BondrPlatformShell({ children }: { children: ReactNode }) {
   const account = useBondrTurnkeyAccount();
+  const pathname = usePathname();
+  const router = useRouter();
+  const redirectedRef = useRef(false);
 
-  if (!account.authenticated) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = currentPath(pathname, window.location.search.replace(/^\?/, ''));
+
+    if (!account.authenticated) {
+      sessionStorage.setItem(NEXT_KEY, safeNextPath(path));
+      redirectedRef.current = false;
+      return;
+    }
+
+    if (redirectedRef.current) return;
+    const next = safeNextPath(sessionStorage.getItem(NEXT_KEY));
+    sessionStorage.removeItem(NEXT_KEY);
+    redirectedRef.current = true;
+
+    if (next !== path) router.replace(next);
+  }, [account.authenticated, pathname, router]);
+
+  if (!account.authenticated && !PUBLIC_PATHS.has(pathname)) {
     return <BondrLandingPage />;
   }
 

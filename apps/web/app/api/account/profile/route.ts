@@ -1,15 +1,9 @@
 import { z } from 'zod';
-import { defaultBondrProfile, sanitizeProfileText, type BondrStoredProfile } from '../../../../lib/bondr-profile';
+import { sanitizeProfileText, type BondrStoredProfile } from '../../../../lib/bondr-profile';
+import { loadOrCreateBondrProfile, saveBondrProfile } from '../../../../lib/bondr-profile-store';
 import { TurnkeySessionAuthError, verifyTurnkeyRequest } from '../../../../lib/turnkey-session-auth';
 
 export const dynamic = 'force-dynamic';
-
-type StoredProfile = BondrStoredProfile;
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __bondrTurnkeyProfiles: Map<string, StoredProfile> | undefined;
-}
 
 const profileSchema = z.object({
   userId: z.string().min(1).max(160).optional(),
@@ -23,11 +17,6 @@ const profileSchema = z.object({
   bio: z.string().max(160).optional(),
   preferredWalletLabel: z.string().max(80).optional()
 }).strict();
-
-function profileStore() {
-  globalThis.__bondrTurnkeyProfiles ??= new Map<string, StoredProfile>();
-  return globalThis.__bondrTurnkeyProfiles;
-}
 
 function authError(error: unknown) {
   if (error instanceof TurnkeySessionAuthError) {
@@ -46,45 +35,28 @@ function subjectPayload(session: Awaited<ReturnType<typeof verifyTurnkeyRequest>
   };
 }
 
-function responsePayload(profile: StoredProfile, session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>, extra: Record<string, unknown> = {}) {
+function responsePayload(input: {
+  profile: BondrStoredProfile;
+  session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>;
+  created?: boolean;
+  stored?: boolean;
+  storage: string;
+  storageDurability: string;
+  durableProfileDatabase: boolean;
+  note: string;
+}) {
   return Response.json({
     status: 'ok',
     verified: true,
-    profile,
-    subject: subjectPayload(session),
-    storage: 'memory',
-    storageDurability: 'ephemeral-server-instance',
-    durableProfileDatabase: false,
-    note: 'Turnkey JWT is verified. Profile persistence is process memory only until a durable database is connected.',
-    ...extra
+    profile: input.profile,
+    subject: subjectPayload(input.session),
+    created: input.created ?? false,
+    stored: input.stored ?? false,
+    storage: input.storage,
+    storageDurability: input.storageDurability,
+    durableProfileDatabase: input.durableProfileDatabase,
+    note: input.note
   }, { headers: { 'cache-control': 'no-store' } });
-}
-
-function getOrCreateProfile(session: Awaited<ReturnType<typeof verifyTurnkeyRequest>>, seed: Partial<StoredProfile> = {}) {
-  const store = profileStore();
-  const existing = store.get(session.userId);
-  const now = new Date().toISOString();
-
-  if (existing) {
-    const updated: StoredProfile = {
-      ...existing,
-      ...(seed.email ? { email: seed.email } : {}),
-      ...(seed.firstAccountAddress ? { firstAccountAddress: seed.firstAccountAddress } : {}),
-      lastSeenAt: now
-    };
-    store.set(session.userId, updated);
-    return { profile: updated, created: false };
-  }
-
-  const created = defaultBondrProfile({
-    userId: session.userId,
-    organizationId: session.organizationId,
-    email: seed.email,
-    firstAccountAddress: seed.firstAccountAddress,
-    now
-  });
-  store.set(session.userId, created);
-  return { profile: created, created: true };
 }
 
 export async function GET(request: Request) {
@@ -95,8 +67,8 @@ export async function GET(request: Request) {
     return authError(error);
   }
 
-  const { profile, created } = getOrCreateProfile(session);
-  return responsePayload(profile, session, { created });
+  const loaded = await loadOrCreateBondrProfile({ userId: session.userId, organizationId: session.organizationId });
+  return responsePayload({ ...loaded, session });
 }
 
 export async function POST(request: Request) {
@@ -126,25 +98,25 @@ export async function POST(request: Request) {
     return Response.json({ status: 'forbidden', error: 'organization-id-mismatch' }, { status: 403, headers: { 'cache-control': 'no-store' } });
   }
 
-  const { profile: base, created } = getOrCreateProfile(session, {
+  const loaded = await loadOrCreateBondrProfile({
+    userId: session.userId,
+    organizationId: session.organizationId,
     ...(parsed.data.email ? { email: parsed.data.email } : {}),
     ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {})
   });
-  const now = new Date().toISOString();
-  const profile: StoredProfile = {
-    ...base,
-    ...(parsed.data.userName ? { userName: sanitizeProfileText(parsed.data.userName, base.userName) } : {}),
-    ...(parsed.data.displayName ? { displayName: sanitizeProfileText(parsed.data.displayName, base.displayName) } : {}),
+
+  const profile: BondrStoredProfile = {
+    ...loaded.profile,
+    ...(parsed.data.userName ? { userName: sanitizeProfileText(parsed.data.userName, loaded.profile.userName) } : {}),
+    ...(parsed.data.displayName ? { displayName: sanitizeProfileText(parsed.data.displayName, loaded.profile.displayName) } : {}),
     ...(parsed.data.email ? { email: parsed.data.email } : {}),
     ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {}),
-    ...(parsed.data.avatarSeed ? { avatarSeed: sanitizeProfileText(parsed.data.avatarSeed, base.avatarSeed) } : {}),
-    ...(parsed.data.avatarGradient ? { avatarGradient: sanitizeProfileText(parsed.data.avatarGradient, base.avatarGradient) } : {}),
+    ...(parsed.data.avatarSeed ? { avatarSeed: sanitizeProfileText(parsed.data.avatarSeed, loaded.profile.avatarSeed) } : {}),
+    ...(parsed.data.avatarGradient ? { avatarGradient: sanitizeProfileText(parsed.data.avatarGradient, loaded.profile.avatarGradient) } : {}),
     ...(typeof parsed.data.bio === 'string' ? { bio: sanitizeProfileText(parsed.data.bio) } : {}),
-    ...(typeof parsed.data.preferredWalletLabel === 'string' ? { preferredWalletLabel: sanitizeProfileText(parsed.data.preferredWalletLabel) } : {}),
-    updatedAt: now,
-    lastSeenAt: now
+    ...(typeof parsed.data.preferredWalletLabel === 'string' ? { preferredWalletLabel: sanitizeProfileText(parsed.data.preferredWalletLabel) } : {})
   };
-  profileStore().set(session.userId, profile);
 
-  return responsePayload(profile, session, { created, stored: true });
+  const saved = await saveBondrProfile(profile);
+  return responsePayload({ ...saved, session, created: loaded.created, stored: true });
 }

@@ -13300,148 +13300,238 @@ body > .createProjectModal .professionalCreateProjectShell {
 
 
 
+
 /* BONDR pre-login landing */
-.bondrLoginShell {
-  position: relative;
-  min-height: calc(100vh - 92px);
-  display: grid;
-  place-items: center;
-  padding: clamp(24px, 5vw, 72px) 18px;
-  overflow: hidden;
+.bondrPublicShell {
+  min-height: 100vh;
   color: #f9ebe0;
   background:
-    radial-gradient(circle at 50% 12%, rgba(0,169,214,0.18), transparent 26rem),
-    radial-gradient(circle at 50% 82%, rgba(25,71,210,0.14), transparent 30rem),
-    linear-gradient(180deg, #02050b 0%, #040915 52%, #010308 100%);
+    radial-gradient(circle at 50% 8%, rgba(0,169,214,0.16), transparent 28rem),
+    radial-gradient(circle at 84% 28%, rgba(25,71,210,0.16), transparent 30rem),
+    linear-gradient(180deg, #02050b 0%, #040915 56%, #010308 100%);
+  overflow-x: hidden;
 }
-.bondrLoginShell::before {
+.bondrPublicShell::before {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(125,199,255,0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(125,199,255,0.028) 1px, transparent 1px);
+    linear-gradient(rgba(125,199,255,0.032) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125,199,255,0.026) 1px, transparent 1px);
   background-size: 44px 44px;
-  mask-image: radial-gradient(circle at 50% 48%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 24%, #000 0%, transparent 76%);
 }
-.bondrLoginBackdropGlow {
-  position: absolute;
-  width: min(720px, 86vw);
-  height: min(720px, 86vw);
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(0,169,214,0.20), rgba(25,71,210,0.10) 44%, transparent 70%);
-  filter: blur(14px);
-  pointer-events: none;
-}
-.bondrLoginCard {
+.bondrPublicHeader {
   position: relative;
-  z-index: 1;
-  width: min(560px, 100%);
-  border: 1px solid rgba(249,235,224,0.12);
-  border-radius: clamp(26px, 4vw, 38px);
-  padding: clamp(22px, 5vw, 38px);
-  text-align: center;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255,127,17,0.08), transparent 18rem),
-    linear-gradient(180deg, rgba(6,15,30,0.96), rgba(0,0,0,0.94));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 42px 130px rgba(0,0,0,0.52);
-  backdrop-filter: blur(18px);
-}
-.bondrLoginCard::after {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border: 1px solid rgba(125,199,255,0.08);
-  border-radius: calc(clamp(26px, 4vw, 38px) - 10px);
-  pointer-events: none;
-}
-.bondrLoginWordmarkWrap {
-  position: relative;
-  z-index: 1;
-  width: min(420px, 100%);
-  margin: 0 auto clamp(24px, 4vw, 34px);
-  padding: 10px;
-  border: 1px solid rgba(249,235,224,0.10);
-  border-radius: 20px;
-  background: #000;
-  box-shadow: 0 0 60px rgba(0,169,214,0.12);
-}
-.bondrLoginWordmarkWrap img { display: block; width: 100%; height: auto; border-radius: 12px; }
-.bondrLoginContent {
-  position: relative;
-  z-index: 1;
-  max-width: 450px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1180px, calc(100% - 28px));
   margin: 0 auto;
+  padding: 24px 0;
 }
-.bondrLoginEyebrow {
+.bondrPublicBrand {
+  display: block;
+  width: 168px;
+  padding: 6px;
+  border: 1px solid rgba(249,235,224,0.08);
+  border-radius: 14px;
+  background: #000;
+}
+.bondrPublicBrand img,
+.bondrAuthWordmark { display: block; width: 100%; height: auto; border-radius: 10px; }
+.bondrPublicActions { display: flex; align-items: center; gap: 10px; }
+.bondrPublicActions button {
+  border: 1px solid rgba(249,235,224,0.12);
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: #f9ebe0;
+  background: rgba(249,235,224,0.045);
+  cursor: pointer;
+  font-weight: 900;
+}
+.bondrPublicActions button:last-child {
+  border-color: rgba(255,127,17,0.36);
+  background: rgba(255,127,17,0.10);
+}
+.bondrPublicHero {
+  position: relative;
+  z-index: 1;
+  width: min(960px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: clamp(80px, 13vw, 154px) 0 clamp(84px, 12vw, 142px);
+  text-align: center;
+}
+.bondrPublicEyebrow,
+.bondrPublicSectionHead span,
+.bondrPublicSecurity span,
+.bondrPublicDocs span {
   color: #7dc7ff;
   text-transform: uppercase;
   letter-spacing: 0.17em;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
-.bondrLoginContent h1 {
-  margin: 10px 0 12px;
+.bondrPublicHero h1 {
+  margin: 14px auto 18px;
+  max-width: 940px;
   color: #fff9f2;
-  font-size: clamp(38px, 7vw, 64px);
-  line-height: 0.92;
-  letter-spacing: -0.06em;
+  font-size: clamp(48px, 8vw, 102px);
+  line-height: 0.88;
+  letter-spacing: -0.074em;
+  text-wrap: balance;
 }
-.bondrLoginContent p {
-  margin: 0;
-  color: rgba(249,235,224,0.68);
-  font-size: 15px;
+.bondrPublicHero p {
+  max-width: 740px;
+  margin: 0 auto;
+  color: rgba(249,235,224,0.70);
+  font-size: clamp(16px, 1.6vw, 20px);
   line-height: 1.65;
 }
-.bondrLoginButton {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  margin-top: clamp(24px, 4vw, 34px);
-  border: 1px solid rgba(255,127,17,0.45);
-  border-radius: 18px;
-  padding: 16px 18px;
+.bondrHeroActions {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-top: 32px;
+}
+.bondrHeroActions > button,
+.bondrAuthPrimary {
+  border: 1px solid rgba(255,127,17,0.48);
+  border-radius: 16px;
+  padding: 15px 22px;
   color: #fff9f2;
-  background: linear-gradient(135deg, #ff7f11 0%, #1947d2 70%, #00a9d6 100%);
-  box-shadow: 0 22px 70px rgba(25,71,210,0.28), 0 0 32px rgba(255,127,17,0.16);
+  background: linear-gradient(135deg, #ff7f11 0%, #1947d2 72%, #00a9d6 100%);
+  box-shadow: 0 22px 70px rgba(25,71,210,0.26), 0 0 34px rgba(255,127,17,0.16);
   cursor: pointer;
   font-weight: 950;
   font-size: 15px;
 }
-.bondrLoginButton:disabled {
-  opacity: 0.58;
-  cursor: not-allowed;
-}
-.bondrLoginMessage {
-  position: relative;
-  z-index: 1;
-  margin: 14px 0 0;
-  color: rgba(249,235,224,0.72);
-  font-size: 13px;
-}
-.bondrLoginSafety {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-}
-.bondrLoginSafety span {
-  border: 1px solid rgba(125,199,255,0.18);
-  border-radius: 999px;
-  padding: 7px 9px;
-  background: rgba(125,199,255,0.052);
-  color: #d8efff;
-  font-size: 11px;
+.bondrHeroActions span { color: rgba(249,235,224,0.58); font-size: 14px; }
+.bondrHeroActions span button {
+  border: 0;
+  padding: 0;
+  color: #7dc7ff;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
   font-weight: 900;
 }
-@media (max-width: 620px) {
-  .bondrLoginShell { min-height: calc(100vh - 80px); padding-inline: 12px; }
-  .bondrLoginCard { padding: 20px; }
-  .bondrLoginWordmarkWrap { padding: 8px; }
+.bondrHeroSafety {
+  margin: 18px auto 0;
+  color: rgba(249,235,224,0.50);
+  font-size: 13px;
+}
+.bondrPublicInfo,
+.bondrPublicSecurity,
+.bondrPublicDocs {
+  position: relative;
+  z-index: 1;
+  width: min(1080px, calc(100% - 28px));
+  margin: 0 auto 16px;
+  border: 1px solid rgba(249,235,224,0.09);
+  border-radius: 26px;
+  padding: clamp(20px, 3vw, 30px);
+  background: linear-gradient(180deg, rgba(6,15,30,0.82), rgba(1,3,8,0.80));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+}
+.bondrPublicSectionHead h2,
+.bondrPublicSecurity h2,
+.bondrPublicDocs h2 {
+  margin: 8px 0 0;
+  color: #fff9f2;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 0.98;
+  letter-spacing: -0.052em;
+}
+.bondrPublicCardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.bondrPublicCardGrid article {
+  border: 1px solid rgba(125,199,255,0.14);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(125,199,255,0.04);
+}
+.bondrPublicCardGrid strong { color: #fff9f2; font-size: 17px; }
+.bondrPublicCardGrid p { color: rgba(249,235,224,0.60); line-height: 1.55; }
+.bondrPublicSecurity { display: flex; align-items: center; justify-content: space-between; gap: 22px; }
+.bondrSecurityPills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.bondrSecurityPills span {
+  border: 1px solid rgba(125,199,255,0.18);
+  border-radius: 999px;
+  padding: 8px 10px;
+  color: #d8efff;
+  background: rgba(125,199,255,0.052);
+  font-size: 12px;
+  font-weight: 900;
+}
+.bondrPublicDocs { margin-bottom: 48px; }
+.bondrPublicDocs a {
+  display: inline-flex;
+  margin-top: 16px;
+  border: 1px solid rgba(249,235,224,0.12);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #f9ebe0;
+  text-decoration: none;
+  background: rgba(249,235,224,0.045);
+  font-weight: 900;
+}
+.bondrAuthBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(1,4,10,0.78);
+  backdrop-filter: blur(16px);
+}
+.bondrAuthModal {
+  position: relative;
+  width: min(500px, 100%);
+  border: 1px solid rgba(249,235,224,0.12);
+  border-radius: 30px;
+  padding: 24px;
+  text-align: left;
+  background: radial-gradient(circle at 50% 0%, rgba(255,127,17,0.09), transparent 17rem), linear-gradient(180deg, rgba(6,15,30,0.99), rgba(0,0,0,0.98));
+  box-shadow: 0 34px 120px rgba(0,0,0,0.58);
+}
+.bondrAuthClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(249,235,224,0.12);
+  border-radius: 999px;
+  color: #f9ebe0;
+  background: rgba(249,235,224,0.05);
+  cursor: pointer;
+  font-size: 20px;
+}
+.bondrAuthWordmark { max-width: 250px; margin-bottom: 20px; border: 1px solid rgba(249,235,224,0.08); background: #000; }
+.bondrAuthModal h2 { margin: 10px 0; color: #fff9f2; font-size: clamp(32px, 5vw, 52px); line-height: 0.94; letter-spacing: -0.055em; }
+.bondrAuthModal p { color: rgba(249,235,224,0.68); line-height: 1.6; }
+.bondrAuthPrimary { width: 100%; margin-top: 14px; }
+.bondrAuthPrimary:disabled { opacity: 0.58; cursor: not-allowed; }
+.bondrAuthModal small { display: block; margin-top: 12px; color: rgba(249,235,224,0.48); line-height: 1.45; }
+.bondrLoginMessage { margin: 12px 0 0; color: rgba(249,235,224,0.72); font-size: 13px; }
+@media (max-width: 860px) {
+  .bondrPublicCardGrid { grid-template-columns: 1fr 1fr; }
+  .bondrPublicSecurity { align-items: flex-start; flex-direction: column; }
+  .bondrSecurityPills { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .bondrPublicHeader { align-items: flex-start; gap: 14px; flex-direction: column; }
+  .bondrPublicCardGrid { grid-template-columns: 1fr; }
+  .bondrPublicHero { text-align: left; }
+  .bondrHeroActions { justify-items: start; }
 }
 
 /* BONDR secured profile editor */
