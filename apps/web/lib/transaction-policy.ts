@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey, SystemProgram, Transaction, VersionedTransaction } from '@solana/web3.js';
 type TerminalIntent = {
   id: string;
   expectedSigner: string;
@@ -21,6 +21,12 @@ export const DEFAULT_ALLOWED_SWAP_PROGRAMS = [
   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 ];
 
+export type DecodedSolTransfer = {
+  from: string;
+  to: string;
+  lamports: number;
+};
+
 export type DecodedTransactionPolicy = {
   kind: 'versioned' | 'legacy';
   signerKeys: string[];
@@ -28,20 +34,39 @@ export type DecodedTransactionPolicy = {
   programs: string[];
   messageHash: string;
   usesAddressLookupTables?: boolean;
+  systemTransfers: DecodedSolTransfer[];
 };
+
+function parseSystemTransfer(data: Buffer | Uint8Array) {
+  const buffer = Buffer.from(data);
+  if (buffer.length < 12) return null;
+  const instruction = buffer.readUInt32LE(0);
+  if (instruction !== 2) return null;
+  const lamports = Number(buffer.readBigUInt64LE(4));
+  return Number.isSafeInteger(lamports) && lamports > 0 ? lamports : null;
+}
 
 export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
   try {
     const tx = VersionedTransaction.deserialize(raw);
     const accountKeys = tx.message.staticAccountKeys.map((key) => key.toBase58());
     const programs = Array.from(new Set(tx.message.compiledInstructions.map((ix) => accountKeys[ix.programIdIndex]).filter(Boolean)));
+    const systemTransfers = tx.message.compiledInstructions.flatMap((ix) => {
+      const program = accountKeys[ix.programIdIndex];
+      const lamports = program === SystemProgram.programId.toBase58() ? parseSystemTransfer(ix.data) : null;
+      if (!lamports || ix.accountKeyIndexes.length < 2) return [];
+      const from = accountKeys[ix.accountKeyIndexes[0]];
+      const to = accountKeys[ix.accountKeyIndexes[1]];
+      return from && to ? [{ from, to, lamports }] : [];
+    });
     return {
       kind: 'versioned',
       signerKeys: tx.message.staticAccountKeys.slice(0, tx.signatures.length).map((key) => key.toBase58()),
       accountKeys,
       programs,
       messageHash: createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex'),
-      usesAddressLookupTables: 'addressTableLookups' in tx.message && Array.isArray(tx.message.addressTableLookups) && tx.message.addressTableLookups.length > 0
+      usesAddressLookupTables: 'addressTableLookups' in tx.message && Array.isArray(tx.message.addressTableLookups) && tx.message.addressTableLookups.length > 0,
+      systemTransfers
     };
   } catch {
     const tx = Transaction.from(raw);
@@ -52,12 +77,18 @@ export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
       accountSet.add(ix.programId.toBase58());
       for (const key of ix.keys) accountSet.add(key.pubkey.toBase58());
     }
+    const systemTransfers = tx.instructions.flatMap((ix) => {
+      const lamports = ix.programId.equals(SystemProgram.programId) ? parseSystemTransfer(ix.data) : null;
+      if (!lamports || ix.keys.length < 2) return [];
+      return [{ from: ix.keys[0].pubkey.toBase58(), to: ix.keys[1].pubkey.toBase58(), lamports }];
+    });
     return {
       kind: 'legacy',
       signerKeys: tx.signatures.map((sig) => sig.publicKey.toBase58()),
       accountKeys: Array.from(accountSet),
       programs: Array.from(programs),
-      messageHash: createHash('sha256').update(tx.serializeMessage()).digest('hex')
+      messageHash: createHash('sha256').update(tx.serializeMessage()).digest('hex'),
+      systemTransfers
     };
   }
 }
@@ -109,5 +140,36 @@ export function policyCheck(params: {
     blockers,
     intentRequired: Boolean(params.intentId),
     safeToBroadcastIfLiveEnabled: blockers.length === 0
+  };
+}
+
+
+export function fundingPolicyCheck(params: {
+  decoded: DecodedTransactionPolicy;
+  expectedSigner: string;
+  allowedSource: string;
+  allowedDestination: string;
+  maxLamports: number;
+}) {
+  const blockers: string[] = [];
+  if (params.expectedSigner !== params.allowedSource) blockers.push('expectedSigner must equal the approved funding source.');
+  if (!params.decoded.signerKeys.includes(params.allowedSource)) blockers.push('Signed transaction does not include approved source as signer.');
+  const allowedPrograms = [SystemProgram.programId.toBase58()];
+  for (const program of params.decoded.programs) if (!allowedPrograms.includes(program)) blockers.push(`Program not allowed for funding broadcast: ${program}`);
+  if (params.decoded.systemTransfers.length !== 1) blockers.push('Funding broadcast requires exactly one SystemProgram.transfer instruction.');
+  const transfer = params.decoded.systemTransfers[0] ?? null;
+  if (transfer) {
+    if (transfer.from !== params.allowedSource) blockers.push('Funding source does not match approved sender.');
+    if (transfer.to !== params.allowedDestination) blockers.push('Funding destination does not match approved receiver.');
+    if (transfer.lamports > params.maxLamports) blockers.push(`Funding amount exceeds cap: ${transfer.lamports} lamports > ${params.maxLamports}.`);
+    if (transfer.lamports <= 0) blockers.push('Funding amount must be positive.');
+  }
+  if (params.decoded.usesAddressLookupTables) blockers.push('Address lookup tables are not allowed for funding broadcast.');
+  return {
+    safeToBroadcastFunding: blockers.length === 0,
+    blockers,
+    transfer,
+    allowedPrograms,
+    maxLamports: params.maxLamports
   };
 }

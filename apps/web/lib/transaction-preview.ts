@@ -1,4 +1,4 @@
-export type TransactionPreviewAction = 'swap' | 'launch' | 'lp' | 'claim' | 'wallet-send';
+export type TransactionPreviewAction = 'swap' | 'launch' | 'lp' | 'claim' | 'wallet-send' | 'funding';
 export type TransactionPreviewMode = 'preview-only' | 'unsigned-build' | 'simulation-ready';
 
 export type TransactionPreview = {

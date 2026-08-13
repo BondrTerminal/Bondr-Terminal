@@ -92,3 +92,37 @@ test('policy check binds signed transaction to expected message hash and require
   assert.match(blocked.blockers.join('\n'), /Transaction message hash does not match intent/);
   assert.match(blocked.blockers.join('\n'), /Required account missing/);
 });
+
+test('funding policy allows only approved capped SOL transfer', async () => {
+  const { Keypair, SystemProgram, Transaction } = await import('@solana/web3.js');
+  const { decodeTransactionPolicy, fundingPolicyCheck } = await import('../apps/web/lib/transaction-policy.js');
+  const source = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const tx = new Transaction();
+  tx.recentBlockhash = '11111111111111111111111111111111';
+  tx.feePayer = source.publicKey;
+  tx.add(SystemProgram.transfer({ fromPubkey: source.publicKey, toPubkey: destination, lamports: 1_000_000 }));
+  tx.sign(source);
+  const decoded = decodeTransactionPolicy(tx.serialize());
+  const result = fundingPolicyCheck({ decoded, expectedSigner: source.publicKey.toBase58(), allowedSource: source.publicKey.toBase58(), allowedDestination: destination.toBase58(), maxLamports: 1_000_000 });
+  assert.equal(result.safeToBroadcastFunding, true);
+  assert.equal(result.transfer?.lamports, 1_000_000);
+});
+
+test('funding policy blocks destination mismatch and over-cap transfer', async () => {
+  const { Keypair, SystemProgram, Transaction } = await import('@solana/web3.js');
+  const { decodeTransactionPolicy, fundingPolicyCheck } = await import('../apps/web/lib/transaction-policy.js');
+  const source = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const otherDestination = Keypair.generate().publicKey;
+  const tx = new Transaction();
+  tx.recentBlockhash = '11111111111111111111111111111111';
+  tx.feePayer = source.publicKey;
+  tx.add(SystemProgram.transfer({ fromPubkey: source.publicKey, toPubkey: destination, lamports: 1_000_001 }));
+  tx.sign(source);
+  const decoded = decodeTransactionPolicy(tx.serialize());
+  const result = fundingPolicyCheck({ decoded, expectedSigner: source.publicKey.toBase58(), allowedSource: source.publicKey.toBase58(), allowedDestination: otherDestination.toBase58(), maxLamports: 1_000_000 });
+  assert.equal(result.safeToBroadcastFunding, false);
+  assert.match(result.blockers.join('\n'), /destination/);
+  assert.match(result.blockers.join('\n'), /exceeds cap/);
+});
