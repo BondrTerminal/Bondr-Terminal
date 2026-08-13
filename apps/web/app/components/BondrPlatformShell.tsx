@@ -74,7 +74,6 @@ function AppHeader() {
       <div className="bondrHeaderActions" aria-label="Account and watch controls">
         <HeaderWalletChip />
         <GlobalCreateProjectAction />
-        <a className="bondrHeaderAction" href="/deployment">Launch Prep</a>
         <AccountNavButton />
       </div>
     </header>
