@@ -13610,3 +13610,39 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #ff7f11;
   font-size: 13px;
 }
+
+/* BONDR nav dropdown visibility fix */
+.bondrTopHeader,
+.bondrHeaderNav,
+.bondrToolsMenu {
+  overflow: visible !important;
+}
+.bondrToolsMenu {
+  position: relative !important;
+  z-index: 10050 !important;
+}
+.bondrToolsMenu[open] {
+  z-index: 10060 !important;
+}
+.bondrToolsMenuPanel {
+  position: absolute !important;
+  top: calc(100% + 0.55rem) !important;
+  right: 0 !important;
+  z-index: 10070 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  min-width: 220px !important;
+}
+.bondrToolsMenuPanel a {
+  display: flex !important;
+}
+@media (max-width: 880px) {
+  .bondrToolsMenuPanel {
+    position: fixed !important;
+    top: 72px !important;
+    right: 16px !important;
+    left: 16px !important;
+    width: auto !important;
+  }
+}
