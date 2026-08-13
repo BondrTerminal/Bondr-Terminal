@@ -103,6 +103,7 @@ function TurnkeyAccountBridge({ children }: { children: ReactNode }) {
     sessionJwt: maybeString(session?.token) ?? maybeString(session?.jwt) ?? maybeString(session?.sessionJwt),
     login: async () => {
       await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
+      await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
     logout: async () => {
       await turnkey.logout();

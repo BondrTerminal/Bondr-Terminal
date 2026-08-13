@@ -13576,3 +13576,13 @@ body > .createProjectModal .professionalCreateProjectShell {
   border-color: rgba(255,127,17,0.46);
   box-shadow: 0 0 0 3px rgba(255,127,17,0.10);
 }
+
+.bondrPublicSlogan {
+  margin: 12px auto 0;
+  color: #ff7f11;
+  font-size: clamp(18px, 3vw, 30px);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 28px rgba(255,127,17,0.20);
+}

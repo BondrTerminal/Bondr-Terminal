@@ -92,7 +92,11 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(NEXT_KEY);
     redirectedRef.current = true;
 
-    if (next !== path) router.replace(next);
+    if (next !== path) {
+      router.replace(next);
+    } else {
+      router.refresh();
+    }
   }, [account.authenticated, pathname, router]);
 
   if (!account.authenticated && !PUBLIC_PATHS.has(pathname)) {

@@ -30,6 +30,12 @@ const productCards = [
 
 const safetyCards = ['Turnkey identity', 'Browser-wallet signing', 'Simulation required', 'Broadcast/deployment gated'];
 
+function waitForModalUnmount() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+
 export function BondrLandingPage() {
   const account = useBondrTurnkeyAccount();
   const [intent, setIntent] = useState<LoginIntent | null>(null);
@@ -49,8 +55,11 @@ export function BondrLandingPage() {
 
     setBusy(true);
     setMessage('Opening Turnkey secure login…');
+    setIntent(null);
+    await waitForModalUnmount();
     try {
       await account.login();
+      await account.refresh();
       setMessage('Unlocking BONDR terminal…');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Turnkey login did not complete.');
@@ -75,6 +84,7 @@ export function BondrLandingPage() {
 
       <section className="bondrPublicHero">
         <div className="bondrPublicEyebrow">Solana operator terminal</div>
+        <div className="bondrPublicSlogan">Scope. Snipe. Deploy.</div>
         <h1>Deploy and operate Solana launches from one secured terminal.</h1>
         <p>BONDR brings deployment prep, wallet operations, liquidity planning, token intelligence, and browser-wallet execution gates into one private command layer.</p>
         <div className="bondrHeroActions">
