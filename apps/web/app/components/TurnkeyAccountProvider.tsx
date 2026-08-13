@@ -137,6 +137,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, clearVerifiedSession 
     },
     logout: async () => {
       clearVerifiedSession();
+      sessionStorage.removeItem('bondr_verified_auth');
       await turnkey.logout();
     },
     refresh: async () => {
@@ -160,7 +161,9 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
       callbacks={{
         onAuthenticationSuccess: ({ session }) => {
           const verified = normalizeVerifiedSession(session);
+          if (!verified) return;
           setVerifiedSession(verified);
+          sessionStorage.setItem('bondr_verified_auth', 'true');
           window.setTimeout(() => {
             window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
           }, 0);

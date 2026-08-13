@@ -11,6 +11,7 @@ import { AccountNavButton } from './AccountNavButton';
 
 const NEXT_KEY = 'bondr_next_path';
 const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
+const VERIFIED_AUTH_KEY = 'bondr_verified_auth';
 const PUBLIC_PATHS = new Set(['/whitepaper']);
 
 const primaryNavItems = [
@@ -95,6 +96,11 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
       redirectedRef.current = true;
       router.replace(next);
       router.refresh();
+      window.setTimeout(() => {
+        if (sessionStorage.getItem(VERIFIED_AUTH_KEY) === 'true' && !document.querySelector('.bondrTopHeader')) {
+          window.location.href = next;
+        }
+      }, 250);
     }
 
     window.addEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);
