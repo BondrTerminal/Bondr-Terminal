@@ -95,12 +95,6 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
       redirectedRef.current = true;
       router.replace(next);
       router.refresh();
-
-      window.setTimeout(() => {
-        if (!document.querySelector('.bondrTopHeader')) {
-          window.location.assign(next);
-        }
-      }, 700);
     }
 
     window.addEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);

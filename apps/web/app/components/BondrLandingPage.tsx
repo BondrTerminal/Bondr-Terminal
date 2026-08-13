@@ -60,8 +60,7 @@ export function BondrLandingPage() {
     try {
       await account.login();
       await account.refresh();
-      window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
-      setMessage('Unlocking BONDR terminal…');
+      setMessage('Complete Turnkey verification to unlock BONDR terminal…');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Turnkey login did not complete.');
     } finally {
