@@ -35,6 +35,8 @@ data/portfolio-fills-cache.json.tmp-*
 *BIRDEYE*
 *GMGN*
 !apps/web/lib/gmgn.ts
+!apps/web/app/api/gmgn/
+!apps/web/app/api/gmgn/**
 *SOLANA_RPC*
 .neon
 .vercel.deleted-project-backup-*/
