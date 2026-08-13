@@ -18,11 +18,14 @@ export async function GET() {
     account: {
       configured: turnkeyConfigured,
       clientIdentityAvailable: turnkeyConfigured,
-      serverVerifiedProfileStorage: false,
-      serverVerification: 'not-enabled',
-      blocker: 'Turnkey session JWT verification helpers are not installed/configured in the web backend yet.',
-      nextRequiredPackage: '@turnkey/crypto',
-      model: 'global-login-and-client-profile-ready; durable server profile storage intentionally deferred until JWT verification is implemented'
+      serverVerifiedProfileStorage: true,
+      serverVerification: 'turnkey-session-jwt',
+      verificationHelper: 'apps/web/lib/turnkey-session-auth.ts',
+      requiredHeader: 'Authorization: Bearer <Turnkey session JWT>',
+      durableProfileDatabase: false,
+      blocker: 'Turnkey JWT verification is implemented, but profile persistence is process memory only until a durable database is connected.',
+      package: '@turnkey/crypto',
+      model: 'global-login-client-profile-ready; server profile endpoints require verified Turnkey session JWT; durable storage remains deferred'
     },
     turnkey: {
       organizationIdConfigured,

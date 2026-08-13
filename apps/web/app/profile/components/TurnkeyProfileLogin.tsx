@@ -18,6 +18,7 @@ function detectBrowserWallet(): string {
 export function TurnkeyProfileLogin() {
   const account = useBondrTurnkeyAccount();
   const [busy, setBusy] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
   const browserWallet = detectBrowserWallet();
 
   async function login() {
@@ -32,7 +33,39 @@ export function TurnkeyProfileLogin() {
 
   async function logout() {
     setBusy(true);
-    try { await account.logout(); } finally { setBusy(false); }
+    try { await account.logout(); setSyncStatus(''); } finally { setBusy(false); }
+  }
+
+  async function syncProfile() {
+    if (!account.sessionJwt) {
+      setSyncStatus('Turnkey session JWT not exposed by the client SDK yet. Login identity is active, but server profile sync needs the JWT bearer token.');
+      return;
+    }
+    setBusy(true);
+    setSyncStatus('Verifying Turnkey JWT and syncing profile…');
+    try {
+      const response = await fetch('/api/account/profile', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${account.sessionJwt}`
+        },
+        body: JSON.stringify({
+          userId: account.userId ?? undefined,
+          userName: account.userName ?? undefined,
+          email: account.email ?? undefined,
+          organizationId: account.organizationId ?? undefined,
+          firstAccountAddress: account.firstAccountAddress ?? undefined
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message ?? payload.error ?? `Profile sync failed: HTTP ${response.status}`);
+      setSyncStatus('Verified Turnkey JWT and synced ephemeral server profile.');
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Profile sync failed.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!account.configured) {
@@ -88,8 +121,10 @@ export function TurnkeyProfileLogin() {
             {account.authenticated ? 'Logged in' : account.clientReady ? 'Log in with Turnkey' : 'Loading Turnkey'}
           </button>
           <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!account.clientReady || !account.authenticated || busy}>Refresh profile</button>
+          <button className="button secondary" type="button" onClick={() => void syncProfile()} disabled={!account.authenticated || busy}>Verify server profile</button>
           <button className="button secondary" type="button" onClick={() => void logout()} disabled={!account.authenticated || busy}>Log out</button>
         </div>
+        {syncStatus && <p className="qaMuted">{syncStatus}</p>}
       </div>
 
       <div className="documentCard accountGlassCard">
@@ -103,8 +138,10 @@ export function TurnkeyProfileLogin() {
           <div className="sideRow"><span>First wallet</span><strong>{shortValue(account.firstWalletId)}</strong></div>
           <div className="sideRow"><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
           <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
+          <div className="sideRow"><span>Session JWT</span><strong>{account.sessionJwt ? 'available' : 'not exposed'}</strong></div>
           <div className="sideRow"><span>Execution</span><strong>simulation + policy gated</strong></div>
         </div>
+        {syncStatus && <p className="qaMuted">{syncStatus}</p>}
       </div>
 
       <div className="documentCard accountGlassCard">

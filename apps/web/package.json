@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",
+    "@turnkey/crypto": "^2.11.2",
     "@turnkey/react-wallet-kit": "^2.2.0",
     "gmgn-cli": "1.5.4",
     "lightweight-charts": "^5.2.0",

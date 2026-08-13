@@ -85,6 +85,9 @@ importers:
       '@solana/web3.js':
         specifier: ^1.98.4
         version: 1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@5.0.10)
+      '@turnkey/crypto':
+        specifier: ^2.11.2
+        version: 2.11.2
       '@turnkey/react-wallet-kit':
         specifier: ^2.2.0
         version: 2.2.0(@types/react@19.2.17)(bufferutil@4.1.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)(utf-8-validate@6.0.6)(zod@4.4.3)
@@ -1463,6 +1466,10 @@ packages:
     resolution: {integrity: sha512-A9dqEXHIhTNy4t32LodJOTm/I762TjcPAck8gl9E004f73Gz0WCGORnsgiSrSYHAkj4rC4oLUK8rbmRIikGBCQ==}
     engines: {node: '>=18.0.0'}
 
+  '@turnkey/crypto@2.11.2':
+    resolution: {integrity: sha512-Fi4SJ26KvBDrlJxC1gKNBJZAnx4xryATNiwq6aKPy+A6qLRubdBqKqqb3Ycg4/NaYZ4TQWjFdmY1O1lsBsUoOQ==}
+    engines: {node: '>=18.0.0'}
+
   '@turnkey/encoding@0.6.0':
     resolution: {integrity: sha512-IC8qXvy36+iGAeiaVIuJvB35uU2Ld/RAWI/DRTKS+ttBej0GXhOn48Ouu5mlca4jt8ZEuwXmDVv74A8uBQclsA==}
     engines: {node: '>=18.0.0'}
@@ -1488,6 +1495,10 @@ packages:
 
   '@turnkey/sdk-types@1.2.0':
     resolution: {integrity: sha512-S37cabMXICiM5ZpeRhYDuPuRrtE3GLlsHjasWCusWS7PUOP7Ru+g7HOHHWhb7A390j+NKvz1CJ1z8kvdfC0nvg==}
+    engines: {node: '>=18.0.0'}
+
+  '@turnkey/sdk-types@1.5.0':
+    resolution: {integrity: sha512-Gl/K1vp2H/K9E8BrfMzHTkvD/WrbKsttImCGI+iPbOwz7Mt8vrjMEDyjqbq+44VLBBxxX3oMnDKjCwMyt6E8xA==}
     engines: {node: '>=18.0.0'}
 
   '@turnkey/webauthn-stamper@0.6.0':
@@ -4604,6 +4615,17 @@ snapshots:
       borsh: 2.0.0
       cbor-js: 0.1.0
 
+  '@turnkey/crypto@2.11.2':
+    dependencies:
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.0
+      '@noble/hashes': 1.8.0
+      '@peculiar/x509': 1.12.3
+      '@turnkey/encoding': 0.6.0
+      '@turnkey/sdk-types': 1.5.0
+      borsh: 2.0.0
+      cbor-js: 0.1.0
+
   '@turnkey/encoding@0.6.0':
     dependencies:
       bs58: 6.0.0
@@ -4671,6 +4693,8 @@ snapshots:
       - zod
 
   '@turnkey/sdk-types@1.2.0': {}
+
+  '@turnkey/sdk-types@1.5.0': {}
 
   '@turnkey/webauthn-stamper@0.6.0':
     dependencies:

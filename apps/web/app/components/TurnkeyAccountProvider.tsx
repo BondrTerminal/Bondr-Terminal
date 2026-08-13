@@ -21,6 +21,7 @@ export type BondrTurnkeyAccount = {
   firstWalletId: string | null;
   firstAccountAddress: string | null;
   sessionExpiresAt: string | null;
+  sessionJwt: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -42,6 +43,7 @@ const defaultAccount: BondrTurnkeyAccount = {
   firstWalletId: null,
   firstAccountAddress: null,
   sessionExpiresAt: null,
+  sessionJwt: null,
   login: noop,
   logout: noop,
   refresh: noop
@@ -98,6 +100,7 @@ function TurnkeyAccountBridge({ children }: { children: ReactNode }) {
     firstWalletId: firstWallet?.walletId ?? null,
     firstAccountAddress: firstAccount?.address ?? null,
     sessionExpiresAt: maybeString(session?.expiry) ?? maybeString(session?.expiresAt),
+    sessionJwt: maybeString(session?.token) ?? maybeString(session?.jwt) ?? maybeString(session?.sessionJwt),
     login: async () => {
       await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
     },
