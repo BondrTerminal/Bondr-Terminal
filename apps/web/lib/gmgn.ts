@@ -25,21 +25,18 @@ export function normalizeGmgnChain(value: string | null | undefined): GmgnChain 
 }
 
 function resolveGmgnCli() {
-  const candidates: Array<{ command: string; prefixArgs: string[] }> = [];
-  try { candidates.push({ command: process.execPath, prefixArgs: [require.resolve('gmgn-cli')] }); } catch {}
+  const candidates: Array<{ command: string; prefixArgs: string[]; source: string }> = [];
+  try { candidates.push({ command: process.execPath, prefixArgs: [require.resolve('gmgn-cli')], source: 'package-main' }); } catch {}
+  try { candidates.push({ command: process.execPath, prefixArgs: [require.resolve('gmgn-cli/dist/index.js')], source: 'package-dist' }); } catch {}
   try {
     const packageJson = require.resolve('gmgn-cli/package.json');
-    candidates.push({ command: process.execPath, prefixArgs: [join(dirname(packageJson), 'dist', 'index.js')] });
+    candidates.push({ command: process.execPath, prefixArgs: [join(dirname(packageJson), 'dist', 'index.js')], source: 'package-json-dist' });
   } catch {}
-  candidates.push(
-    { command: join(process.cwd(), 'node_modules', '.bin', 'gmgn-cli'), prefixArgs: [] },
-    { command: join(process.cwd(), 'apps', 'web', 'node_modules', '.bin', 'gmgn-cli'), prefixArgs: [] }
-  );
   for (const candidate of candidates) {
-    const target = candidate.prefixArgs[0] ?? candidate.command;
-    if (existsSync(target)) return { installed: true, ...candidate };
+    const target = candidate.prefixArgs[0];
+    if (target && existsSync(target)) return { installed: true, ...candidate };
   }
-  return { installed: false, command: 'gmgn-cli', prefixArgs: [] };
+  return { installed: false, command: process.execPath, prefixArgs: [], source: 'unresolved' };
 }
 
 export function gmgnReadiness() {
@@ -49,6 +46,7 @@ export function gmgnReadiness() {
     status: cli.installed && apiConfigured ? 'ok' : cli.installed ? 'optional-not-configured' : 'unavailable',
     configured: apiConfigured,
     cliInstalled: cli.installed,
+    cliSource: cli.source,
     execution: 'read-only-cli-adapter-no-swap-no-cooking',
     featuresUnlockedIfConfigured: ['GMGN token info', 'GMGN token security', 'GMGN pools', 'GMGN holders/traders', 'GMGN trending/hot-search intelligence'],
     disabledCapabilities: ['swap', 'multi-swap', 'order create/update', 'cooking token launch', 'private-key execution'],
