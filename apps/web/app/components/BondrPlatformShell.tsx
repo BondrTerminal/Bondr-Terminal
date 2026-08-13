@@ -17,15 +17,15 @@ const PUBLIC_PATHS = new Set(['/whitepaper']);
 const primaryNavItems = [
   { href: '/', label: 'Hub' },
   { href: '/sniper', label: 'Terminal' },
-  { href: '/liquidity', label: 'Liquidity' },
   { href: '/deployment', label: 'Bond' },
-  { href: '/wallets', label: 'Wallet Ops' },
+  { href: '/wallets', label: 'Wallet' },
   { href: '/projects', label: 'Projects' },
   { href: '/portfolio', label: 'Portfolio' }
 ];
 
 const toolItems = [
-  { href: '/token-analyzer', label: 'Token Analyzer' },
+  { href: '/liquidity', label: 'Liquidity' },
+  { href: '/token-analyzer', label: 'Analyzer' },
   { href: '/project-dashboard', label: 'Project Dashboard' },
   { href: '/whitepaper', label: 'Whitepaper' }
 ];
