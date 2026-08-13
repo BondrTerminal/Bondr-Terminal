@@ -55,8 +55,10 @@ export async function GET(request: Request) {
   const context = buildMeridianHubContext(projectId, store);
   const activeProject = context.projects[0] ?? null;
 
+  const activation = getLiveActivationStatus();
+
   return Response.json({
-    status: 'ok', observedAt, signer: 'browser-wallet+client-mint-keypair', liveTradingEnabled: liveEnabled(),
+    status: 'ok', observedAt, signer: 'browser-wallet+client-mint-keypair', liveTradingEnabled: activation.liveTradingEnabled, deploymentEnabled: activation.deploymentEnabled,
     contract: 'deployment-engine-v2-shared-context',
     projectContext: activeProject,
     deploymentSnapshot: activeProject ? {
@@ -75,19 +77,19 @@ export async function GET(request: Request) {
         maxBuySol: activeProject.launchConfig.walletPlan.filter((entry) => entry.participate).reduce((sum, entry) => sum + entry.maxBuySol, 0)
       },
       preflightChecks: activeProject.preflight,
-      transactionPlan: { status: liveEnabled() ? 'builder-available-for-token-mint' : 'disabled until live-gated', path: activeProject.project.launchPath, raydiumBurnLiquidity: activeProject.launchConfig.route.burnLiquidity, raydiumLiquiditySol: activeProject.launchConfig.route.raydiumLiquiditySol, note: 'Simulation/preflight only unless LIVE_TRADING_ENABLED and browser-wallet signing are explicitly enabled.' },
+      transactionPlan: { status: activation.deploymentEnabled ? 'builder-available-for-token-mint' : 'disabled until deployment-gated', path: activeProject.project.launchPath, raydiumBurnLiquidity: activeProject.launchConfig.route.burnLiquidity, raydiumLiquiditySol: activeProject.launchConfig.route.raydiumLiquiditySol, note: 'Simulation/preflight only unless deployment gate, browser-wallet signing, and explicit approval are enabled.' },
       simulationStatus: { status: 'preflight-only', path: activeProject.project.launchPath, walletPlanStatus: activeProject.launchConfig.walletPlan.length ? 'configured' : 'missing-wallet-plan', note: 'No signed deployment or fund movement is performed by GET.' },
-      liveReadiness: { status: liveEnabled() ? 'requires browser-wallet signing' : 'disabled until live-gated', requiresExplicitConfirmation: true },
+      liveReadiness: { status: activation.deploymentEnabled ? 'requires browser-wallet signing' : 'deployment-disabled', requiresExplicitConfirmation: true },
       blockers: activeProject.blockers,
       nextActions: activeProject.nextActions,
       sourceStatus: activeProject.sourceStatus
     } : null,
     engines: {
-      tokenMint: { status: liveEnabled() ? 'transaction-builder-ready' : 'live-disabled', method: 'POST {operation:"create-spl-token", payer, mint, decimals, initialSupply, freezeAuthority?}' },
+      tokenMint: { status: activation.deploymentEnabled ? 'transaction-builder-ready' : 'deployment-disabled', method: 'POST {operation:"create-spl-token", payer, mint, decimals, initialSupply, freezeAuthority?}' },
       launchBundle: { status: 'preflight-only', note: 'Bundle execution requires funded wallet set, signing order, and anti-self-trade checks.' },
       createLp: { status: 'protocol-sdk-required', note: 'Raydium/Orca/Meteora LP creation needs protocol-specific builders and pool config; not faked.' }
     },
-    execution: liveEnabled() ? 'browser-signing-required' : 'live-disabled-preflight-only'
+    execution: activation.deploymentEnabled ? 'browser-signing-required' : 'deployment-disabled-preflight-only'
   });
 }
 
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as null | { operation?: string; payer?: string; mint?: string; decimals?: number; initialSupply?: number; freezeAuthority?: string | null };
   if (!body?.operation) return Response.json({ error: 'Missing operation.' }, { status: 400 });
   if (body.operation !== 'create-spl-token') return Response.json({ status: 'preflight-only', operation: body.operation, reason: 'Only SPL token mint transaction building is implemented here; LP/bundle routes require protocol-specific builders.', execution: 'builder-not-available' }, { status: 501 });
-  if (!liveEnabled()) return Response.json({ status: 'blocked', operation: body.operation, reason: 'LIVE_TRADING_ENABLED is false.', execution: 'live-disabled' }, { status: 403 });
+  if (!liveEnabled()) return Response.json({ status: 'blocked', operation: body.operation, reason: 'LIVE_DEPLOYMENT_ENABLED is false.', execution: 'deployment-disabled' }, { status: 403 });
   try {
     const payer = parsePk(body.payer, 'payer');
     const mint = parsePk(body.mint, 'mint');

@@ -16,6 +16,8 @@ function nextWalletId(store: MeridianStore, role: string) { const base = slug(ro
 function activity(walletId: string, type: string, message: string, status: WalletActivity['status'] = 'info'): WalletActivity { return { id: `wact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, walletId, timestamp: new Date().toISOString(), type, status, message }; }
 function passphrase(body: Body) { const value = clean(body.vaultPassphrase, '', 1000); if (value.length < 8) throw new Error('Vault passphrase must be at least 8 characters.'); return value; }
 function noStore(json: unknown, status = 200) { return Response.json(json, { status, headers: { 'cache-control': 'no-store, no-cache, must-revalidate, private' } }); }
+function walletVaultBetaEnabled() { return process.env.WALLET_VAULT_BETA_ENABLED === 'true'; }
+function betaVaultBlocked(action: unknown) { return noStore({ status: 'blocked', action, error: 'Managed local wallet vault is disabled for browser-wallet beta.', execution: 'wallet-vault-beta-disabled-no-private-key-custody' }, 403); }
 function managedWalletRecord(store: MeridianStore, role: string, publicKey: string, groupId: string, purpose: string): Wallet {
   const group = store.walletGroups.find((item) => item.id === groupId);
   if (!group) throw new Error('Wallet group does not exist.');
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
   if (mutationMode() === 'disabled') return mutationBlockedResponse('Mutations are disabled by MUTATIONS_DISABLED=true.');
   const body = await request.json().catch(() => null) as Body | null;
   if (!body?.action) return noStore({ status: 'error', error: 'Missing vault action.', ...mutationMeta('Vault action rejected.') }, 400);
+  if (!walletVaultBetaEnabled()) return betaVaultBlocked(body.action);
   try {
     const store = readStore();
     if (body.action === 'create-managed-wallet') {
