@@ -73,3 +73,22 @@ test('policy check blocks address lookup table transactions until resolved', () 
   assert.equal(result.safeToBroadcastIfLiveEnabled, false);
   assert.match(result.blockers.join('\n'), /Address lookup table resolution required/);
 });
+
+test('policy check binds signed transaction to expected message hash and required intent accounts', () => {
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [SIGNER],
+    accountKeys: [SIGNER, MINT, SPL_TOKEN_PROGRAM_ID],
+    programs: [SPL_TOKEN_PROGRAM_ID],
+    messageHash: 'signed-message-hash'
+  };
+
+  const passed = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT, transactionMessageHash: 'signed-message-hash', requiredAccounts: [SIGNER, MINT] });
+  assert.equal(passed.safeToBroadcastIfLiveEnabled, true);
+  assert.equal(passed.transactionMessageHash, 'signed-message-hash');
+
+  const blocked = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT, transactionMessageHash: 'old-message-hash', requiredAccounts: [SIGNER, MINT, 'Sysvar1111111111111111111111111111111111111'] });
+  assert.equal(blocked.safeToBroadcastIfLiveEnabled, false);
+  assert.match(blocked.blockers.join('\n'), /Transaction message hash does not match intent/);
+  assert.match(blocked.blockers.join('\n'), /Required account missing/);
+});

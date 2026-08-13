@@ -13,10 +13,19 @@ type ExecutionQuote = {
 
 type SwapBuild = ExecutionQuote & {
   swap?: { swapTransaction?: string; lastValidBlockHeight?: number | null; simulationError?: unknown };
+  intentId?: string;
+  expectedSigner?: string;
+  expectedMint?: string;
+  transactionMessageHash?: string | null;
+  request?: { inputMint?: string; outputMint?: string; rawAmount?: string; amount?: number | string; side?: string; spendAsset?: string; slippageBps?: number; userPublicKey?: string };
+  allowedPrograms?: string[];
+  requiredAccounts?: string[];
 };
 
 type SimulationPayload = { status?: string; error?: string; simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null }; transactionPreview?: TransactionPreview };
-type SignedSwapPayload = { signedTransaction: string; signature?: string; explorerUrl?: string; submitted?: boolean };
+type SignedReviewPayload = { status?: string; error?: string; execution?: string; intentId?: string; expectedSigner?: string; expectedMint?: string; simulationStatus?: string | null; review?: { signerMatched?: boolean; expectedMintReferenced?: boolean; requiredAccountsMatched?: boolean; programsAllowed?: boolean; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null; altPolicy?: string; safeToBroadcastIfLiveEnabled?: boolean; localSignatureReviewPassed?: boolean; programs?: string[] }; blockers?: string[]; warnings?: string[]; broadcast?: string };
+type SignedSwapPayload = { signedTransaction: string; signature?: string; explorerUrl?: string; submitted?: boolean; review?: SignedReviewPayload | null };
+
 
 type BrowserSolanaProvider = {
   isPhantom?: boolean;
@@ -60,6 +69,7 @@ function parseSlippage(value: string, fallback = 100) { const n = Number(String(
 function formatBps(value: string) { const bps = parseSlippage(value, 0); return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`; }
 function formatPriceImpact(value?: string | null) { const n = Number(value ?? NaN); if (!Number.isFinite(n)) return '—'; const pct = Math.abs(n) <= 1 ? n * 100 : n; return `${pct.toFixed(Math.abs(pct) >= 10 ? 1 : 2)}%`; }
 function formatQuoteAmount(value?: string | null) { if (!value) return '—'; const n = Number(value); return Number.isFinite(n) ? formatTokenAmount(n) : value; }
+function hashLabel(value?: string | null) { return value ? `${value.slice(0, 10)}…${value.slice(-8)}` : '—'; }
 
 const SOL_AMOUNT_PRESETS = ['0.01', '0.05', '0.10', '0.25'];
 const SELL_PERCENT_PRESETS = [25, 50, 75, 100];
@@ -94,6 +104,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   const [swapBuild, setSwapBuild] = useState<SwapBuild | null>(null);
   const [simulation, setSimulation] = useState<SimulationPayload | null>(null);
   const [signedSwap, setSignedSwap] = useState<SignedSwapPayload | null>(null);
+  const [signedReview, setSignedReview] = useState<SignedReviewPayload | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
 
@@ -156,7 +167,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     void fetch(`/api/wallet-token-balances?mint=${encodeURIComponent(activeMint)}`, { signal: controller.signal, cache: 'no-store' }).then((response) => response.ok ? response.json() : null).then((payload) => setTokenBalances(payload as WalletTokenBalances | null)).catch(() => setTokenBalances(null));
     return () => controller.abort();
   }, [activeMint]);
-  useEffect(() => { setSwapBuild(null); setSimulation(null); setSignedSwap(null); }, [activeMint, side, amount, spendAsset, slippage, selectedWalletId]);
+  useEffect(() => { setSwapBuild(null); setSimulation(null); setSignedSwap(null); setSignedReview(null); }, [activeMint, side, amount, spendAsset, slippage, selectedWalletId]);
   useEffect(() => { if (side === 'Buy') setSellPercentPreset(null); }, [side]);
 
   const selectedDockWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? (selectedWalletId === 'browser-wallet' ? null : renderedWallets[0] ?? null);
@@ -267,7 +278,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   async function buildAndSimulateSwap() {
     if (!capabilities?.liveTradingEnabled) { setLiveMessage(capabilities?.disabledReason ?? 'Unsigned transaction build is disabled.'); return; }
     if (!activeMint || liveLoading) return;
-    setLiveLoading(true); setLiveMessage(null); setSwapBuild(null); setSimulation(null); setSignedSwap(null);
+    setLiveLoading(true); setLiveMessage(null); setSwapBuild(null); setSimulation(null); setSignedSwap(null); setSignedReview(null);
     try {
       const publicKey = walletPublicKey ?? await connectBrowserWallet();
       if (!publicKey) return;
@@ -296,8 +307,12 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapBuild.swap.swapTransaction));
       const signed = await provider.signTransaction(transaction);
       const signedTransaction = bytesToBase64(signed.serialize());
-      setSignedSwap({ signedTransaction, submitted: false });
-      setLiveMessage(capabilities?.broadcastEnabled ? 'Signed locally. Broadcast is available only through the separate submit step.' : 'Signed locally. Broadcast is disabled in A-profile.');
+      const reviewResponse = await fetch('/api/terminal/signed-review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction, intentId: swapBuild.intentId, expectedSigner: swapBuild.expectedSigner ?? publicKey, expectedMint: swapBuild.expectedMint ?? activeMint, transactionMessageHash: swapBuild.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null }) });
+      const review = await reviewResponse.json().catch(() => null) as SignedReviewPayload | null;
+      setSignedReview(review);
+      setSignedSwap({ signedTransaction, submitted: false, review });
+      if (!reviewResponse.ok || review?.status !== 'ok') { setLiveMessage(review?.error ?? review?.blockers?.[0] ?? 'Signed transaction review failed. Broadcast remains blocked.'); return; }
+      setLiveMessage(capabilities?.broadcastEnabled ? 'Signed locally and review passed. Broadcast is available only through the separate submit step.' : 'Signed locally and review passed. Broadcast is disabled in A-profile.');
     } catch (error) { setLiveMessage(error instanceof Error ? error.message : 'Wallet signing failed or was rejected.'); }
     finally { setLiveLoading(false); }
   }
@@ -307,7 +322,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     if (!signedSwap?.signedTransaction || liveLoading) return;
     setLiveLoading(true); setLiveMessage(null);
     try {
-      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction: signedSwap.signedTransaction }) });
+      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction: signedSwap.signedTransaction, intentId: swapBuild?.intentId, expectedSigner: swapBuild?.expectedSigner, expectedMint: swapBuild?.expectedMint, transactionMessageHash: swapBuild?.transactionMessageHash ?? signedReview?.review?.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null }) });
       const sent = await response.json() as { signature?: string; explorerUrl?: string; error?: string };
       if (!response.ok || !sent.signature) { setLiveMessage(sent.error ?? 'Broadcast failed.'); return; }
       setSignedSwap((current) => current ? { ...current, signature: sent.signature, explorerUrl: sent.explorerUrl, submitted: true } : current);
@@ -349,6 +364,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
           </div>
 
           <div className="tradePanelSection tradeActionSection"><div className="tradePanelSectionHead"><span>03</span><strong>Execution ladder</strong><small>Simulation required before signing</small></div>{operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}{signerMismatch && <div className="walletMismatchNotice"><strong>Selected wallet and connected signer do not match.</strong><p>Selected: <code>{selectedDockWallet?.address}</code></p><p>Connected: <code>{walletPublicKey}</code></p></div>}<ul className="liveBetaStepLadder" aria-label="A-profile signing steps"><li className={`walletReadinessRow ${walletPublicKey ? 'pass' : 'warn'}`}><strong>1. Wallet connected</strong><span>{walletPublicKey ? compact(walletPublicKey ?? '') : 'Phantom/Solflare required'}</span></li><li className={`walletReadinessRow ${selectedExecutionAddress ? signerMismatch ? 'fail' : 'pass' : 'warn'}`}><strong>2. Active wallet selected</strong><span>{selectedExecutionAddress ? signerMismatch ? `Selected ${compact(selectedExecutionAddress)} ≠ signer ${compact(walletPublicKey ?? '')}` : compact(selectedExecutionAddress) : 'Use connected wallet'}</span></li><li className={`walletReadinessRow ${quote?.status === 'ok' ? 'pass' : 'warn'}`}><strong>3. Quote</strong><span>{quote?.status === 'ok' ? 'Quote ready' : 'Run quote preview'}</span></li><li className={`walletReadinessRow ${swapBuild?.swap?.swapTransaction ? 'pass' : 'warn'}`}><strong>4. Unsigned build</strong><span>{swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : 'Run build + simulate'}</span></li><li className={`walletReadinessRow ${simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'}`}><strong>5. Simulation</strong><span>{simulationPassed ? 'Simulation passed' : simulation?.error ?? 'Required before signing'}</span></li><li className={`walletReadinessRow ${signedSwap?.signedTransaction ? 'pass' : canSign ? 'pass' : 'fail'}`}><strong>6. Browser signing eligible</strong><span>{signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : (blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Blocked until simulation passes')}</span></li><li className="walletReadinessRow fail"><strong>7. Broadcast disabled</strong><span>{capabilities?.broadcastEnabled ? 'Separate submit step required' : 'Broadcast OFF: A-profile signs locally only'}</span></li></ul><div className="terminalBlockReasonCard"><strong>Exact block reasons</strong><p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons after simulation/signing gates pass.'}</p><small>Broadcast is intentionally off for this profile. Signing creates a local signed payload only; nothing is submitted on-chain here.</small></div><div className="axiomActionRow"><button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Quoting…' : 'Preview quote'}</button><button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working…' : 'Build + simulate'}</button><button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign in wallet</button><button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Submit transaction' : 'Broadcast OFF — A-profile'}</button></div><div className="axiomTicketFooter"><button type="button" disabled>{capabilities?.readinessLevel ?? 'checking'}</button><span>{liveMessage ?? quote?.error ?? 'Ready for quote preview.'}</span></div></div>
+          <div className={`transactionPreviewCard ${signedReview?.status === 'blocked' ? 'blockedPreview' : signedReview?.status === 'ok' ? 'okPreview' : 'emptyPreview'}`} aria-label="Signed transaction intent review"><div className="transactionPreviewHeader"><div><span>Signed transaction review</span><strong>{signedReview?.status === 'ok' ? 'intent matched' : signedReview?.status === 'blocked' ? 'blocked' : 'awaiting signature'}</strong></div><em>{signedReview?.broadcast ?? 'broadcast-not-performed'}</em></div><div className="transactionPreviewGrid"><div><span>Intent</span><strong>{swapBuild?.intentId ? hashLabel(swapBuild.intentId) : '—'}</strong></div><div><span>Signer</span><strong>{signedReview?.review?.signerMatched ? 'matched' : swapBuild?.expectedSigner ? compact(swapBuild.expectedSigner) : '—'}</strong></div><div><span>Mint</span><strong>{signedReview?.review?.expectedMintReferenced ? 'referenced' : swapBuild?.expectedMint ? compact(swapBuild.expectedMint) : '—'}</strong></div><div><span>Message hash</span><strong>{hashLabel(signedReview?.review?.transactionMessageHash ?? swapBuild?.transactionMessageHash)}</strong></div><div><span>Simulation</span><strong>{simulation?.status ?? 'not-run'}</strong></div><div><span>ALT policy</span><strong>{signedReview?.review?.altPolicy ?? 'pending'}</strong></div></div>{signedReview?.blockers?.length ? <ul className="transactionPreviewList blockers">{signedReview.blockers.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul> : null}<p>Signing only. This review binds the browser-wallet signature to the stored intent; it does not broadcast or enable trading.</p></div>
           <TransactionPreviewCard preview={simulation?.transactionPreview ?? swapBuild?.transactionPreview ?? quote?.transactionPreview ?? null} />
         </div>
       </section>

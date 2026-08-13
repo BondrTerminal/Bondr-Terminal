@@ -3,6 +3,7 @@ import { configuredSolanaRpc } from '../../../lib/solana-rpc';
 import { getIntentAsync, updateIntentAsync } from '../../../lib/live-store';
 import { decodeTransactionPolicy, policyCheck } from '../../../lib/transaction-policy';
 import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
+import { sameOriginAllowed, mutationBlockedResponse } from '../../../lib/mutation-safety';
 import { liveDisabledPreview } from '../../../lib/transaction-preview';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 import { getSolanaRpcHealth } from '../../../lib/rpc-health';
@@ -23,6 +24,8 @@ type SendRequest = {
   expectedSigner?: string;
   expectedMint?: string;
   expectedSide?: 'buy' | 'sell' | 'Buy' | 'Sell';
+  simulationStatus?: string | null;
+  transactionMessageHash?: string | null;
 };
 
 function rejectIfLiveDisabled() {
@@ -74,6 +77,8 @@ function validateIntent(intentId: string | null, expectedSigner: string | null, 
 }
 
 export async function POST(request: Request) {
+  const origin = sameOriginAllowed(request);
+  if (!origin.allowed) return mutationBlockedResponse(origin.note);
   const disabled = rejectIfLiveDisabled();
   if (disabled) return disabled;
   const authBlocked = await meridianAuthRequiredResponse(request);
@@ -111,11 +116,13 @@ export async function POST(request: Request) {
   const intent = body.intentId ? await getIntentAsync(body.intentId) : null;
   const expectedSigner = body.expectedSigner ?? intent?.expectedSigner ?? null;
   const expectedMint = body.expectedMint ?? intent?.expectedMint ?? null;
-  const policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null });
+  const policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null, transactionMessageHash: body.transactionMessageHash ?? intent?.transactionMessageHash ?? null });
   const intentError = validateIntent(body.intentId ?? null, expectedSigner, expectedMint, decoded);
-  if (intentError || !policy.safeToBroadcastIfLiveEnabled) {
-    if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_blocked', note: intentError ?? policy.blockers.join(' | ') });
-    return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error: intentError ?? 'Signed transaction failed intent policy.', execution: 'broadcast-rejected', blockers: policy.blockers, decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt } : null, serverSigning: false }, { status: 400 });
+  const simulationError = body.simulationStatus === 'ok' ? null : 'Broadcast requires a fresh ok simulationStatus tied to the signed transaction review.';
+  if (intentError || simulationError || !policy.safeToBroadcastIfLiveEnabled) {
+    const error = intentError ?? simulationError ?? 'Signed transaction failed intent policy.';
+    if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_blocked', note: error ?? policy.blockers.join(' | ') });
+    return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error, execution: 'broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...policy.blockers], decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables) }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt, transactionMessageHash: intent.transactionMessageHash } : null, serverSigning: false }, { status: 400 });
   }
   if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_requested' });
 
@@ -141,6 +148,7 @@ export async function POST(request: Request) {
       expectedSigner,
       expectedMint: expectedMint ?? null,
       expectedSide: body.expectedSide ?? null,
+      simulationStatus: body.simulationStatus ?? null,
       rpcProvider: rpc.provider,
       signature,
       intentPolicy: { safeToBroadcastIfLiveEnabled: policy.safeToBroadcastIfLiveEnabled, transactionMessageHash: policy.transactionMessageHash },
