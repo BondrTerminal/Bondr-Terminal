@@ -6,6 +6,9 @@ import { AuthState, ClientState, TurnkeyProvider, type TurnkeyProviderConfig, us
 const organizationId = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ?? process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? '';
 const authProxyConfigId = process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID ?? process.env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID ?? '';
 const configured = Boolean(organizationId && authProxyConfigId);
+const VERIFIED_AUTH_KEY = 'bondr_verified_auth';
+const PENDING_LOGIN_KEY = 'bondr_pending_login';
+const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
 
 export type BondrTurnkeyAccount = {
   configured: boolean;
@@ -173,8 +176,11 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
     setVerifiedSession(verified);
     setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true }));
-    sessionStorage.setItem('bondr_verified_auth', 'true');
-    window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
+    sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
+    if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
+      sessionStorage.removeItem(PENDING_LOGIN_KEY);
+      window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
+    }
   }, [setDebug, setVerifiedSession, turnkey.session, verifiedSession?.organizationId, verifiedSession?.userId]);
 
   const value = useMemo<BondrTurnkeyAccount>(() => ({
@@ -198,6 +204,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
       hasSessionUserOrg: Boolean(sessionUserId && sessionOrganizationId)
     },
     login: async () => {
+      sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
       setDebug((current) => ({ ...current, lastEvent: 'login-modal-opened', lastErrorCode: null, lastErrorMessage: null }));
       await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
@@ -205,7 +212,8 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     logout: async () => {
       clearVerifiedSession();
       setDebug(() => ({ ...defaultDebugState, lastEvent: 'logout' }));
-      sessionStorage.removeItem('bondr_verified_auth');
+      sessionStorage.removeItem(VERIFIED_AUTH_KEY);
+      sessionStorage.removeItem(PENDING_LOGIN_KEY);
       await turnkey.logout();
     },
     refresh: async () => {
@@ -243,10 +251,13 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
           }));
           if (!verified) return;
           setVerifiedSession(verified);
-          sessionStorage.setItem('bondr_verified_auth', 'true');
-          window.setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('bondr-turnkey-auth-success'));
-          }, 0);
+          sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
+          if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
+            sessionStorage.removeItem(PENDING_LOGIN_KEY);
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
+            }, 0);
+          }
         },
         onError: (error) => {
           setDebug((current) => ({
