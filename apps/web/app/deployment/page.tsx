@@ -93,7 +93,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
           <h1>Token launch command center.</h1>
           <p>
             Data-backed launch workspace for Pump.fun/Raydium project preparation, metadata,
-            wallet readiness, funding plans, launch preflight, transaction builders, and post-launch monitoring. Deployment execution, funding, and broadcast remain disabled in A-profile.
+            wallet readiness, funding plans, launch preflight, transaction builders, and post-launch monitoring. Deployment execution, funding, and broadcast remain gated by policy.
           </p>
           <div className="launchHeroStatus">
             <span>Deployment route</span>
@@ -105,7 +105,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
         <WalletRailStatus surface="deployment" selectedWalletAddress={activeWallets[0]?.address ?? null} activeMint={activeProject?.tokenMint ?? null} />
 
         <section className="deploymentAdapterReadiness" aria-label="Deployment adapter status">
-          <strong>Deployment disabled in A-profile. Configure and preflight only.</strong>
+          <strong>Deployment execution is policy-gated. Configure and preflight first.</strong>
           <p>Pump.fun, Raydium, Meteora, and Bonk launch paths are visible for planning, but no wallet funding, token deployment, claim, payout, signature request, or broadcast is enabled from this page.</p>
           <div className="deploymentAdapterGrid">
             {['Pump.fun', 'Raydium', 'Meteora', 'Bonk'].map((adapter) => <div key={adapter}><span>{adapter}</span><strong>Disabled</strong><small>configure only · no broadcast</small></div>)}

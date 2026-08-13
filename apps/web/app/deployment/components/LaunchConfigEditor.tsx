@@ -185,7 +185,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       </section>
 
       <section className="documentCard deploymentDisabledPanel">
-        <div className="sectionIntro compactIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>
+        <div className="sectionIntro compactIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>Deployment execution requires explicit approval, valid preflight, wallet confirmation, and the separate broadcast gate.</p></div>
         <div className="deploymentAdapterGrid">
           <div><span>Unsigned deploy builder</span><strong>Disabled</strong><small>adapter not active</small></div>
           <div><span>Browser-wallet deploy signature</span><strong>Disabled</strong><small>deployment gate off</small></div>

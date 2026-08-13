@@ -60,15 +60,14 @@ function TurnkeyConfiguredPanel() {
         <div className="profileAvatar">{authenticated ? 'TK' : 'B'}</div>
         <div>
           <div className="eyebrow">Turnkey profile</div>
-          <h1>{authenticated ? 'Read-only identity connected' : 'Connect read-only identity'}</h1>
+          <h1>{authenticated ? 'Turnkey identity connected' : 'Log in with Turnkey'}</h1>
           <p>
-            Turnkey is installed only as a profile identity surface. It may show user/wallet/account metadata,
-            but signing, swaps, credential export, wallet mutation, and live trading remain disabled in Bond.Terminal.
+            Turnkey provides the operator identity layer for Bond.Terminal. Transaction signing still happens through explicit wallet prompts and protected execution gates.
           </p>
         </div>
         <div className="profileActions">
           <button className="button" type="button" onClick={() => void login()} disabled={!clientReady || authenticated}>
-            {authenticated ? 'Identity connected' : clientReady ? 'Connect identity' : 'Loading Turnkey'}
+            {authenticated ? 'Logged in' : clientReady ? 'Log in with Turnkey' : 'Loading Turnkey'}
           </button>
           <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!clientReady || !authenticated}>
             Refresh profile
@@ -77,7 +76,7 @@ function TurnkeyConfiguredPanel() {
       </div>
 
       <div className="documentCard">
-        <h2>Read-only account state</h2>
+        <h2>Account state</h2>
         <div className="infoGrid">
           <div className="sideRow"><span>Status</span><strong>{authenticated ? 'authenticated' : 'not authenticated'}</strong></div>
           <div className="sideRow"><span>Turnkey client</span><strong>{turnkey.clientState ?? 'initializing'}</strong></div>
@@ -86,18 +85,18 @@ function TurnkeyConfiguredPanel() {
           <div className="sideRow"><span>First wallet</span><strong>{shortValue(firstWallet?.walletId)}</strong></div>
           <div className="sideRow"><span>First account</span><strong>{shortValue(firstAccount?.address)}</strong></div>
           <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
-          <div className="sideRow"><span>Signing</span><strong>disabled in app</strong></div>
-          <div className="sideRow"><span>Live trading</span><strong>disabled</strong></div>
+          <div className="sideRow"><span>Signing</span><strong>browser-wallet gated</strong></div>
+          <div className="sideRow"><span>Execution</span><strong>policy gated</strong></div>
         </div>
       </div>
 
       <div className="documentCard">
-        <h2>Profile obligation</h2>
+        <h2>Access model</h2>
         <ol className="roadmapList">
-          <li>Represent operator identity through Turnkey Auth Proxy.</li>
-          <li>Expose only read-only user/wallet/account metadata inside Bond.Terminal.</li>
-          <li>Do not treat embedded wallet visibility as execution permission.</li>
-          <li>Map identity to projects later as metadata only until a separate permission model exists.</li>
+          <li>Turnkey authenticates the operator profile.</li>
+          <li>The operator session protects server-side gated workflows.</li>
+          <li>Browser wallets remain the signing authority for transactions.</li>
+          <li>Execution policies still enforce simulation, signer matching, and route limits.</li>
         </ol>
       </div>
     </section>
@@ -112,11 +111,11 @@ export function TurnkeyProfileLogin() {
           <div className="profileAvatar">TK</div>
           <div>
             <div className="eyebrow">Turnkey profile</div>
-            <h1>Turnkey identity surface installed</h1>
-            <p>Add the public Turnkey organization ID and Auth Proxy config ID when we are ready to test read-only profile identity.</p>
+            <h1>Turnkey login needs configuration</h1>
+            <p>Add the public Turnkey organization ID and Auth Proxy config ID in production to enable operator login.</p>
           </div>
           <div className="profileActions">
-            <button className="button" type="button" disabled>Identity unavailable</button>
+            <button className="button" type="button" disabled>Turnkey unavailable</button>
           </div>
         </div>
 
@@ -130,11 +129,11 @@ export function TurnkeyProfileLogin() {
         </div>
 
         <div className="documentCard">
-          <h2>Current obligation</h2>
+          <h2>Configuration rules</h2>
           <ol className="roadmapList">
             <li>Only public Turnkey IDs belong in NEXT_PUBLIC vars.</li>
             <li>No sensitive credentials, provider credentials, or Turnkey secret material should be committed.</li>
-            <li>This section represents identity only; signing, swaps, wallet export/import, and live trading remain disabled.</li>
+            <li>Wallet signing and execution remain gated outside this identity panel.</li>
           </ol>
         </div>
       </section>

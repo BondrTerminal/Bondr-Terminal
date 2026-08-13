@@ -73,7 +73,7 @@ The web app is the presentation and operator layer for Meridian. It now includes
 - `/project-dashboard` net SOL flow accounting: sells minus buys, held tokens excluded
 - `/sniper` read-only DexScreener token/pair intelligence
 - `/liquidity` paper-first Liquidity Engine cockpit
-- `/whitepaper`, `/github`, `/profile`
+- `/whitepaper`, `/profile`, `/profile`
 
 Preview limitations:
 

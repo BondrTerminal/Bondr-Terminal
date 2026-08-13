@@ -40,7 +40,7 @@ type WalletRailPayload = {
 };
 
 type WalletRailStatusProps = {
-  surface?: 'profile' | 'wallets' | 'terminal' | 'live-beta-test' | 'portfolio' | 'deployment';
+  surface?: 'profile' | 'wallets' | 'terminal' | 'portfolio' | 'deployment';
   selectedWalletAddress?: string | null;
   activeMint?: string | null;
   compact?: boolean;
@@ -145,7 +145,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
           address: connectedSigner,
           role: 'browser signer watch-only',
           groupId,
-          purpose: 'Watch-only public address for A-profile browser-wallet matching and balance display.',
+          purpose: 'Watch-only public address for browser-wallet matching and balance display.',
           status: 'active'
         })
       });
@@ -206,7 +206,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
     : effectiveSelectedWallet
       ? railLoaded ? 'Selected wallet not matched to inventory. If this is your connected signer, add it as watch-only to save the public record.' : 'Checking selected wallet against Wallet Ops.'
       : 'No selected wallet for this browser/page.';
-  const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'live-beta-test' ? 'Live Beta wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
+  const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
   const badge = connectedSigner ? 'Browser wallet connected' : providerReady ? 'Provider ready' : 'Connect browser wallet';
 
   const rows = useMemo(() => [
@@ -220,8 +220,8 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
     ['Selected token balance', tokenAmount(selectedToken), activeMint ? `Selected wallet token balance for ${short(activeMint)}.` : 'No active mint supplied.'],
     ['Balance status', rail?.balanceStatus ?? (loading ? 'loading' : 'not-connected'), rail?.balanceStatus === 'provider-limited' ? 'Balance provider-limited; wallet may still have funds.' : rail?.balanceSource ?? 'wallet-rail'],
     ['Last refreshed', rail?.lastUpdated ? new Date(rail.lastUpdated).toLocaleTimeString() : '—', rail?.lastUpdated ?? 'Not refreshed yet.'],
-    ['Auth state', rail?.authState ?? 'checking', 'Operator auth state for A-profile.'],
-    ['Wallet mode', rail?.walletMode ?? 'checking', connectedSigner ? 'A-profile primary mode is browser-wallet.' : 'No signer connected.'],
+    ['Auth state', rail?.authState ?? 'checking', 'Operator session state.'],
+    ['Wallet mode', rail?.walletMode ?? 'checking', connectedSigner ? 'Primary mode is browser-wallet signing.' : 'No signer connected.'],
     ['Active wallet', short(effectiveSelectedWallet), effectiveSelectedWallet ? 'Used by this browser for Terminal/Deployment selection.' : 'Use connected wallet to set active wallet.']
   ], [activeMint, connectedInventoryLabel, connectedSigner, connectedToken, effectiveSelectedWallet, loading, rail, selectedInventoryDetail, selectedInventoryLabel, selectedToken]);
 
@@ -252,7 +252,7 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
         {blockers.map((item) => <p key={item}><strong>Blocked:</strong> {item}</p>)}
         {warnings.map((item) => <p key={item}><strong>Note:</strong> {item}</p>)}
       </div>}
-      <p className="walletRailFooter">Broadcast disabled in A-profile. This rail reads balances and signer state only; it never requests private keys, server-signs, funds wallets, deploys, claims, or broadcasts.</p>
+      <p className="walletRailFooter">This rail reads balances and signer state only; it never requests private keys, server-signs, funds wallets, deploys, claims, or broadcasts.</p>
     </section>
   );
 }

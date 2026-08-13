@@ -185,7 +185,7 @@ export async function POST(request: Request) {
     deploymentState: {
       stage: 'configuration',
       ready: false,
-      disabledReason: `Project record created for ${quoteToken} quote planning (${launchNotes || 'no launch notes'}). Configure details; token deployment, funding, signing, and broadcast remain disabled in A-profile.`
+      disabledReason: `Project record created for ${quoteToken} quote planning (${launchNotes || 'no launch notes'}). Configure details; token deployment, funding, signing, and broadcast remain policy-gated.`
     },
     monitor: {
       holders: [{ label: 'Unique holders', value: '—', detail: 'No token loaded' }],

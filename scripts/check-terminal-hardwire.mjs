@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 
 const base = process.env.TERMINAL_BASE_URL ?? 'http://localhost:3000';
-const renderedRoutes = ['/', '/projects', '/projects/meridian-demo', '/wallets', '/deployment', '/sniper', '/liquidity', '/token-analyzer', '/whitepaper', '/github'];
+const renderedRoutes = ['/', '/projects', '/projects/meridian-demo', '/wallets', '/deployment', '/sniper', '/liquidity', '/token-analyzer', '/whitepaper', '/profile'];
 const forbiddenHtml = [
   'mock',
   'Mock',

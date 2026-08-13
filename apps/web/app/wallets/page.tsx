@@ -26,7 +26,7 @@ export default async function WalletsPage({ searchParams }: WalletsPageProps) {
           <div>
             <div className="eyebrow">Wallet Ops</div>
             <h1>Connect and select a real wallet.</h1>
-            <p>A-profile uses your browser wallet for signing. Wallet Ops stores public watch-only records only for matching, labels, and balance display.</p>
+            <p>Bond.Terminal uses your browser wallet for signing. Wallet Ops stores public watch-only records for matching, labels, and balance display.</p>
           </div>
           <div className="launchHeroStatus">
             <span>Saved wallets</span>
@@ -62,11 +62,10 @@ export default async function WalletsPage({ searchParams }: WalletsPageProps) {
         </section>
 
         <section className="walletBoardSafetyFooter cleanActionFooter">
-          <strong>A-profile wallet rules</strong>
+          <strong>Wallet rules</strong>
           <span>Signable means the connected browser signer equals the selected/saved public address. No private keys, sends, funding, deployment, claims, payouts, or broadcast are available from Wallet Ops.</span>
           <a href={selectedProject ? `/deployment?project=${selectedProject.id}` : '/deployment'}>Open Deployment</a>
           <a href={selectedProject ? `/sniper?project=${selectedProject.id}` : '/sniper'}>Open Terminal</a>
-          <a href="/live-beta-test">Open Live Beta Test</a>
         </section>
       </div>
     </main>
