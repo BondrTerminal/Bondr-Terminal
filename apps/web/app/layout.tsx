@@ -6,46 +6,59 @@ import { HeaderWalletChip } from './components/HeaderWalletChip';
 
 export const metadata: Metadata = {
   title: 'Bond.Terminal',
-  description: 'Bond.Terminal is a Solana launch operating system with browser-wallet signing, wallet operations, project configuration, portfolio reads, and gated execution.'
+  description: 'Bond.Terminal is a Solana command hub for autonomous liquidity, market making, scalper workflows, launch operations, wallet operations, portfolio reads, and gated browser-wallet execution.'
 };
 
 const navItems = [
   { href: '/', label: 'Hub' },
-  { href: '/deployment', label: 'Deployment' },
+  { href: '/liquidity', label: 'Liquidity Engine' },
   { href: '/sniper', label: 'Terminal' },
-  { href: '/wallets', label: 'Wallets' },
-  { href: '/projects', label: 'Projects' },
   { href: '/portfolio', label: 'Portfolio' },
-  { href: '/token-analyzer', label: 'Analyzer' },
-  { href: '/github', label: 'GitHub' }
+  { href: '/deployment', label: 'Deployment' },
+  { href: '/projects', label: 'Projects' },
+  { href: '/project-dashboard', label: 'Project Dashboard' },
+  { href: '/wallets', label: 'Wallet Ops' },
+  { href: '/profile', label: 'Profile' }
+];
+
+const toolItems = [
+  { href: '/liquidity', label: 'Market Maker / Scalper' },
+  { href: '/token-analyzer', label: 'Token Analyzer' },
+  { href: '/github', label: 'GitHub / Ops' },
+  { href: '/live-beta-test', label: 'Signing Harness' }
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
-        <div className="bondrAppFrame">
-          <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
-            <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
-              <span className="bondrLogoText" aria-label="BONDR">
-                <span>B</span><span className="bondrScopeO">O</span><span>N</span><span>D</span><span>R</span>
+        <div className="appFrame bondrFinalShell">
+          <aside className="sideToolbar" aria-label="Bond.Terminal navigation">
+            <a className="brandMark sideBrand" href="/" aria-label="Bond.Terminal home">
+              <span className="brandGlyph">B</span>
+              <span>
+                <strong>Bond.Terminal</strong>
+                <small>Solana command hub</small>
               </span>
             </a>
-            <nav className="bondrHeaderNav" aria-label="Main navigation">
+            <nav aria-label="Main navigation">
               {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
             </nav>
-            <div className="bondrHeaderActions" aria-label="Account and watch controls">
+            <div className="sideTools" aria-label="Tools navigation">
+              <span>Tools</span>
+              {toolItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+            </div>
+            <div className="sideStatus">
+              <span>Flagship</span>
+              <strong>Liquidity Engine</strong>
+              <small>Market maker / scalper cockpit</small>
+            </div>
+            <div className="sideSessionRail" aria-label="Wallet and project controls">
               <HeaderWalletChip />
               <GlobalCreateProjectAction />
-              <a className="bondrHeaderAction" href="/wallets">Wallet Ops</a>
-              <a className="bondrProfileOrb" href="/profile" aria-label="Open profile and account">B</a>
             </div>
-          </header>
-          <div className="preBetaGlobalStrip" role="status" aria-label="BONDR pre-beta execution status">
-            <strong>Live beta A-profile active</strong>
-            <span>Signing + simulation are enabled behind operator auth and browser-wallet confirmation. Broadcast, deployment, wallet funding, claims, and payouts remain disabled.</span>
-          </div>
-          <div className="bondrAppContent">
+          </aside>
+          <div className="appContent">
             {children}
           </div>
         </div>

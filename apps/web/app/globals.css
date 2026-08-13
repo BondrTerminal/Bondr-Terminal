@@ -13116,3 +13116,59 @@ body > .createProjectModal .professionalCreateProjectShell {
 .foundationStatusGrid strong { display:block; margin-top:5px; }
 .foundationStatusGrid small { display:block; margin-top:5px; color:var(--muted,#9b8d84); line-height:1.35; font-size:.76rem; }
 .foundationStatusPanel p { margin:12px 0 0; color:var(--muted,#9b8d84); line-height:1.45; }
+
+/* Final shell restoration: preserve the approved sidebar command-hub structure while newer backend/auth gates remain active. */
+.bondrFinalShell .sideToolbar {
+  min-height: 100vh;
+}
+.sideTools {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 127, 17, 0.22);
+}
+.sideTools > span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.sideTools a {
+  color: rgba(249, 235, 224, 0.82);
+  text-decoration: none;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 12px;
+  padding: 0.52rem 0.65rem;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+.sideTools a:hover {
+  border-color: rgba(255, 127, 17, 0.52);
+  color: #F9EBE0;
+}
+.sideSessionRail {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+.sideSessionRail .bondrHeaderChip,
+.sideSessionRail .bondrHeaderAction,
+.sideSessionRail .globalCreateProjectAction,
+.sideSessionRail button,
+.sideSessionRail a {
+  max-width: 100%;
+}
+.bondrMatrixRow {
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.1fr) minmax(160px, 1fr) minmax(180px, 1.1fr);
+}
+@media (max-width: 900px) {
+  .bondrFinalShell {
+    display: block;
+  }
+  .bondrFinalShell .sideToolbar {
+    min-height: auto;
+  }
+}

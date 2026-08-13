@@ -10,7 +10,7 @@ const engineCapabilities = [
   ['Route preview', 'Uses Jupiter quote previews before any swap transaction is built.'],
   ['Browser signing', 'Live actions require browser-wallet approval; server custody is intentionally blocked.'],
   ['Risk gates', 'Server caps max SOL/USDC, slippage, and live-mode availability before building transactions.'],
-  ['Backend status', 'Shows canonical snapshot liquidity plus backend route readiness, wallet balance reads, execution gates, and engine status.']
+  ['Market-maker status', 'Shows canonical snapshot liquidity plus backend route readiness, wallet balance reads, execution gates, engine status, and scalper operating context.']
 ];
 
 const engineWorkflow = [
@@ -26,11 +26,11 @@ export default async function LiquidityPage() {
     <main>
       <div className="contentShell liquidityCommandShell">
         <section className="documentHero oceanHero liquidityHero">
-          <div className="eyebrow">Flagship Module</div>
-          <h1>Liquidity Engine.</h1>
+          <div className="eyebrow">Flagship Tool</div>
+          <h1>Liquidity Engine / Market Maker / Scalper.</h1>
           <p>
-            Live-read liquidity cockpit for pool discovery, LP lock/burn inspection, Jupiter route preview,
-            browser-wallet signing gates, and backend engine readiness before any funded action goes live.
+            Flagship market-maker and scalper cockpit for pool discovery, LP lock/burn inspection, Jupiter route preview,
+            inventory/exposure context, browser-wallet signing gates, and backend engine readiness before any funded action goes live.
           </p>
         </section>
 
