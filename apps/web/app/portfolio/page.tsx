@@ -8,6 +8,7 @@ import { getSolanaRpcHealth } from '../../lib/rpc-health';
 import { MeridianStatusBadge } from '../components/MeridianStatusBadge';
 import { PortfolioPnlChart } from './components/PortfolioPnlChart';
 import { WalletRailStatus } from '../components/WalletRailStatus';
+import { PortfolioWalletGrid } from './components/PortfolioWalletGrid';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,27 +35,6 @@ function numberText(value: unknown) {
 }
 
 
-function solscanAddress(address: string) {
-  return `https://solscan.io/account/${address}`;
-}
-
-function custodyLabel(wallet: Json) {
-  const custody = text(wallet.custodyMode, 'watch-only');
-  if (/browser/i.test(custody)) return 'Browser signer';
-  if (/managed|local|generated/i.test(custody)) return 'Generated wallet';
-  return 'Watch-only';
-}
-
-function walletActionHref(wallet: Json, action: string) {
-  const id = encodeURIComponent(text(wallet.id, ''));
-  return `/portfolio?view=wallets&wallet=${id}&action=${action}`;
-}
-
-function walletSolText(wallet: Json) {
-  const status = text(wallet.balanceStatus, 'unknown');
-  if (status !== 'live') return `${status === 'provider-limited' ? 'provider-limited' : status === 'modeled' ? 'modeled' : 'unavailable'} · SOL not live`;
-  return `${numberText(wallet.solBalance)} SOL · live`;
-}
 
 function asRows(value: unknown): Json[] {
   return Array.isArray(value) ? value.filter((row): row is Json => Boolean(row) && typeof row === 'object' && !Array.isArray(row)) : [];
@@ -89,8 +69,42 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
   const mintParam = scopedMint ? `&mint=${scopedMint}` : '';
   const snapshot = await buildPortfolioSnapshot(store);
   const timeseries = await buildPortfolioTimeseries(params?.range);
-  const wallets = asRows(snapshot.wallets.data.rows);
+  const snapshotWallets = asRows(snapshot.wallets.data.rows);
   const holdings = asRows(snapshot.holdings.data.rows);
+  const walletSnapshotById = new Map(snapshotWallets.map((wallet) => [String(wallet.id), wallet]));
+  const tokenStatsByWallet = new Map<string, { tokenCount: number; tokenValueUsd: number | null; status: string }>();
+  for (const holding of holdings) {
+    for (const account of asRows(holding.tokenAccounts)) {
+      const address = String(account.wallet ?? '');
+      if (!address) continue;
+      const current = tokenStatsByWallet.get(address) ?? { tokenCount: 0, tokenValueUsd: null, status: 'rpc-current-holdings' };
+      current.tokenCount += 1;
+      const value = Number(holding.valueUsd);
+      if (Number.isFinite(value)) current.tokenValueUsd = (current.tokenValueUsd ?? 0) + value;
+      tokenStatsByWallet.set(address, current);
+    }
+  }
+  const walletRows = store.wallets
+    .filter((wallet) => selectedContext ? wallet.groupId === selectedContext.project.walletGroupId : true)
+    .map((wallet) => {
+      const hydrated = walletSnapshotById.get(wallet.id) ?? {};
+      const tokenStats = tokenStatsByWallet.get(wallet.address);
+      return {
+        ...hydrated,
+        id: wallet.id,
+        role: wallet.role,
+        address: wallet.address,
+        scope: wallet.scope,
+        groupId: wallet.groupId,
+        status: wallet.status,
+        purpose: wallet.purpose,
+        custodyMode: wallet.custodyMode ?? 'watch-only',
+        archived: Boolean(wallet.archived),
+        tokenCount: tokenStats?.tokenCount ?? 0,
+        tokenValueUsd: tokenStats?.tokenValueUsd ?? null,
+        tokenStatus: tokenStats?.status ?? (holdings.length ? 'zero-current-holdings' : snapshot.holdings.status)
+      };
+    });
   const activePositions = asRows(snapshot.positions.data.active).filter((row) => {
     if (!search) return true;
     return [row.name, row.symbol, row.mint].some((value) => String(value ?? '').toLowerCase().includes(search));
@@ -163,20 +177,8 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
 
         {view === 'wallets' ? (
           <section className="portfolioWalletsView">
-            <div className="portfolioPanelTitle"><div><span>BONDR Portfolio</span><strong>Wallets</strong><small>Canonical wallet grid for browser signers, watch-only records, balances, and safe record actions.</small></div><div className="portfolioActionStack"><button disabled>Generate wallet — coming next</button><small>No server custody or auto-funding until backup/export UX is safe.</small></div></div>
-            <div className="portfolioWalletGrid" aria-label="Portfolio wallet grid">
-              {wallets.length ? wallets.map((wallet) => {
-                const address = text(wallet.address, '');
-                const selected = selectedContext?.wallets.some((item) => item.address === address);
-                return <article className={`portfolioWalletCard ${selected ? 'selectedWalletCard' : ''}`} key={String(wallet.id)}>
-                  <div className="walletCardTop"><div><span>{custodyLabel(wallet)}</span><strong>{text(wallet.role, 'Wallet')}</strong></div><a href={solscanAddress(address)} target="_blank" rel="noreferrer">Solscan</a></div>
-                  <code>{shortAddress(address)}</code>
-                  <div className="walletCardMetrics"><div><span>SOL balance</span><strong>{walletSolText(wallet)}</strong></div><div><span>Value status</span><strong>{money(wallet.solValueUsd, 'price unavailable')}</strong></div><div><span>Signer state</span><strong>{selected ? 'selected/project wallet' : 'available record'}</strong></div><div><span>Record</span><strong>{wallet.archived ? 'archived' : text(wallet.status, 'active')}</strong></div></div>
-                  <div className="walletCardActions"><a href={`/sniper?wallet=${encodeURIComponent(address)}`}>Open Terminal</a><a href={walletActionHref(wallet, 'export')}>Export record</a><a href={walletActionHref(wallet, wallet.archived ? 'restore' : 'archive')}>{wallet.archived ? 'Restore' : 'Archive'}</a></div>
-                  <p>No private key is shown here. Browser-wallet signing stays in Phantom/Solflare; generated-wallet backup UX remains gated.</p>
-                </article>;
-              }) : <div className="emptyPortfolioState">No wallet records yet. Connect a browser wallet from the live-beta or terminal flow, then add it as watch-only.</div>}
-            </div>
+            <div className="portfolioPanelTitle"><div><span>BONDR Portfolio</span><strong>Wallets</strong><small>Canonical wallet/spot interface. Public records only; browser signer custody stays in the browser wallet.</small></div><div className="portfolioActionStack"><a href="/profile">Connect signer</a></div></div>
+            <PortfolioWalletGrid wallets={walletRows} projectId={selectedContext?.project.id ?? null} />
 
           </section>
         ) : (

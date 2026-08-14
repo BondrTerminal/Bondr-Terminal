@@ -14,6 +14,8 @@ export type BondrTurnkeyAccount = {
   configured: boolean;
   clientReady: boolean;
   authenticated: boolean;
+  authResolved: boolean;
+  authHydrating: boolean;
   clientState: string;
   authState: string;
   userId: string | null;
@@ -52,6 +54,8 @@ const defaultAccount: BondrTurnkeyAccount = {
   configured,
   clientReady: false,
   authenticated: false,
+  authResolved: !configured,
+  authHydrating: configured,
   clientState: configured ? 'loading' : 'not-configured',
   authState: 'unauthenticated',
   userId: null,
@@ -193,6 +197,8 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
   const sessionUserId = maybeString(session?.userId);
   const sessionOrganizationId = maybeString(session?.organizationId);
   const authenticated = turnkey.authState === AuthState.Authenticated || Boolean(sessionUserId && sessionOrganizationId) || Boolean(verifiedSession);
+  const authResolved = clientReady || authenticated || turnkey.authState === AuthState.Unauthenticated;
+  const authHydrating = configured && !authenticated && !authResolved;
   const user = turnkey.user as Record<string, unknown> | undefined;
   const firstWallet = turnkey.wallets[0] as (typeof turnkey.wallets)[number] | undefined;
   const firstAccount = firstWallet?.accounts?.[0];
@@ -216,6 +222,8 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     configured: true,
     clientReady,
     authenticated,
+    authResolved,
+    authHydrating,
     clientState: turnkey.clientState ?? 'loading',
     authState: turnkey.authState ?? 'unauthenticated',
     userId: maybeString(user?.userId) ?? maybeString(user?.id) ?? sessionUserId ?? verifiedSession?.userId ?? null,
@@ -251,7 +259,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     refresh: async () => {
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     }
-  }), [authenticated, clearVerifiedSession, clientReady, debug, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedSession, walletProviderNames, walletProviderNamespaces]);
+  }), [authenticated, authHydrating, authResolved, clearVerifiedSession, clientReady, debug, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedSession, walletProviderNames, walletProviderNamespaces]);
 
   return <TurnkeyAccountContext.Provider value={value}>{children}</TurnkeyAccountContext.Provider>;
 }

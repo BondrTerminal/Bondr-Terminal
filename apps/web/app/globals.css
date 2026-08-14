@@ -13709,3 +13709,70 @@ body > .createProjectModal .professionalCreateProjectShell {
   font-size: 12px;
 }
 .portfolioWalletCard p { margin: 12px 0 0; color: rgba(249, 235, 224, 0.62); font-size: 12px; line-height: 1.45; }
+
+
+/* Portfolio canonical wallet grid */
+.bondrAuthResolving {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #05070b;
+  color: #d7e7ff;
+  font: 600 14px/1.4 var(--font-sans, system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.portfolioWalletGridShell { display: grid; gap: 16px; }
+.portfolioWalletSummaryBar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.portfolioWalletSummaryBar > div,
+.portfolioWalletCard {
+  border: 1px solid rgba(125, 199, 255, 0.18);
+  border-radius: 18px;
+  background: rgba(8, 16, 30, 0.78);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+}
+.portfolioWalletSummaryBar > div { padding: 14px; display: grid; gap: 4px; }
+.portfolioWalletSummaryBar span,
+.portfolioWalletCard span,
+.portfolioWalletCard small { color: #91a9ca; }
+.portfolioWalletSummaryBar strong { color: #ecf6ff; }
+.portfolioWalletSummaryBar small { color: #7f94b8; }
+.portfolioWalletGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.portfolioWalletCard { padding: 16px; display: grid; gap: 14px; }
+.portfolioWalletCard.selected { border-color: rgba(82, 255, 186, 0.52); box-shadow: 0 0 0 1px rgba(82, 255, 186, 0.12), 0 18px 45px rgba(0,0,0,.25); }
+.portfolioWalletCard.archived { opacity: 0.68; }
+.portfolioWalletCardHead { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.portfolioWalletCardHead div { display: grid; gap: 4px; }
+.portfolioWalletCardHead strong { color: #f4fbff; font-size: 1rem; }
+.portfolioWalletCard code { color: #7dc7ff; font-size: 0.82rem; }
+.portfolioWalletStats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.portfolioWalletStats > div { padding: 11px; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; background: rgba(255,255,255,0.035); display: grid; gap: 3px; }
+.portfolioWalletStats strong { color: #eaf5ff; font-size: 0.88rem; }
+.portfolioWalletPurpose { margin: 0; color: #aabbd3; font-size: 0.86rem; line-height: 1.45; }
+.portfolioWalletActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.portfolioWalletActions button,
+.portfolioWalletActions a {
+  border: 1px solid rgba(125,199,255,.22);
+  border-radius: 999px;
+  background: rgba(125,199,255,.08);
+  color: #dceeff;
+  padding: 8px 10px;
+  text-decoration: none;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.portfolioWalletActions button:disabled { opacity: .55; cursor: not-allowed; }
+.archivedPortfolioWallets { display: grid; gap: 12px; }
+.archivedPortfolioWallets summary { cursor: pointer; color: #a8c8ff; }
+@media (max-width: 760px) {
+  .portfolioWalletSummaryBar,
+  .portfolioWalletStats { grid-template-columns: 1fr; }
+}
