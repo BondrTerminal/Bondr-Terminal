@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { eventsForProject, formatSol, getProject, launchPreflight, projectFlow, readinessScore, walletsForGroup } from '../../../lib/meridian-store';
+import { eventsForProject, formatSol, getProject, launchPreflight, portfolioWalletHref, projectFlow, readinessScore, walletsForGroup } from '../../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
   const readiness = readinessScore(project, store);
   const flow = projectFlow(project.id, store);
   const wallets = walletsForGroup(project.walletGroupId, store).filter((wallet) => !wallet.archived);
+  const walletHref = portfolioWalletHref(project.id);
   const preflight = launchPreflight(project, store);
   const events = eventsForProject(project.id, store);
   const operatingSequence = [
@@ -59,7 +60,7 @@ export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
             <div className="sectionIntro compactIntro"><span>Command links</span><h2>Module handoffs</h2></div>
             <div className="projectModuleLinks">
               <a href={project.moduleLinks.deployment}><strong>Deployment</strong><span>metadata, launch path, preflight</span></a>
-              <a href={project.moduleLinks.wallets}><strong>Wallet Ops</strong><span>wallet group, balance board, archive</span></a>
+              <a href={walletHref}><strong>Wallets</strong><span>wallet group, balance board, archive</span></a>
               <a href={project.moduleLinks.sniper}><strong>Terminal</strong><span>token intelligence and route context</span></a>
               <a href={project.moduleLinks.dashboard}><strong>Dashboard</strong><span>net SOL accounting</span></a>
               <a href={project.moduleLinks.liquidity}><strong>Liquidity</strong><span>liquidity engine handoff</span></a>

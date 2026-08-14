@@ -226,9 +226,14 @@ export type PreflightCheck = {
   href: string;
 };
 
+export function portfolioWalletHref(projectId?: string | null): string {
+  return projectId ? `/portfolio?view=wallets&project=${encodeURIComponent(projectId)}` : '/portfolio?view=wallets';
+}
+
 export function launchPreflight(project: Project, store = getMeridianStore()): PreflightCheck[] {
   const wallets = walletsForGroup(project.walletGroupId, store).filter((wallet) => !wallet.archived);
   const flow = projectFlow(project.id, store);
+  const walletHref = portfolioWalletHref(project.id);
   return [
     {
       label: 'Project object',
@@ -249,14 +254,14 @@ export function launchPreflight(project: Project, store = getMeridianStore()): P
       status: wallets.length > 0 ? 'ready' : 'blocked',
       owner: 'wallets',
       detail: wallets.length > 0 ? `${wallets.length} active wallet(s) attached via ${project.walletGroupId}.` : 'No active wallets attached to this project.',
-      href: project.moduleLinks.wallets
+      href: walletHref
     },
     {
       label: 'Funding plan',
       status: project.fundingPlan.budgetSol > 0 ? 'review' : 'blocked',
       owner: 'wallets',
       detail: `Budget ${project.fundingPlan.budgetSol.toFixed(2)} SOL · liquidity ${project.fundingPlan.liquiditySol.toFixed(2)} SOL · fee reserve ${project.fundingPlan.feeReserveSol.toFixed(2)} SOL.`,
-      href: project.moduleLinks.wallets
+      href: walletHref
     },
     {
       label: 'Launch path',
@@ -294,8 +299,8 @@ export function projectNextAction(project: Project, store = getMeridianStore()):
   const missing = readiness.missing[0];
   if (!missing) return { label: project.status === 'deployed' ? 'Review post-launch monitor' : 'Ready for launch review', href: project.moduleLinks.deployment };
   if (missing === 'Metadata') return { label: 'Complete metadata', href: project.moduleLinks.deployment };
-  if (missing === 'Wallet group') return { label: 'Assign wallet group', href: project.moduleLinks.wallets };
-  if (missing === 'Funding plan') return { label: 'Prepare funding plan', href: project.moduleLinks.wallets };
+  if (missing === 'Wallet group') return { label: 'Assign wallet group', href: portfolioWalletHref(project.id) };
+  if (missing === 'Funding plan') return { label: 'Prepare funding plan', href: portfolioWalletHref(project.id) };
   if (missing === 'Launch path') return { label: 'Select launch path', href: project.moduleLinks.deployment };
   return { label: `Fix ${missing.toLowerCase()}`, href: project.moduleLinks.deployment };
 }

@@ -427,7 +427,7 @@ function ChecklistTab({ projectId, projectName, activeMint, terminalWarning, liv
     <DataTable className="checklistContextTable" head={['Context', 'Value', 'Action / Route']} rows={[
       ['Terminal note', terminalWarning ?? 'Project, mint, and wallet group context loaded.', 'Main terminal remains uncluttered.'],
       ['Deployment', projectId ? `/deployment?project=${projectId}` : '/deployment', 'Open Deployment link should route here.'],
-      ['Wallets', projectId ? `/wallets?project=${projectId}` : '/wallets', 'Manage wallets link should route here.'],
+      ['Wallets', projectId ? `/portfolio?view=wallets&project=${projectId}` : '/portfolio?view=wallets', 'Manage wallets link should route here.'],
       ['Portfolio', projectId ? `/portfolio?project=${projectId}${activeMint ? `&mint=${activeMint}` : ''}` : '/portfolio', 'Portfolio link should preserve project/mint.'],
       ['Resolution API', '/api/pre-live-resolution', 'Read-only pre-live matrix.']
     ]} empty={<EmptyState title="No checklist context" detail="Context props were not supplied." />} />

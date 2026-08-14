@@ -9,7 +9,7 @@ const repoItems = [
 
 const localDocs = [
   ['Projects', '/projects'],
-  ['Wallet Ops', '/wallets'],
+  ['Portfolio Wallets', '/portfolio?view=wallets'],
   ['Deployment', '/deployment'],
   ['Terminal', '/sniper'],
   ['Liquidity', '/liquidity'],

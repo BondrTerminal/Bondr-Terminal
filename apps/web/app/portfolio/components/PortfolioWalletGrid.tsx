@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 type WalletRow = {
@@ -47,6 +48,7 @@ function usdText(value: number | null | undefined) {
 }
 
 export function PortfolioWalletGrid({ wallets, projectId }: Props) {
+  const router = useRouter();
   const [message, setMessage] = useState('');
 
   function exportRecord(wallet: WalletRow) {
@@ -85,7 +87,7 @@ export function PortfolioWalletGrid({ wallets, projectId }: Props) {
       return;
     }
     setMessage(archived ? 'Wallet record archived.' : 'Wallet record restored.');
-    window.location.reload();
+    router.refresh();
   }
 
   const active = wallets.filter((wallet) => !wallet.archived);

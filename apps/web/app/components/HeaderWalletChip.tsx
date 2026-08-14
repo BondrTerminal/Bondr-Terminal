@@ -76,7 +76,7 @@ export function HeaderWalletChip() {
         ? 'signer mismatch'
         : rail?.balanceStatus ?? (signer ? 'checking' : 'not connected');
 
-  return <a className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/wallets" title={rail?.warnings?.join(' · ') ?? 'Wallet Ops'}>
+  return <a className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/portfolio?view=wallets" title={rail?.warnings?.join(' · ') ?? 'Portfolio wallets'}>
     <span>{short(selected)}</span>
     <strong>{sol(balance)}</strong>
     <em>{status}</em>

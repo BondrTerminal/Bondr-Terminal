@@ -17,8 +17,8 @@ export const meridianObligationMatrix: MeridianObligation[] = [
     capability: 'read-only'
   },
   {
-    section: 'Wallet Ops',
-    route: '/wallets',
+    section: 'Portfolio Wallets',
+    route: '/portfolio?view=wallets',
     obligation: 'Inspect wallet records, groups, archive state, and balance labels.',
     source: 'Local Meridian model plus RPC/Helius-ready SOL balance hydration.',
     blocked: 'No create, import sensitive credential, fund, collect, send, delete, or export key material.',

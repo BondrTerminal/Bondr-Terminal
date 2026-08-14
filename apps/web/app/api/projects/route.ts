@@ -196,7 +196,7 @@ export async function POST(request: Request) {
     },
     moduleLinks: {
       deployment: `/deployment?project=${id}`,
-      wallets: `/wallets?project=${id}`,
+      wallets: `/portfolio?view=wallets&project=${id}`,
       sniper: `/sniper?project=${id}`,
       dashboard: `/projects/${id}`,
       liquidity: `/liquidity?project=${id}`

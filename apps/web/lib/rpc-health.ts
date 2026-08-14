@@ -29,9 +29,17 @@ export type SolanaRpcHealth = RpcProviderHealth & {
   providers: RpcProviderHealth[];
 };
 
+let rpcHealthCache: { expiresAt: number; value: SolanaRpcHealth } | null = null;
+let rpcHealthInflight: Promise<SolanaRpcHealth> | null = null;
+
 function timeoutMs() {
   const value = Number(process.env.SOLANA_RPC_HEALTH_TIMEOUT_MS ?? '2500');
   return Number.isFinite(value) && value > 0 ? value : 2500;
+}
+
+function cacheTtlMs() {
+  const value = Number(process.env.SOLANA_RPC_HEALTH_CACHE_MS ?? '15000');
+  return Number.isFinite(value) && value >= 0 ? value : 15000;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -122,7 +130,7 @@ function providerRank(provider: RpcProviderHealth) {
   return 3;
 }
 
-export async function getSolanaRpcHealth(): Promise<SolanaRpcHealth> {
+async function computeSolanaRpcHealth(): Promise<SolanaRpcHealth> {
   const observedAt = new Date().toISOString();
   const providers = configuredDedicatedSolanaRpcs();
   if (!providers.length) {
@@ -150,4 +158,18 @@ export async function getSolanaRpcHealth(): Promise<SolanaRpcHealth> {
   const selected = [...results].sort((a, b) => providerRank(a) - providerRank(b) || (a.latencyMs ?? Number.MAX_SAFE_INTEGER) - (b.latencyMs ?? Number.MAX_SAFE_INTEGER))[0];
   const summary = results.map((provider) => `${provider.providerLabel}:${provider.status}${provider.quotaLimited ? ':quota' : ''}`).join(' · ');
   return { ...selected, selectedProvider: selected.provider, selectedProviderLabel: selected.providerLabel, configuredProviderCount: results.length, providerSummary: summary, providers: results };
+}
+
+export async function getSolanaRpcHealth(): Promise<SolanaRpcHealth> {
+  const now = Date.now();
+  if (rpcHealthCache && rpcHealthCache.expiresAt > now) return rpcHealthCache.value;
+  if (rpcHealthInflight) return rpcHealthInflight;
+  rpcHealthInflight = computeSolanaRpcHealth().then((value) => {
+    const ttl = cacheTtlMs();
+    rpcHealthCache = ttl ? { value, expiresAt: Date.now() + ttl } : null;
+    return value;
+  }).finally(() => {
+    rpcHealthInflight = null;
+  });
+  return rpcHealthInflight;
 }

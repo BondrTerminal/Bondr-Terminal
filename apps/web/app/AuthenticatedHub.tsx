@@ -44,7 +44,7 @@ const modules = [
     state: 'Obligation: account, not execute'
   },
   {
-    href: '/wallets',
+    href: '/portfolio?view=wallets',
     label: 'Operator module',
     title: 'Wallet Operations',
     body: 'Browser-wallet and watch-only workspace for signer matching, labels, balances, and wallet readiness. No custody or funding actions.',
@@ -110,7 +110,7 @@ export function AuthenticatedHub() {
             <h2>A hub, not a single dashboard.</h2>
             <p>
               Bond.Terminal houses multiple Solana operator tools around a shared project object. Terminal, Liquidity, Launch Prep,
-              Wallet Ops, Projects, Portfolio, and analysis surfaces now coordinate as one operator workflow.
+              Portfolio wallets, Projects, Terminal, and analysis surfaces now coordinate as one operator workflow.
             </p>
           </div>
         </section>
