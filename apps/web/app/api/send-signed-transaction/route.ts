@@ -1,7 +1,7 @@
 import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
 import { getIntentAsync, updateIntentAsync } from '../../../lib/live-store';
-import { decodeTransactionPolicy, fundingPolicyCheck, policyCheck } from '../../../lib/transaction-policy';
+import { decodeTransactionPolicy, decodeTransactionPolicyWithLookupTables, fundingPolicyCheck, policyCheck } from '../../../lib/transaction-policy';
 import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 import { sameOriginAllowed, mutationBlockedResponse } from '../../../lib/mutation-safety';
 import { liveDisabledPreview } from '../../../lib/transaction-preview';
@@ -118,8 +118,10 @@ export async function POST(request: Request) {
   }
 
   let decoded: ReturnType<typeof decodeTransactionPolicy>;
+  const rpc = configuredSolanaRpc();
+  const connection = new Connection(rpc.url, 'confirmed');
   try {
-    decoded = decodeTransactionPolicy(raw);
+    decoded = await decodeTransactionPolicyWithLookupTables(raw, connection);
   } catch (error) {
     return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: error instanceof Error ? error.message : 'Unable to decode signed transaction.', execution: 'broadcast-rejected' }, { status: 400 });
   }
@@ -140,19 +142,17 @@ export async function POST(request: Request) {
       return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error: simulationError ?? 'Signed funding transaction failed funding policy.', execution: 'funding-broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...fundingPolicy.blockers], decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables), systemTransfers: decoded.systemTransfers }, fundingPolicy: { transfer: fundingPolicy.transfer, maxLamports: fundingPolicy.maxLamports, approvedSource: FUNDING_TEST_SOURCE, approvedDestination: FUNDING_TEST_DESTINATION }, serverSigning: false }, { status: 400 });
     }
   } else {
-    policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null, transactionMessageHash: body.transactionMessageHash ?? intent?.transactionMessageHash ?? null });
+    policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null, transactionMessageHash: intent?.transactionMessageHash ?? body.transactionMessageHash ?? null, allowWalletAssertionHashMismatch: true });
     const intentError = validateIntent(body.intentId ?? null, expectedSigner, expectedMint, decoded);
     if (intentError || simulationError || !policy.safeToBroadcastIfLiveEnabled) {
       const error = intentError ?? simulationError ?? 'Signed transaction failed intent policy.';
       if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_blocked', note: error ?? policy.blockers.join(' | ') });
-      return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error, execution: 'broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...policy.blockers], decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables) }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt, transactionMessageHash: intent.transactionMessageHash } : null, serverSigning: false }, { status: 400 });
+      return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error, execution: 'broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...policy.blockers], warnings: policy.warnings, decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables), unresolvedAddressLookupTables: decoded.unresolvedAddressLookupTables ?? [] }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt, transactionMessageHash: intent.transactionMessageHash } : null, serverSigning: false }, { status: 400 });
     }
     if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_requested' });
   }
 
   try {
-    const rpc = configuredSolanaRpc();
-    const connection = new Connection(rpc.url, 'confirmed');
     const signature = await connection.sendRawTransaction(raw, {
       skipPreflight: false,
       maxRetries: 3,
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
       simulationStatus: body.simulationStatus ?? null,
       rpcProvider: rpc.provider,
       signature,
-      intentPolicy: policy ? { safeToBroadcastIfLiveEnabled: policy.safeToBroadcastIfLiveEnabled, transactionMessageHash: policy.transactionMessageHash } : null,
+      intentPolicy: policy ? { safeToBroadcastIfLiveEnabled: policy.safeToBroadcastIfLiveEnabled, transactionMessageHash: policy.transactionMessageHash, messageHashMatched: policy.messageHashMatched, warnings: policy.warnings } : null,
       fundingPolicy: fundingPolicy ? { safeToBroadcastFunding: fundingPolicy.safeToBroadcastFunding, transfer: fundingPolicy.transfer, maxLamports: fundingPolicy.maxLamports, approvedSource: FUNDING_TEST_SOURCE, approvedDestination: FUNDING_TEST_DESTINATION } : null,
       explorerUrl: `https://solscan.io/tx/${signature}`
     });

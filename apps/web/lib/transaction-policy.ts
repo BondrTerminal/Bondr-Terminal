@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { PublicKey, SystemProgram, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { type AddressLookupTableAccount, type Connection, PublicKey, SystemProgram, Transaction, VersionedTransaction } from '@solana/web3.js';
 type TerminalIntent = {
   id: string;
   expectedSigner: string;
@@ -18,7 +18,11 @@ export const DEFAULT_ALLOWED_SWAP_PROGRAMS = [
   'ComputeBudget111111111111111111111111111111',
   'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
   'TokenzQdBNbLqP5VEhdkAS6EP1rH4D9Lr6VY7UG6w',
-  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+  // Lighthouse assertion protocol. Some browser wallets add this safety wrapper
+  // after local signing, which changes the signed message hash without changing
+  // the intended swap route.
+  'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'
 ];
 
 export const FUNDING_ALLOWED_AUXILIARY_PROGRAMS = [
@@ -42,7 +46,42 @@ export type DecodedTransactionPolicy = {
   messageHash: string;
   usesAddressLookupTables?: boolean;
   systemTransfers: DecodedSolTransfer[];
+  unresolvedAddressLookupTables?: string[];
 };
+
+function uniqueBase58(keys: (PublicKey | undefined)[]) {
+  return Array.from(new Set(keys.filter((key): key is PublicKey => Boolean(key)).map((key) => key.toBase58())));
+}
+
+function decodeVersionedTransactionPolicy(tx: VersionedTransaction, lookupAccounts: AddressLookupTableAccount[] = []): DecodedTransactionPolicy {
+  const messageAccountKeys = tx.message.getAccountKeys({ addressLookupTableAccounts: lookupAccounts });
+  const staticAccountKeys = tx.message.staticAccountKeys;
+  const lookupWritable = messageAccountKeys.accountKeysFromLookups?.writable ?? [];
+  const lookupReadonly = messageAccountKeys.accountKeysFromLookups?.readonly ?? [];
+  const accountKeys = uniqueBase58([...staticAccountKeys, ...lookupWritable, ...lookupReadonly]);
+  const programs = Array.from(new Set(tx.message.compiledInstructions.map((ix) => messageAccountKeys.get(ix.programIdIndex)?.toBase58()).filter((program): program is string => Boolean(program))));
+  const systemTransfers = tx.message.compiledInstructions.flatMap((ix) => {
+    const program = messageAccountKeys.get(ix.programIdIndex)?.toBase58();
+    const lamports = program === SystemProgram.programId.toBase58() ? parseSystemTransfer(ix.data) : null;
+    if (!lamports || ix.accountKeyIndexes.length < 2) return [];
+    const from = messageAccountKeys.get(ix.accountKeyIndexes[0])?.toBase58();
+    const to = messageAccountKeys.get(ix.accountKeyIndexes[1])?.toBase58();
+    return from && to ? [{ from, to, lamports }] : [];
+  });
+  const unresolvedAddressLookupTables = tx.message.addressTableLookups
+    .map((lookup) => lookup.accountKey.toBase58())
+    .filter((address) => !lookupAccounts.some((account) => account.key.toBase58() === address));
+  return {
+    kind: 'versioned',
+    signerKeys: staticAccountKeys.slice(0, tx.signatures.length).map((key) => key.toBase58()),
+    accountKeys,
+    programs,
+    messageHash: createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex'),
+    usesAddressLookupTables: tx.message.addressTableLookups.length > 0,
+    unresolvedAddressLookupTables,
+    systemTransfers
+  };
+}
 
 function parseSystemTransfer(data: Buffer | Uint8Array) {
   const buffer = Buffer.from(data);
@@ -56,25 +95,7 @@ function parseSystemTransfer(data: Buffer | Uint8Array) {
 export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
   try {
     const tx = VersionedTransaction.deserialize(raw);
-    const accountKeys = tx.message.staticAccountKeys.map((key) => key.toBase58());
-    const programs = Array.from(new Set(tx.message.compiledInstructions.map((ix) => accountKeys[ix.programIdIndex]).filter(Boolean)));
-    const systemTransfers = tx.message.compiledInstructions.flatMap((ix) => {
-      const program = accountKeys[ix.programIdIndex];
-      const lamports = program === SystemProgram.programId.toBase58() ? parseSystemTransfer(ix.data) : null;
-      if (!lamports || ix.accountKeyIndexes.length < 2) return [];
-      const from = accountKeys[ix.accountKeyIndexes[0]];
-      const to = accountKeys[ix.accountKeyIndexes[1]];
-      return from && to ? [{ from, to, lamports }] : [];
-    });
-    return {
-      kind: 'versioned',
-      signerKeys: tx.message.staticAccountKeys.slice(0, tx.signatures.length).map((key) => key.toBase58()),
-      accountKeys,
-      programs,
-      messageHash: createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex'),
-      usesAddressLookupTables: 'addressTableLookups' in tx.message && Array.isArray(tx.message.addressTableLookups) && tx.message.addressTableLookups.length > 0,
-      systemTransfers
-    };
+    return decodeVersionedTransactionPolicy(tx);
   } catch {
     const tx = Transaction.from(raw);
     const accountSet = new Set<string>();
@@ -100,6 +121,20 @@ export function decodeTransactionPolicy(raw: Buffer): DecodedTransactionPolicy {
   }
 }
 
+export async function decodeTransactionPolicyWithLookupTables(raw: Buffer, connection: Connection): Promise<DecodedTransactionPolicy> {
+  try {
+    const tx = VersionedTransaction.deserialize(raw);
+    if (!tx.message.addressTableLookups.length) return decodeVersionedTransactionPolicy(tx);
+    const lookupAccounts = await Promise.all(tx.message.addressTableLookups.map(async (lookup) => {
+      const response = await connection.getAddressLookupTable(lookup.accountKey);
+      return response.value;
+    }));
+    return decodeVersionedTransactionPolicy(tx, lookupAccounts.filter((account): account is AddressLookupTableAccount => Boolean(account)));
+  } catch {
+    return decodeTransactionPolicy(raw);
+  }
+}
+
 export function policyCheck(params: {
   decoded: DecodedTransactionPolicy;
   intent?: TerminalIntent | null;
@@ -109,6 +144,7 @@ export function policyCheck(params: {
   allowedPrograms?: string[] | null;
   requiredAccounts?: string[] | null;
   transactionMessageHash?: string | null;
+  allowWalletAssertionHashMismatch?: boolean;
 }) {
   const intent = params.intent ?? null;
   const expectedSigner = params.expectedSigner ?? intent?.expectedSigner ?? null;
@@ -117,6 +153,7 @@ export function policyCheck(params: {
   const requiredAccounts = Array.from(new Set([...(params.requiredAccounts ?? intent?.requiredAccounts ?? []), expectedMint].filter((item): item is string => Boolean(item))));
   const messageHash = params.transactionMessageHash ?? intent?.transactionMessageHash ?? null;
   const blockers: string[] = [];
+  const warnings: string[] = [];
 
   if (params.intentId && !intent) blockers.push('Intent not found.');
   if (intent && Date.parse(intent.expiresAt) <= Date.now()) blockers.push('Intent expired.');
@@ -132,8 +169,12 @@ export function policyCheck(params: {
   }
   for (const account of requiredAccounts) if (!params.decoded.accountKeys.includes(account)) blockers.push(`Required account missing: ${account}`);
   for (const program of params.decoded.programs) if (!allowedPrograms.includes(program)) blockers.push(`Program not allowed by intent policy: ${program}`);
-  if (messageHash && params.decoded.messageHash !== messageHash) blockers.push('Transaction message hash does not match intent.');
-  if (params.decoded.usesAddressLookupTables) blockers.push('Address lookup table resolution required before broadcast policy can pass.');
+  const walletAssertionPresent = params.decoded.programs.includes('L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95');
+  if (messageHash && params.decoded.messageHash !== messageHash) {
+    if (params.allowWalletAssertionHashMismatch && walletAssertionPresent) warnings.push('Transaction message hash changed after wallet assertion wrapping; strict signer/account/program policy still passed.');
+    else blockers.push('Transaction message hash does not match intent.');
+  }
+  if (params.decoded.unresolvedAddressLookupTables?.length) blockers.push('Address lookup table resolution required before broadcast policy can pass.');
 
   return {
     intent,
@@ -142,9 +183,11 @@ export function policyCheck(params: {
     requiredAccountsMatched: requiredAccounts.every((account) => params.decoded.accountKeys.includes(account)),
     programsAllowed: params.decoded.programs.every((program) => allowedPrograms.includes(program)),
     transactionMessageHash: params.decoded.messageHash,
+    messageHashMatched: !messageHash || params.decoded.messageHash === messageHash,
     allowedPrograms,
     requiredAccounts,
     blockers,
+    warnings,
     intentRequired: Boolean(params.intentId),
     safeToBroadcastIfLiveEnabled: blockers.length === 0
   };

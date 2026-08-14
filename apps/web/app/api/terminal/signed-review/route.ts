@@ -1,7 +1,9 @@
 import { PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { getIntentAsync, updateIntentAsync } from '../../../../lib/live-store';
 import { sameOriginAllowed, mutationBlockedResponse } from '../../../../lib/mutation-safety';
-import { decodeTransactionPolicy, policyCheck } from '../../../../lib/transaction-policy';
+import { configuredSolanaRpc } from '../../../../lib/solana-rpc';
+import { decodeTransactionPolicy, decodeTransactionPolicyWithLookupTables, policyCheck } from '../../../../lib/transaction-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,17 +67,18 @@ export async function POST(request: Request) {
   let decoded: ReturnType<typeof decodeTransactionPolicy> | null = null;
   if (!blockers.length) {
     try {
-      decoded = decodeTransactionPolicy(raw);
+      const rpc = configuredSolanaRpc();
+      decoded = await decodeTransactionPolicyWithLookupTables(raw, new Connection(rpc.url, 'confirmed'));
     } catch (error) {
       blockers.push(error instanceof Error ? error.message : 'Unable to decode signed transaction.');
     }
   }
 
-  const policy = decoded ? policyCheck({ decoded, intent, intentId: body.intentId, expectedSigner, expectedMint, transactionMessageHash: body.transactionMessageHash ?? intent.transactionMessageHash }) : null;
-  const hardBlockers = [...blockers, ...(policy?.blockers.filter((item) => !item.includes('Address lookup table resolution required')) ?? [])];
+  const policy = decoded ? policyCheck({ decoded, intent, intentId: body.intentId, expectedSigner, expectedMint, transactionMessageHash: intent.transactionMessageHash ?? body.transactionMessageHash ?? null, allowWalletAssertionHashMismatch: true }) : null;
+  const hardBlockers = [...blockers, ...(policy?.blockers ?? [])];
   const warnings = [
     'Review only: no transaction was broadcast.',
-    ...(policy?.blockers.filter((item) => item.includes('Address lookup table resolution required')) ?? [])
+    ...(policy?.warnings ?? [])
   ];
   const reviewPassed = hardBlockers.length === 0;
 
@@ -100,9 +103,14 @@ export async function POST(request: Request) {
       expectedMintReferenced: Boolean(policy?.expectedMintReferenced),
       requiredAccountsMatched: Boolean(policy?.requiredAccountsMatched),
       programsAllowed: Boolean(policy?.programsAllowed),
+      messageHashMatched: policy?.messageHashMatched ?? null,
       transactionMessageHash: policy?.transactionMessageHash ?? decoded?.messageHash ?? null,
       expectedTransactionMessageHash: body.transactionMessageHash ?? intent.transactionMessageHash ?? null,
-      altPolicy: decoded?.usesAddressLookupTables ? 'requires-resolution-before-broadcast' : 'no-address-lookup-tables',
+      altPolicy: decoded?.usesAddressLookupTables
+        ? decoded.unresolvedAddressLookupTables?.length
+          ? 'lookup-resolution-incomplete'
+          : 'lookup-tables-resolved'
+        : 'no-address-lookup-tables',
       safeToBroadcastIfLiveEnabled: Boolean(policy?.safeToBroadcastIfLiveEnabled),
       localSignatureReviewPassed: reviewPassed,
       programs: decoded?.programs ?? []

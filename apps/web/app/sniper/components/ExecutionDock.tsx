@@ -23,7 +23,7 @@ type SwapBuild = ExecutionQuote & {
 };
 
 type SimulationPayload = { status?: string; error?: string; simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null }; transactionPreview?: TransactionPreview };
-type SignedReviewPayload = { status?: string; error?: string; execution?: string; intentId?: string; expectedSigner?: string; expectedMint?: string; simulationStatus?: string | null; review?: { signerMatched?: boolean; expectedMintReferenced?: boolean; requiredAccountsMatched?: boolean; programsAllowed?: boolean; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null; altPolicy?: string; safeToBroadcastIfLiveEnabled?: boolean; localSignatureReviewPassed?: boolean; programs?: string[] }; blockers?: string[]; warnings?: string[]; broadcast?: string };
+type SignedReviewPayload = { status?: string; error?: string; execution?: string; intentId?: string; expectedSigner?: string; expectedMint?: string; simulationStatus?: string | null; review?: { signerMatched?: boolean; expectedMintReferenced?: boolean; requiredAccountsMatched?: boolean; programsAllowed?: boolean; messageHashMatched?: boolean; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null; altPolicy?: string; safeToBroadcastIfLiveEnabled?: boolean; localSignatureReviewPassed?: boolean; programs?: string[] }; blockers?: string[]; warnings?: string[]; broadcast?: string };
 type SignedSwapPayload = { signedTransaction: string; signature?: string; explorerUrl?: string; submitted?: boolean; review?: SignedReviewPayload | null };
 
 
@@ -396,6 +396,8 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
         expectedMintReferenced: signedReview?.review?.expectedMintReferenced ?? null,
         requiredAccountsMatched: signedReview?.review?.requiredAccountsMatched ?? null,
         programsAllowed: signedReview?.review?.programsAllowed ?? null,
+        messageHashMatched: signedReview?.review?.messageHashMatched ?? null,
+        altPolicy: signedReview?.review?.altPolicy ?? null,
         safeToBroadcastIfLiveEnabled: signedReview?.review?.safeToBroadcastIfLiveEnabled ?? null,
         blockers: signedReview?.blockers ?? [],
         warnings: signedReview?.warnings ?? []

@@ -58,20 +58,57 @@ test('policy check blocks mismatched signer, missing mint, and changed message h
   assert.match(result.blockers.join('\n'), /Transaction message hash does not match intent/);
 });
 
-test('policy check blocks address lookup table transactions until resolved', () => {
+test('policy check blocks address lookup table transactions until unresolved lookup keys are resolved', () => {
   const decoded: DecodedTransactionPolicy = {
     kind: 'versioned',
     signerKeys: [SIGNER],
     accountKeys: [SIGNER, MINT, SPL_TOKEN_PROGRAM_ID],
     programs: [SPL_TOKEN_PROGRAM_ID],
     messageHash: 'message-hash',
-    usesAddressLookupTables: true
+    usesAddressLookupTables: true,
+    unresolvedAddressLookupTables: ['Lookup111111111111111111111111111111111111']
   };
 
   const result = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT });
 
   assert.equal(result.safeToBroadcastIfLiveEnabled, false);
   assert.match(result.blockers.join('\n'), /Address lookup table resolution required/);
+});
+
+test('policy check allows resolved lookup table transactions', () => {
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [SIGNER],
+    accountKeys: [SIGNER, MINT, SPL_TOKEN_PROGRAM_ID],
+    programs: [SPL_TOKEN_PROGRAM_ID],
+    messageHash: 'message-hash',
+    usesAddressLookupTables: true,
+    unresolvedAddressLookupTables: []
+  };
+
+  const result = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT });
+
+  assert.equal(result.safeToBroadcastIfLiveEnabled, true);
+  assert.deepEqual(result.blockers, []);
+});
+
+test('policy check permits wallet assertion hash mismatch only when requested', () => {
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [SIGNER],
+    accountKeys: [SIGNER, MINT, SPL_TOKEN_PROGRAM_ID, 'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'],
+    programs: [SPL_TOKEN_PROGRAM_ID, 'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'],
+    messageHash: 'wallet-wrapped-message-hash'
+  };
+
+  const blocked = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT, transactionMessageHash: 'intent-message-hash' });
+  assert.equal(blocked.safeToBroadcastIfLiveEnabled, false);
+  assert.match(blocked.blockers.join('\n'), /Transaction message hash does not match intent/);
+
+  const allowed = policyCheck({ decoded, expectedSigner: SIGNER, expectedMint: MINT, transactionMessageHash: 'intent-message-hash', allowWalletAssertionHashMismatch: true });
+  assert.equal(allowed.safeToBroadcastIfLiveEnabled, true);
+  assert.deepEqual(allowed.blockers, []);
+  assert.match(allowed.warnings.join('\n'), /wallet assertion wrapping/);
 });
 
 test('policy check binds signed transaction to expected message hash and required intent accounts', () => {
