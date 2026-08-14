@@ -7351,6 +7351,14 @@ html, body { max-width: 100%; overflow-x: clip; }
 .walletPreflightSummary { display: grid; gap: 7px; border: 1px solid rgba(255,209,102,0.30); border-radius: 14px; padding: 13px; background: rgba(255,209,102,0.07); color: var(--muted); font-size: 13px; }
 .walletPreflightSummary strong { color: var(--yellow); font-size: 16px; }
 .walletPreflightSummary em { color: var(--yellow); font-style: normal; line-height: 1.45; }
+.walletSendResult { display: grid; gap: 7px; border: 1px solid var(--line); border-radius: 14px; padding: 13px; background: rgba(255,255,255,0.055); color: var(--muted); font-size: 13px; }
+.walletSendResult strong { color: var(--text); font-size: 16px; }
+.walletSendResult.built { border-color: rgba(85,240,168,.34); background: rgba(85,240,168,.08); }
+.walletSendResult.built strong { color: var(--green); }
+.walletSendResult.error { border-color: rgba(255,92,122,.34); background: rgba(255,92,122,.08); }
+.walletSendResult.error strong { color: var(--red); }
+.walletSendResult.building { border-color: rgba(86,182,214,.34); background: rgba(86,182,214,.08); }
+.walletSendResult a { width: fit-content; border: 1px solid rgba(85,240,168,.32); border-radius: 10px; padding: 8px 10px; color: var(--green); text-decoration: none; font-weight: 900; background: rgba(85,240,168,.08); }
 .walletConfirmLine { display: flex !important; grid-template-columns: auto 1fr; flex-direction: row; align-items: center; color: var(--muted); font-size: 13px; }
 .walletConfirmLine input { width: auto; }
 .walletReceivePanel { display: grid; gap: 12px; }

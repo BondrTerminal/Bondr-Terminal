@@ -42,6 +42,13 @@ type ExecutionCapabilities = {
   fundingBroadcastEnabled?: boolean;
   walletVaultEnabled?: boolean;
 };
+type SendBuildResult = {
+  status: 'idle' | 'building' | 'built' | 'error';
+  message: string;
+  rpcProvider?: string;
+  requiredSigners?: string[];
+  transactionBase64?: string;
+};
 
 type Props = {
   wallets: BoardWallet[];
@@ -124,6 +131,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const [lastManagedWallet, setLastManagedWallet] = useState<CreatedManagedWallet | null>(null);
   const [activeWalletAddress, setActiveWalletAddress] = useState('');
   const [executionCapabilities, setExecutionCapabilities] = useState<ExecutionCapabilities | null>(null);
+  const [sendBuildResult, setSendBuildResult] = useState<SendBuildResult>({ status: 'idle', message: 'Load the capped funding test, then build the unsigned transaction.' });
   const [loading, setLoading] = useState(false);
   const visibleWallets = useMemo(() => wallets.filter((wallet) => matchesFilter(wallet, filter, selectedGroupId)), [wallets, filter, selectedGroupId]);
   const activeWallets = wallets.filter((wallet) => !wallet.archived);
@@ -149,6 +157,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     setPrivateKeyInput('');
     setImportPreview(null);
     setAddressInput('');
+    if (nextAction !== 'send') setSendBuildResult({ status: 'idle', message: 'Load the capped funding test, then build the unsigned transaction.' });
     if (nextAction !== 'export') setLastManagedWallet(null);
     if (nextAction === 'phantom') {
       setPurposeInput('Browser wallet connected through Phantom. Key stays in Phantom; Bond.Terminal cannot export it.');
@@ -321,11 +330,42 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   async function runSendPreflight() {
     if (!fromWallet) return;
     if (!fundingTestShape) {
-      setMessage({ type: 'warn', text: 'Only the approved 0.001 SOL funding test shape can be built from Wallet Center. Load the capped funding test before running preflight.' });
+      const text = 'Only the approved 0.001 SOL funding test shape can be built from Wallet Center. Load the capped funding test before running preflight.';
+      setSendBuildResult({ status: 'error', message: text });
+      setMessage({ type: 'warn', text });
       return;
     }
-    const json = await mutate('/api/wallet-ops-engine', { method: 'POST', body: JSON.stringify({ operation: 'fund', from: fromWallet.address, to: receiver, amountSol: Number(amount) }) }, 'Unsigned transfer built. Browser signing would be required next.');
-    if (!json) setMessage((current) => current ?? { type: 'warn', text: 'Live send remains disabled by gate.' });
+    setLoading(true);
+    setMessage(null);
+    setSendBuildResult({ status: 'building', message: 'Building unsigned funding-test transaction...' });
+    try {
+      const response = await fetch('/api/wallet-ops-engine', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: 'fund', from: fromWallet.address, to: receiver, amountSol: Number(amount) })
+      });
+      const json = await response.json().catch(() => null) as null | { error?: string; reason?: string; rpcProvider?: string; requiredSigners?: string[]; transactionBase64?: string };
+      if (!response.ok || !json?.transactionBase64) {
+        const error = json?.error ?? json?.reason ?? `Unsigned build failed with ${response.status}.`;
+        setSendBuildResult({ status: 'error', message: error });
+        setMessage({ type: 'error', text: error });
+        return;
+      }
+      setSendBuildResult({
+        status: 'built',
+        message: 'Unsigned transaction built. Next: open Live Beta, simulate, sign in browser wallet, then broadcast only when the funding gate is enabled.',
+        rpcProvider: json.rpcProvider,
+        requiredSigners: json.requiredSigners,
+        transactionBase64: json.transactionBase64
+      });
+      setMessage({ type: 'ok', text: 'Unsigned funding-test transaction built. Continue in Live Beta for simulate/sign/broadcast.' });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Unsigned build failed.';
+      setSendBuildResult({ status: 'error', message: text });
+      setMessage({ type: 'error', text });
+    } finally {
+      setLoading(false);
+    }
   }
 
   function selectWallet(wallet: BoardWallet) {
@@ -344,6 +384,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     if (source) setFromWalletId(source.id);
     setReceiver(FUNDING_TEST_DESTINATION);
     setAmount(FUNDING_TEST_AMOUNT_SOL);
+    setSendBuildResult({ status: 'idle', message: 'Approved 0.001 SOL funding test loaded. Build the unsigned transaction next.' });
     setMessage({ type: 'warn', text: 'Loaded the capped funding test: 0.001 SOL to the approved receiver. Build/simulate/sign/broadcast still require the Live Beta flow and gates.' });
   }
 
@@ -463,7 +504,15 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
                 <label className="wide"><span>Memo / note</span><input placeholder="Optional local note" /></label>
                 <div className="walletPreflightSummary wide"><strong>Preflight summary</strong><span>From: {fromWallet.role} · {fromWallet.shortAddress}</span><span>To: {receiver || 'Missing receiver address'}</span><span>Amount: {amount || '0'} SOL</span><span>Estimated fee: provider-calculated later</span><span>Remaining balance: {fromWallet.balanceStatus === 'live' ? `${remaining.toFixed(4)} SOL` : fromWallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : 'provider-limited'}</span><span>Signer: {selectedActiveWallet === fromWallet.address ? 'selected wallet matches source' : 'browser selected wallet must match source'}</span><span>Funding gate: {fundingGateEnabled ? 'enabled' : 'disabled'}</span><span>Funding test: {fundingTestShape ? 'approved shape' : 'not approved shape'}</span><em>This Wallet Center only builds the approved funding-test transfer. Arbitrary sends stay disabled until a broader send policy exists.</em></div>
                 <button className="walletModalPrimary wide" type="button" onClick={useFundingTest}>Load capped funding test</button>
-                <button className="walletModalPrimary wide" type="button" onClick={runSendPreflight} disabled={loading || !fundingTestShape}>{loading ? 'Checking…' : fundingTestShape ? 'Run gated unsigned-build check' : 'Load approved funding test first'}</button>
+                <button className="walletModalPrimary wide" type="button" onClick={runSendPreflight} disabled={loading || !fundingTestShape}>{loading ? 'Building unsigned transaction…' : fundingTestShape ? 'Build Funding Test Transaction' : 'Load approved funding test first'}</button>
+                <div className={`walletSendResult wide ${sendBuildResult.status}`} aria-live="polite">
+                  <strong>{sendBuildResult.status === 'built' ? 'Transaction built' : sendBuildResult.status === 'building' ? 'Building' : sendBuildResult.status === 'error' ? 'Build blocked' : 'Ready'}</strong>
+                  <span>{sendBuildResult.message}</span>
+                  {sendBuildResult.rpcProvider && <span>RPC provider: {sendBuildResult.rpcProvider}</span>}
+                  {sendBuildResult.requiredSigners?.length ? <span>Required signer: {sendBuildResult.requiredSigners.join(', ')}</span> : null}
+                  {sendBuildResult.transactionBase64 && <span>Unsigned payload: {sendBuildResult.transactionBase64.length.toLocaleString()} base64 chars</span>}
+                  {sendBuildResult.status === 'built' && <a href={selectedProjectId ? `/live-beta-test?project=${selectedProjectId}` : '/live-beta-test'}>Open Live Beta</a>}
+                </div>
               </div>
             )}
             {action === 'receive' && receiveWallet && (
