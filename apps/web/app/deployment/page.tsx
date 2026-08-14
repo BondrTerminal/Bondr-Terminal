@@ -5,7 +5,6 @@ import { getSolanaRpcHealth } from '../../lib/rpc-health';
 import { getLiveActivationStatus } from '../../lib/live-activation';
 import { LaunchConfigEditor } from './components/LaunchConfigEditor';
 import { CreateProjectLauncher } from '../components/CreateProjectLauncher';
-import { WalletRailStatus } from '../components/WalletRailStatus';
 import { PreLiveDryRunAction } from '../sniper/components/PreLiveDryRunAction';
 import { DeploymentLaunchBuilderPanel } from './components/DeploymentLaunchBuilderPanel';
 import { DeploymentReadinessReportAction } from './components/DeploymentReadinessReportAction';
@@ -32,6 +31,11 @@ const routeMap = [
 ];
 
 const launchPathLabels = ['pump.fun', 'raydium', 'meteora', 'bonk'];
+const routeAdapters = [
+  ['Pump.fun', 'PumpPortal create/trade-local', 'ready', 'IPFS metadata, dev buy, local signing, dry-run first.'],
+  ['Bonk', 'LaunchLab candidate', 'research', 'PumpPortal bonk pool or direct LaunchLab adapter; prove in simulation first.'],
+  ['Raydium', 'LaunchLab / Trade API', 'mapped', 'Bonding curve launch, graduation tracking, V0 tx build, explicit CU fees.']
+];
 
 function formatAddress(address?: string | null) {
   return address ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—';
@@ -45,6 +49,21 @@ function statusClass(status: string) {
 
 function GatePill({ label, enabled }: { label: string; enabled: boolean }) {
   return <span className={enabled ? 'deploymentGatePill on' : 'deploymentGatePill'}>{label}: {enabled ? 'on' : 'off'}</span>;
+}
+
+function RouteAdapterStrip({ activePath }: { activePath?: string }) {
+  return (
+    <section className="routeAdapterStrip" aria-label="Launch route adapters">
+      {routeAdapters.map(([venue, adapter, status, detail]) => (
+        <div className={activePath?.toLowerCase().includes(venue.toLowerCase().split('.')[0] ?? venue.toLowerCase()) ? 'routeAdapterCard active' : 'routeAdapterCard'} key={venue}>
+          <span>{venue}</span>
+          <strong>{adapter}</strong>
+          <em className={statusClass(status)}>{status}</em>
+          <small>{detail}</small>
+        </div>
+      ))}
+    </section>
+  );
 }
 
 function AllocationGraph({ project }: { project: Project }) {
@@ -112,7 +131,6 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
           <div className="deploymentCommandActions">
             {activeProject && <button className="button primary" type="submit" form="launch-config-form">Save Config</button>}
             {activeProject && <PreLiveDryRunAction projectId={activeProject.id} />}
-            {activeProject && <DeploymentReadinessReportAction projectId={activeProject.id} />}
             {activeProject && <a className="button secondary" href={`/portfolio?view=wallets&project=${activeProject.id}`}>Wallet Center</a>}
           </div>
         </section>
@@ -122,17 +140,15 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
           <p>Configure token info, dev wallet, bundle wallets, sniper wallets, and Task Manager rules here. No token launch, wallet funding, signature request, or deployment broadcast happens while the deployment gate is closed.</p>
         </section>
 
-        <WalletRailStatus surface="deployment" selectedWalletAddress={activeWallets[0]?.address ?? null} activeMint={activeProject?.tokenMint ?? null} />
-
         <section className="deploymentCockpitGrid" aria-label="Deployment cockpit">
           <div className="deploymentCockpitMain">
             <section className="launchPathStrip" aria-label="Launch paths">
               {launchPathLabels.map((path) => <span className={activeProject?.launchPath === path ? 'active' : ''} key={path}>{path}</span>)}
             </section>
+            <RouteAdapterStrip activePath={activeProject?.launchPath} />
             {activeProject
               ? <LaunchConfigEditor project={activeProject} wallets={activeWallets} />
               : <CreateProjectLauncher mode="compact" title="Create Project" label="Create Project" copy="Create a real project before configuring deployment. No token is deployed and no wallet is funded." className="bottomQuickDeployPanel" />}
-            {activeProject && <DeploymentLaunchBuilderPanel projectId={activeProject.id} defaultPayer={activeWallets[0]?.address ?? null} deploymentEnabled={activation.deploymentEnabled} />}
           </div>
 
           <aside className="deploymentOperatorRail" aria-label="Deployment operator rail">
@@ -164,7 +180,43 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
             </section>
 
             <section className="deploymentRailPanel">
-              <div className="railPanelHeader"><span>Backend truth</span><strong>compact map</strong></div>
+              <div className="railPanelHeader"><span>Dry-run summary</span><strong>{dryRun?.status ?? 'not run'}</strong></div>
+              <div className="deploymentRailStats">
+                <div><span>Participating</span><strong>{dryRun?.participatingWalletCount ?? participatingPlan.length}</strong></div>
+                <div><span>Planned SOL</span><strong>{(dryRun?.totalPlannedBuySol ?? plannedBuySol).toFixed(3)}</strong></div>
+                <div><span>Max SOL</span><strong>{(dryRun?.totalMaxBuySol ?? maxBuySol).toFixed(3)}</strong></div>
+                <div><span>Observed</span><strong>{dryRun?.observedAt ? 'yes' : 'no'}</strong></div>
+              </div>
+            </section>
+
+            <section className="deploymentRailPanel">
+              <div className="railPanelHeader"><span>Wallet plan</span><strong>{activeWallets.length}</strong></div>
+              <div className="deploymentWalletRailList compact">
+                {activeWallets.length ? activeWallets.map((wallet) => {
+                  const plan = activeConfig?.walletPlan.find((entry) => entry.walletId === wallet.id);
+                  return (
+                    <div className="deploymentWalletRailRow" key={wallet.id}>
+                      <strong>{plan?.role ?? wallet.role}</strong>
+                      <code title={wallet.address}>{formatAddress(wallet.address)}</code>
+                      <span>{plan?.participate ? 'active' : 'observe'}</span>
+                      <span>{(plan?.plannedBuySol ?? 0).toFixed(3)} / {(plan?.maxBuySol ?? 0).toFixed(3)} SOL</span>
+                    </div>
+                  );
+                }) : <div className="deploymentRailEmpty">Add wallets in Wallet Center before launch prep.</div>}
+              </div>
+            </section>
+          </aside>
+        </section>
+
+        <details className="deploymentAdvancedDetails">
+          <summary>Advanced / debug context</summary>
+          <section className="deploymentAdvancedGrid">
+            <article className="documentCard">
+              <div className="sectionIntro compactIntro">
+                <span>Backend truth</span>
+                <h2>Capability map</h2>
+                <p>Operator diagnostics only. Keep this collapsed during normal launch setup.</p>
+              </div>
               <div className="deploymentCapabilityList compact">
                 {capabilityMap.map(([feature, status, detail]) => (
                   <div className="deploymentCapabilityRow" key={feature}>
@@ -186,46 +238,18 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
                   ))}
                 </div>
               </details>
-            </section>
-
-            <section className="deploymentRailPanel">
-              <div className="railPanelHeader"><span>Dry-run / activity</span><strong>{dryRun?.status ?? 'not run'}</strong></div>
-              <div className="deploymentRailStats">
-                <div><span>Participating</span><strong>{dryRun?.participatingWalletCount ?? participatingPlan.length}</strong></div>
-                <div><span>Planned SOL</span><strong>{(dryRun?.totalPlannedBuySol ?? plannedBuySol).toFixed(3)}</strong></div>
-                <div><span>Max SOL</span><strong>{(dryRun?.totalMaxBuySol ?? maxBuySol).toFixed(3)}</strong></div>
-                <div><span>Observed</span><strong>{dryRun?.observedAt ? 'yes' : 'no'}</strong></div>
-              </div>
-              {activeProject && (
-                <div className="deploymentRailActions">
-                  <PreLiveDryRunAction projectId={activeProject.id} />
-                  <DeploymentReadinessReportAction projectId={activeProject.id} />
+            </article>
+            {activeProject && (
+              <article className="documentCard">
+                <div className="sectionIntro compactIntro">
+                  <span>QA report</span>
+                  <h2>Copy deployment report</h2>
+                  <p>Collects gates, dry-run, bundle, wallet rail, and deployment engine state.</p>
                 </div>
-              )}
-            </section>
-
-            <section className="deploymentRailPanel">
-              <div className="railPanelHeader"><span>Wallet jobs</span><strong>{activeWallets.length}</strong></div>
-              <div className="deploymentWalletRailList compact">
-                {activeWallets.length ? activeWallets.map((wallet) => {
-                  const plan = activeConfig?.walletPlan.find((entry) => entry.walletId === wallet.id);
-                  return (
-                    <div className="deploymentWalletRailRow" key={wallet.id}>
-                      <strong>{plan?.role ?? wallet.role}</strong>
-                      <code title={wallet.address}>{formatAddress(wallet.address)}</code>
-                      <span>{plan?.participate ? 'active' : 'observe'}</span>
-                      <span>{(plan?.plannedBuySol ?? 0).toFixed(3)} / {(plan?.maxBuySol ?? 0).toFixed(3)} SOL</span>
-                    </div>
-                  );
-                }) : <div className="deploymentRailEmpty">Add wallets in Wallet Center before launch prep.</div>}
-              </div>
-            </section>
-          </aside>
-        </section>
-
-        <details className="deploymentAdvancedDetails">
-          <summary>Advanced launch context</summary>
-          <section className="deploymentAdvancedGrid">
+                <DeploymentReadinessReportAction projectId={activeProject.id} />
+              </article>
+            )}
+            {activeProject && <DeploymentLaunchBuilderPanel projectId={activeProject.id} defaultPayer={activeWallets[0]?.address ?? null} deploymentEnabled={activation.deploymentEnabled} />}
             {activeProject && (
               <article className="documentCard">
                 <div className="sectionIntro compactIntro">

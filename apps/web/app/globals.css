@@ -14100,6 +14100,49 @@ body > .createProjectModal .professionalCreateProjectShell {
   background: rgba(255, 127, 17, 0.11);
   color: #ffb166;
 }
+.routeAdapterStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.routeAdapterCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.routeAdapterCard.active {
+  border-color: rgba(255, 127, 17, 0.46);
+  background: rgba(255, 127, 17, 0.1);
+}
+.routeAdapterCard span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.routeAdapterCard strong {
+  min-width: 0;
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.routeAdapterCard em {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.routeAdapterCard small {
+  grid-column: 1 / -1;
+  color: rgba(249, 235, 224, 0.64);
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
 .deploymentCockpitMain .cleanLaunchConfigEditor {
   gap: 9px;
 }
@@ -14694,6 +14737,9 @@ body > .createProjectModal .professionalCreateProjectShell {
   gap: 10px;
   margin-top: 10px;
 }
+.deploymentAdvancedGrid > .deploymentLaunchBuilderPanel {
+  margin: 0;
+}
 .deploymentEventList {
   display: grid;
   gap: 7px;
@@ -14738,6 +14784,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchWizardTopbar,
   .launchWizardTabs,
   .launchTokenPanel,
+  .routeAdapterStrip,
   .launchWalletSetupHeader,
   .launchBuyModeGrid,
   .launchOverviewGrid {
@@ -14764,6 +14811,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchWizardTopbar,
   .launchWizardTabs,
   .launchTokenPanel,
+  .routeAdapterStrip,
   .launchSegmentGrid.five,
   .launchSegmentGrid.two,
   .launchWalletSetupHeader,

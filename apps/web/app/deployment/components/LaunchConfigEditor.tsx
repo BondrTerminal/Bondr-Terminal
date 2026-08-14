@@ -10,10 +10,10 @@ type LaunchTab = 'token' | 'wallets' | 'buy' | 'task' | 'review';
 
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
-  { id: 'wallets', label: 'Wallet Setup', detail: 'Select launch wallets' },
-  { id: 'buy', label: 'Buy Mode', detail: 'Snipe, bundle, dev buy' },
-  { id: 'task', label: 'Task Builder', detail: 'Automated wallet tasks' },
-  { id: 'review', label: 'Overview & Deploy', detail: 'Preflight and gates' }
+  { id: 'wallets', label: 'Dev Wallet', detail: 'Deployer and wallet roles' },
+  { id: 'buy', label: 'Route & Risk', detail: 'Venue, buy mode, caps' },
+  { id: 'task', label: 'Bundle / Snipe / Task', detail: 'Automated wallet tasks' },
+  { id: 'review', label: 'Review', detail: 'Preflight and gates' }
 ];
 const LAUNCH_PLATFORMS = [
   { value: 'pump', label: 'Pump', detail: 'Pump.fun launch path' },
