@@ -209,7 +209,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
                         <span>{Math.min(wallet.balanceSol, bundleSplit[index] ?? 0.025).toFixed(3)} SOL</span>
                       </div>
                     ))}
-                    {wallets.length === 0 && <div className="bundleWalletRow"><strong>No wallets attached</strong><span>Open Wallet Ops</span></div>}
+                    {wallets.length === 0 && <div className="bundleWalletRow"><strong>No wallets attached</strong><span>Open Portfolio wallets</span></div>}
                   </div>
                   <div className="bundleActionRow">
                     <a href="/api/bundle-sequencer" target="_blank" rel="noreferrer">Open bundle sequencer</a>
@@ -253,7 +253,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
           <div className="sectionIntro compactIntro">
             <span>Preflight</span>
             <h2>Cross-module launch blockers</h2>
-            <p>Deployment should not stand alone. These checks route blocked work to Projects, Wallet Ops, Sniper, Dashboard, or Liquidity.</p>
+            <p>Deployment should not stand alone. These checks route blocked work to Projects, Portfolio wallets, Terminal, Dashboard, or Liquidity.</p>
           </div>
           <div className="projectTable" role="table" aria-label="Cross-module launch blockers">
             <div className="projectRow deploymentPreflightRow projectHead"><span>Project</span><span>Check</span><span>Status</span><span>Owner</span><span>Open</span></div>
