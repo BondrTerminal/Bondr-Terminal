@@ -6,13 +6,14 @@ import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../li
 
 type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-type LaunchTab = 'token' | 'wallets' | 'buy' | 'task' | 'review';
+type LaunchTab = 'token' | 'route' | 'wallets' | 'task' | 'risk' | 'review';
 
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
+  { id: 'route', label: 'Route', detail: 'Venue and buy mode' },
   { id: 'wallets', label: 'Dev Wallet', detail: 'Deployer and wallet roles' },
-  { id: 'buy', label: 'Route & Risk', detail: 'Venue, buy mode, caps' },
   { id: 'task', label: 'Bundle / Snipe / Task', detail: 'Automated wallet tasks' },
+  { id: 'risk', label: 'Risk', detail: 'Caps and exits' },
   { id: 'review', label: 'Review', detail: 'Preflight and gates' }
 ];
 const LAUNCH_PLATFORMS = [
@@ -512,11 +513,11 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <section aria-labelledby="launch-tab-button-buy" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'buy'} id="launch-tab-buy" role="tabpanel">
+      <section aria-labelledby="launch-tab-button-route" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'route'} id="launch-tab-route" role="tabpanel">
         <div className="sectionIntro compactIntro">
-          <span>Buy Mode</span>
-          <h2>Select the launch execution route</h2>
-          <p>Choose how deployer, bundle, sniper, and task wallets participate before setting the execution limits.</p>
+          <span>Route</span>
+          <h2>Select launch route and buy mode</h2>
+          <p>Choose the venue adapter and execution mode before assigning wallets and risk caps.</p>
         </div>
         <div className="launchBuyModeGrid">
           {BUY_MODES.map((mode) => <label className="launchBuyModeCard" key={mode.value}>
@@ -527,6 +528,19 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <small>{wallets.length} wallets available · {selectedTaskSol.toFixed(4)} SOL task max</small>
           </label>)}
         </div>
+        <div className="launchSegmentStack routeOnlySegmentStack">
+          <div>
+            <span>Route Adapter</span>
+            <div className="launchSegmentGrid three">
+              <div className="launchAdapterReadinessCard"><strong>Pump.fun / PumpPortal</strong><small>IPFS metadata, trade-local create/dev buy, local signing, explicit broadcast.</small><em>mapped</em></div>
+              <div className="launchAdapterReadinessCard"><strong>Bonk / LaunchLab</strong><small>PumpPortal bonk pool or direct LaunchLab candidate. Simulation proof required.</small><em>research</em></div>
+              <div className="launchAdapterReadinessCard"><strong>Raydium LaunchLab</strong><small>Bonding-curve launch, graduation tracking, V0 transactions, compute-fee controls.</small><em>mapped</em></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="launch-tab-button-risk" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'risk'} id="launch-tab-risk" role="tabpanel">
         <div className="sectionIntro compactIntro launchSubIntro">
           <span>Execution limits</span>
           <h2>Caps, take-profit, stop-loss, and cooldowns</h2>

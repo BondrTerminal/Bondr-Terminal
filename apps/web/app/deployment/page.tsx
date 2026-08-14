@@ -3,6 +3,7 @@ import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { buildMeridianHubContext } from '../../lib/meridian-context';
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
 import { getLiveActivationStatus } from '../../lib/live-activation';
+import { buildDeploymentLaunchReadiness } from '../../lib/deployment-route-adapters';
 import { LaunchConfigEditor } from './components/LaunchConfigEditor';
 import { CreateProjectLauncher } from '../components/CreateProjectLauncher';
 import { PreLiveDryRunAction } from '../sniper/components/PreLiveDryRunAction';
@@ -24,6 +25,7 @@ const routeMap = [
   ['/deployment', 'Deployment cockpit', 'active'],
   ['/api/projects/[id]/launch-config', 'Launch config save/read', 'real'],
   ['/api/pre-live-dry-run', 'Read-only launch dry-run', 'real'],
+  ['/api/deployment-readiness', 'Dev-wallet launch readiness + rail checks', 'real'],
   ['/api/deployment-engine', 'Launch snapshot + gated SPL builder', 'real-gated'],
   ['/api/bundle-sequencer', 'Bundle validation/build coordination', 'preview'],
   ['/portfolio?view=wallets', 'Wallet Center and custody rails', 'real'],
@@ -100,6 +102,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const projects = selectedProject ? [selectedProject] : hubContext.projects.map((context) => context.project);
   const activeProject = selectedProject ?? projects[0];
   const activeWallets = selectedContext?.wallets ?? (activeProject ? walletsForGroup(activeProject.walletGroupId, store).filter((wallet) => !wallet.archived) : []);
+  const launchReadiness = activeProject ? buildDeploymentLaunchReadiness(activeProject, activeWallets, activation) : null;
   const activeReadiness = activeProject ? readinessScore(activeProject, store) : null;
   const activePreflight = activeProject ? launchPreflight(activeProject, store) : [];
   const activeConfig = activeProject?.launchConfig;
@@ -187,6 +190,20 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
                 <div><span>Max SOL</span><strong>{(dryRun?.totalMaxBuySol ?? maxBuySol).toFixed(3)}</strong></div>
                 <div><span>Observed</span><strong>{dryRun?.observedAt ? 'yes' : 'no'}</strong></div>
               </div>
+            </section>
+
+            <section className="deploymentRailPanel">
+              <div className="railPanelHeader"><span>Dev launch readiness</span><strong>{launchReadiness?.broadcastReady ? 'armed' : 'blocked'}</strong></div>
+              {launchReadiness ? (
+                <div className="deploymentApprovalMini">
+                  <div><span>Mode</span><strong>{launchReadiness.mode}</strong></div>
+                  <div><span>Adapter</span><strong>{launchReadiness.adapterRecommendation}</strong></div>
+                  <div><span>Dev wallet</span><strong>{launchReadiness.devWallet?.shortAddress ?? 'missing'}</strong></div>
+                  <div><span>Max dev buy</span><strong>{launchReadiness.approvalSummary.maxDevBuySol.toFixed(4)} SOL</strong></div>
+                  <div><span>Rails</span><strong>{launchReadiness.railCounts.bundle} bundle · {launchReadiness.railCounts.sniper} sniper · {launchReadiness.railCounts.task} task</strong></div>
+                  <div className="wide"><span>Blockers</span><strong>{launchReadiness.blockers.length ? launchReadiness.blockers.join(', ') : 'approval-required'}</strong></div>
+                </div>
+              ) : <div className="deploymentRailEmpty">Create or select a project to build a launch approval summary.</div>}
             </section>
 
             <section className="deploymentRailPanel">

@@ -13885,6 +13885,35 @@ body > .createProjectModal .professionalCreateProjectShell {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
 }
+.deploymentApprovalMini {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.deploymentApprovalMini > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.deploymentApprovalMini > div.wide {
+  grid-column: 1 / -1;
+}
+.deploymentApprovalMini span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentApprovalMini strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f9ebe0;
+  font-size: 0.78rem;
+}
 .deploymentCommandGates,
 .deploymentGateMatrix,
 .deploymentCommandActions,
@@ -14343,6 +14372,41 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchSegmentGrid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.launchSegmentGrid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.routeOnlySegmentStack {
+  margin-top: 14px;
+}
+.launchAdapterReadinessCard {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.launchAdapterReadinessCard strong {
+  color: #f9ebe0;
+  font-size: 0.92rem;
+}
+.launchAdapterReadinessCard small {
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.35;
+}
+.launchAdapterReadinessCard em {
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(35, 206, 107, 0.26);
+  border-radius: 999px;
+  color: #7ee7a6;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 .launchSegmentOption,
 .launchBuyModeCard {
