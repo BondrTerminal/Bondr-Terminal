@@ -3,7 +3,7 @@ import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
-import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
+import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
@@ -154,6 +154,41 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('pumpportal build-create stays provider-disabled without signing or broadcast', async () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
+  assert.equal(result.contract, 'bondr-pumpportal-build-create-v1');
+  assert.equal(result.status, 'provider-build-disabled');
+  assert.equal(result.execution, 'provider-build-disabled-no-call');
+  assert.deepEqual(result.blockers, ['pumpportal-build-disabled']);
+  assert.equal(result.safety.noSigning, true);
+  assert.equal(result.safety.noBroadcast, true);
+  assert.equal(result.requestBody.action, 'create');
+  assert.equal(result.requestBody.tokenMetadata.uri, 'ipfs://bafybeigdyrztkexample/metadata.json');
+});
+
+test('pumpportal build-create blocks bad mint before provider call', async () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'bad-mint' });
+  assert.equal(result.status, 'blocked');
+  assert.ok(result.blockers.includes('client-mint-public-key-invalid'));
+  assert.equal(result.execution, 'blocked-no-provider-call');
 });
 
 test('ipfs metadata readiness validates token metadata without pinning', () => {

@@ -45,6 +45,20 @@ type PumpPortalPreviewState = {
   error?: string;
 };
 
+type PumpPortalBuildState = {
+  status?: string;
+  result?: {
+    status: string;
+    execution: string;
+    blockers: string[];
+    warnings: string[];
+    safety: { providerCallEnabled: boolean; confirmBuild: boolean };
+    requestBody: { publicKey: string | null; mint: string | null; amount: number; slippage: number; priorityFee: number; pool: string };
+    build?: { transactionBytes: number; transactionHash: string; requiredSigners: string[]; mint: string; feePayer: string | null };
+  };
+  error?: string;
+};
+
 type IpfsMetadataState = {
   status?: string;
   metadataUri?: string;
@@ -75,6 +89,8 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [result, setResult] = useState<BuildState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pumpPortalPreview, setPumpPortalPreview] = useState<PumpPortalPreviewState | null>(null);
+  const [pumpPortalBuild, setPumpPortalBuild] = useState<PumpPortalBuildState | null>(null);
+  const [pumpPortalBuildLoading, setPumpPortalBuildLoading] = useState(false);
   const [ipfsLoading, setIpfsLoading] = useState(false);
   const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
 
@@ -119,6 +135,24 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       setPumpPortalPreview({ status: 'error', error: error instanceof Error ? error.message : 'PumpPortal preview request failed.' });
     } finally {
       setPreviewLoading(false);
+    }
+  }
+
+  async function buildPumpPortalCreate(confirmBuild: boolean) {
+    setPumpPortalBuildLoading(true);
+    setPumpPortalBuild(null);
+    try {
+      const response = await fetch('/api/deployment/pumpportal/build-create', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null, confirmBuild })
+      });
+      const payload = await response.json().catch(() => ({})) as PumpPortalBuildState;
+      setPumpPortalBuild(payload);
+    } catch (error) {
+      setPumpPortalBuild({ status: 'error', error: error instanceof Error ? error.message : 'PumpPortal build-create request failed.' });
+    } finally {
+      setPumpPortalBuildLoading(false);
     }
   }
 
@@ -204,11 +238,16 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         <div>
           <span>PumpPortal create preview</span>
           <strong>IPFS metadata + trade-local create contract</strong>
-          <small>No provider call, no signature request, no broadcast. This only shows whether the create payload is structurally ready.</small>
+          <small>Preview stays local. Build-create calls PumpPortal only when the provider build flag is enabled and still returns unsigned bytes only.</small>
         </div>
-        <button className="button secondary" type="button" onClick={previewPumpPortalCreate} disabled={previewLoading}>
-          {previewLoading ? 'Checking...' : 'Preview PumpPortal create'}
-        </button>
+        <span className="deploymentBuilderActionRow">
+          <button className="button secondary" type="button" onClick={previewPumpPortalCreate} disabled={previewLoading || pumpPortalBuildLoading}>
+            {previewLoading ? 'Checking...' : 'Preview Create'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => void buildPumpPortalCreate(false)} disabled={previewLoading || pumpPortalBuildLoading}>
+            {pumpPortalBuildLoading ? 'Checking...' : 'Build Readiness'}
+          </button>
+        </span>
       </div>
       {pumpPortalPreview && (
         <div className="pumpPortalPreviewResult">
@@ -218,6 +257,15 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Amount / fee</span><strong>{pumpPortalPreview.preview ? `${pumpPortalPreview.preview.payloadPreview.amount.toFixed(4)} SOL` : 'unknown'}</strong><small>priority {pumpPortalPreview.preview?.payloadPreview.priorityFee ?? 0} SOL · slippage {pumpPortalPreview.preview?.payloadPreview.slippage ?? 0}%</small></div>
           <div className="wide"><span>Blockers</span><strong>{pumpPortalPreview.preview?.blockers.length ? pumpPortalPreview.preview.blockers.join(', ') : pumpPortalPreview.error ?? 'preview-ready; live gates still require approval'}</strong></div>
           {Boolean(pumpPortalPreview.preview?.warnings.length) && <div className="wide"><span>Warnings</span><strong>{pumpPortalPreview.preview?.warnings.join(', ')}</strong></div>}
+        </div>
+      )}
+      {pumpPortalBuild && (
+        <div className="pumpPortalPreviewResult">
+          <div><span>Build status</span><strong>{pumpPortalBuild.result?.status ?? pumpPortalBuild.status ?? 'unknown'}</strong><small>{pumpPortalBuild.result?.execution ?? pumpPortalBuild.error ?? 'no provider call'}</small></div>
+          <div><span>Provider call</span><strong>{pumpPortalBuild.result?.safety.providerCallEnabled ? 'enabled' : 'disabled'}</strong><small>confirm {pumpPortalBuild.result?.safety.confirmBuild ? 'yes' : 'no'}</small></div>
+          <div><span>Mint</span><strong>{short(pumpPortalBuild.result?.requestBody.mint)}</strong><small>fee payer {short(pumpPortalBuild.result?.build?.feePayer)}</small></div>
+          <div><span>Unsigned bytes</span><strong>{pumpPortalBuild.result?.build ? `${pumpPortalBuild.result.build.transactionBytes} bytes` : 'not built'}</strong><small>{short(pumpPortalBuild.result?.build?.transactionHash)}</small></div>
+          <div className="wide"><span>Blockers</span><strong>{pumpPortalBuild.result?.blockers.length ? pumpPortalBuild.result.blockers.join(', ') : pumpPortalBuild.error ?? 'build-ready'}</strong></div>
         </div>
       )}
     </section>

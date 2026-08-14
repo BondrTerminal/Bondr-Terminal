@@ -1,5 +1,7 @@
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { createHash } from 'node:crypto';
+import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 
 export type PumpPortalCreatePreview = {
   contract: 'bondr-pumpportal-create-preview-v1';
@@ -73,6 +75,41 @@ export type PumpPortalCreatePreview = {
   };
 };
 
+export type PumpPortalBuildCreateInput = {
+  mintPublicKey?: string | null;
+  confirmBuild?: boolean;
+};
+
+export type PumpPortalBuildCreateResult = {
+  contract: 'bondr-pumpportal-build-create-v1';
+  status: 'blocked' | 'provider-build-disabled' | 'built';
+  observedAt: string;
+  provider: PumpPortalCreatePreview['provider'];
+  preview: PumpPortalCreatePreview;
+  requestBody: PumpPortalCreatePreview['payloadPreview'];
+  blockers: string[];
+  warnings: string[];
+  requiredEnv: ['PUMPPORTAL_BUILD_ENABLED'];
+  optionalEnv: ['PUMPPORTAL_TRADE_LOCAL_URL'];
+  safety: {
+    noSigning: true;
+    noBroadcast: true;
+    noPrivateKeys: true;
+    providerCallEnabled: boolean;
+    confirmBuild: boolean;
+    deploymentGateIgnoredForBuildOnly: true;
+  };
+  build?: {
+    transactionBase64: string;
+    transactionBytes: number;
+    transactionHash: string;
+    requiredSigners: string[];
+    mint: string;
+    feePayer: string | null;
+  };
+  execution: 'blocked-no-provider-call' | 'provider-build-disabled-no-call' | 'unsigned-create-transaction-built-no-signing-no-broadcast';
+};
+
 function isPresent(value?: string | null) {
   return Boolean(value?.trim());
 }
@@ -96,6 +133,43 @@ function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['execu
 
 function numberValue(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function providerBuildEnabled() {
+  return process.env.PUMPPORTAL_BUILD_ENABLED === 'true';
+}
+
+function tradeLocalUrl() {
+  return process.env.PUMPPORTAL_TRADE_LOCAL_URL?.trim() || 'https://pumpportal.fun/api/trade-local';
+}
+
+function validPublicKey(value?: string | null) {
+  if (!value) return false;
+  try {
+    new PublicKey(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildStructuralBlockers(preview: PumpPortalCreatePreview) {
+  return preview.blockers.filter((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker));
+}
+
+function normalizeSerializedTransaction(payload: ArrayBuffer) {
+  const bytes = Buffer.from(payload);
+  const transaction = VersionedTransaction.deserialize(bytes);
+  const transactionBase64 = bytes.toString('base64');
+  return {
+    transactionBase64,
+    transactionBytes: bytes.length,
+    transactionHash: createHash('sha256').update(bytes).digest('hex'),
+    requiredSigners: transaction.message.staticAccountKeys
+      .slice(0, transaction.message.header.numRequiredSignatures)
+      .map((key) => key.toBase58()),
+    feePayer: transaction.message.staticAccountKeys[0]?.toBase58() ?? null
+  };
 }
 
 export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: { mintPublicKey?: string | null } = {}): PumpPortalCreatePreview {
@@ -231,5 +305,74 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
       explicitApprovalRequired: true,
       noProviderCall: true
     }
+  };
+}
+
+export async function buildPumpPortalCreateTransaction(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: PumpPortalBuildCreateInput = {}): Promise<PumpPortalBuildCreateResult> {
+  const observedAt = new Date().toISOString();
+  const preview = buildPumpPortalCreatePreview(project, wallets, activation, { mintPublicKey: input.mintPublicKey });
+  const structuralBlockers = buildStructuralBlockers(preview);
+  const mint = preview.payloadPreview.mint;
+  const requestBody = preview.payloadPreview;
+  const blockers = [
+    ...structuralBlockers,
+    mint && validPublicKey(mint) ? null : 'client-mint-public-key-invalid',
+    requestBody.publicKey && validPublicKey(requestBody.publicKey) ? null : 'dev-wallet-public-key-invalid'
+  ].filter((item): item is string => Boolean(item));
+  const enabled = providerBuildEnabled();
+  const confirmBuild = input.confirmBuild === true;
+  const base = {
+    contract: 'bondr-pumpportal-build-create-v1' as const,
+    observedAt,
+    provider: preview.provider,
+    preview,
+    requestBody,
+    blockers,
+    warnings: preview.warnings,
+    requiredEnv: ['PUMPPORTAL_BUILD_ENABLED'] as ['PUMPPORTAL_BUILD_ENABLED'],
+    optionalEnv: ['PUMPPORTAL_TRADE_LOCAL_URL'] as ['PUMPPORTAL_TRADE_LOCAL_URL'],
+    safety: {
+      noSigning: true as const,
+      noBroadcast: true as const,
+      noPrivateKeys: true as const,
+      providerCallEnabled: enabled,
+      confirmBuild,
+      deploymentGateIgnoredForBuildOnly: true as const
+    }
+  };
+
+  if (blockers.length) {
+    return { ...base, status: 'blocked', execution: 'blocked-no-provider-call' };
+  }
+  if (!enabled || !confirmBuild) {
+    return { ...base, status: 'provider-build-disabled', blockers: enabled ? ['explicit-confirm-build-required'] : ['pumpportal-build-disabled'], execution: 'provider-build-disabled-no-call' };
+  }
+
+  const response = await fetch(tradeLocalUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(requestBody),
+    cache: 'no-store'
+  });
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    return { ...base, status: 'blocked', blockers: [`pumpportal-build-failed-${response.status}`], warnings: [...preview.warnings, text.slice(0, 240)], execution: 'blocked-no-provider-call' };
+  }
+  if (contentType.includes('application/json')) {
+    const json = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+    return { ...base, status: 'blocked', blockers: ['pumpportal-returned-json-not-transaction'], warnings: [...preview.warnings, json?.error ?? json?.message ?? 'PumpPortal returned JSON instead of serialized transaction bytes.'], execution: 'blocked-no-provider-call' };
+  }
+
+  const build = normalizeSerializedTransaction(await response.arrayBuffer());
+  return {
+    ...base,
+    status: 'built',
+    build: {
+      ...build,
+      requiredSigners: Array.from(new Set([...build.requiredSigners, requestBody.publicKey, mint].filter((item): item is string => Boolean(item)))),
+      mint: mint!
+    },
+    execution: 'unsigned-create-transaction-built-no-signing-no-broadcast'
   };
 }
