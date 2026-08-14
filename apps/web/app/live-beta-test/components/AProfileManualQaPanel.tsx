@@ -67,6 +67,16 @@ function ResultCard({ title, status, children }: { title: string; status?: strin
   return <section className="qaResultCard"><div className="qaResultHeader"><span>{title}</span><strong>{status ?? 'pending'}</strong></div>{children}</section>;
 }
 
+function DebugResultCard({ title, status, summary, children }: { title: string; status?: string; summary: string; children: ReactNode }) {
+  return <section className="qaResultCard qaDebugCard">
+    <div className="qaResultHeader"><span>{title}</span><strong>{status ?? 'pending'}</strong></div>
+    <details>
+      <summary>{summary}</summary>
+      {children}
+    </details>
+  </section>;
+}
+
 function PreviewCard({ preview }: { preview?: TransactionPreview | null }) {
   if (!preview) return <p className="qaMuted">No transaction preview yet.</p>;
   return <div className="qaPreviewGrid">
@@ -577,30 +587,42 @@ export function AProfileManualQaPanel() {
         <label><span>Slippage bps</span><input value={slippageBps} onChange={(event) => { setPreset('Custom'); setSlippageBps(event.target.value); resetDownstream('quote'); }} /></label>
         <label><span>Connected signer</span><input value={connectedWallet || 'No browser wallet connected'} readOnly /></label>
       </div>
-      <div className="qaActionRow">
-        <button className="button secondary" type="button" onClick={() => void refresh()}>Refresh capabilities</button>
-        <button className="button secondary" type="button" onClick={() => void refreshRail()}>Refresh wallet rail</button>
-        <button className="button secondary" type="button" onClick={() => void connectWallet()}>{connectedWallet ? 'Reconnect wallet' : 'Connect wallet'}</button>
-        <button className="button secondary" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={loading !== null || !connectedWallet || Boolean(connectedInventoryWallet)}>{loading === 'wallet' ? 'Adding…' : connectedInventoryWallet ? 'Connected signer already in Wallet Ops' : 'Add signer watch-only'}</button>
-        <button className="button secondary" type="button" onClick={useConnectedSignerAsSelectedWallet}>Use connected signer as selected wallet</button>
-        <button className="button" type="button" onClick={() => void runQuote()} disabled={loading !== null || quoteBlocked}>{loading === 'quote' ? 'Quoting…' : 'Quote preview only'}</button>
-        <button className="button" type="button" onClick={() => void runBuild()} disabled={loading !== null || buildBlocked}>{loading === 'build' ? 'Building…' : 'Build unsigned tx only'}</button>
-        <button className="button" type="button" onClick={() => void runSimulation()} disabled={loading !== null || !build?.swap?.swapTransaction}>{loading === 'simulation' ? 'Simulating…' : 'Simulate unsigned tx only'}</button>
-        <button className="button" type="button" onClick={() => void runSign()} disabled={loading !== null || !canSign}>{loading === 'sign' ? 'Signing…' : 'Local sign test'}</button>
-        <button className="button secondary" type="button" onClick={() => void buildFundingTest()} disabled={loading !== null || connectedWallet !== FUNDING_TEST_SOURCE}>{loading === 'funding-build' ? 'Building funding…' : 'Build 0.001 SOL funding tx'}</button>
-        <button className="button danger" type="button" onClick={() => void broadcastFundingTest()} disabled={loading !== null || !fundingBuildReady || !signer.signedTransaction || !simulationPassed || connectedWallet !== FUNDING_TEST_SOURCE || !caps?.fundingBroadcastEnabled}>{loading === 'funding-broadcast' ? 'Broadcasting…' : 'Broadcast 0.001 SOL funding'}</button>
-        <button className="button secondary" type="button" onClick={() => void copyQaReport()}>Copy QA Report</button>
-        <button className="button secondary" type="button" onClick={resetQaSession}>Reset QA Session</button>
+      <div className="qaActionStack" aria-label="A-profile execution actions">
+        <div className="qaActionGroup qaPrimaryActions">
+          <span>Execution path</span>
+          <button className="button" type="button" onClick={() => void runQuote()} disabled={loading !== null || quoteBlocked}>{loading === 'quote' ? 'Quoting…' : 'Quote'}</button>
+          <button className="button" type="button" onClick={() => void runBuild()} disabled={loading !== null || buildBlocked}>{loading === 'build' ? 'Building…' : 'Build unsigned'}</button>
+          <button className="button" type="button" onClick={() => void runSimulation()} disabled={loading !== null || !build?.swap?.swapTransaction}>{loading === 'simulation' ? 'Simulating…' : 'Simulate'}</button>
+          <button className="button" type="button" onClick={() => void runSign()} disabled={loading !== null || !canSign}>{loading === 'sign' ? 'Signing…' : 'Local sign'}</button>
+        </div>
+        <div className="qaActionGroup qaSecondaryActions">
+          <span>Wallet and data</span>
+          <button className="button secondary" type="button" onClick={() => void refresh()}>Refresh capabilities</button>
+          <button className="button secondary" type="button" onClick={() => void refreshRail()}>Refresh rail</button>
+          <button className="button secondary" type="button" onClick={() => void connectWallet()}>{connectedWallet ? 'Reconnect wallet' : 'Connect wallet'}</button>
+          <button className="button secondary" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={loading !== null || !connectedWallet || Boolean(connectedInventoryWallet)}>{loading === 'wallet' ? 'Adding…' : connectedInventoryWallet ? 'Signer saved' : 'Add watch-only'}</button>
+          <button className="button secondary" type="button" onClick={useConnectedSignerAsSelectedWallet}>Use connected</button>
+        </div>
+        <div className="qaActionGroup qaFundingActions">
+          <span>Capped funding lane</span>
+          <button className="button secondary" type="button" onClick={() => void buildFundingTest()} disabled={loading !== null || connectedWallet !== FUNDING_TEST_SOURCE}>{loading === 'funding-build' ? 'Building funding…' : 'Build funding tx'}</button>
+          <button className="button danger" type="button" onClick={() => void broadcastFundingTest()} disabled={loading !== null || !fundingBuildReady || !signer.signedTransaction || !simulationPassed || connectedWallet !== FUNDING_TEST_SOURCE || !caps?.fundingBroadcastEnabled}>{loading === 'funding-broadcast' ? 'Broadcasting…' : 'Broadcast funding'}</button>
+        </div>
+        <div className="qaActionGroup qaReportActions">
+          <span>Report</span>
+          <button className="button secondary" type="button" onClick={() => void copyQaReport()}>Copy QA Report</button>
+          <button className="button secondary" type="button" onClick={resetQaSession}>Reset QA Session</button>
+        </div>
       </div>
       <p className="qaMuted">{reportMessage}</p>
       <div className="qaResultGrid">
-        <ResultCard title="Capabilities / auth" status={caps?.readinessLevel}><pre>{jsonText({ liveTradingEnabled: caps?.liveTradingEnabled, signingEnabled: caps?.signingEnabled, broadcastEnabled: caps?.broadcastEnabled, fundingBroadcastEnabled: caps?.fundingBroadcastEnabled, deploymentEnabled: caps?.deploymentEnabled, readinessLevel: caps?.readinessLevel, auth: caps?.auth, limits: caps?.limits })}</pre></ResultCard>
-        <ResultCard title="Quote result" status={quote?.status}><PreviewCard preview={quote?.transactionPreview} /><pre>{jsonText(quote?.quote ?? quote?.error ?? 'No quote yet.')}</pre></ResultCard>
-        <ResultCard title="Unsigned transaction result" status={build?.status}><PreviewCard preview={build?.transactionPreview} /><pre>{jsonText(build?.swap ? { hasSwapTransaction: Boolean(build.swap.swapTransaction), lastValidBlockHeight: build.swap.lastValidBlockHeight, computeUnitLimit: build.swap.computeUnitLimit, prioritizationFeeLamports: build.swap.prioritizationFeeLamports } : build?.error ?? 'No build yet.')}</pre></ResultCard>
-        <ResultCard title="Simulation logs/result" status={simulation?.status}><PreviewCard preview={simulation?.transactionPreview} /><pre>{jsonText(simulation?.simulation ?? simulation?.error ?? 'No simulation yet.')}</pre></ResultCard>
+        <DebugResultCard title="Capabilities / auth" status={caps?.readinessLevel} summary={`Signing ${caps?.signingEnabled ? 'enabled' : 'disabled'} · broadcast ${caps?.broadcastEnabled ? 'enabled' : 'disabled'} · funding ${caps?.fundingBroadcastEnabled ? 'enabled' : 'disabled'}`}><pre>{jsonText({ liveTradingEnabled: caps?.liveTradingEnabled, signingEnabled: caps?.signingEnabled, broadcastEnabled: caps?.broadcastEnabled, fundingBroadcastEnabled: caps?.fundingBroadcastEnabled, deploymentEnabled: caps?.deploymentEnabled, readinessLevel: caps?.readinessLevel, auth: caps?.auth, limits: caps?.limits })}</pre></DebugResultCard>
+        <DebugResultCard title="Quote result" status={quote?.status} summary={quote?.status === 'ok' ? 'Quote preview complete' : quote?.error ?? 'No quote yet'}><PreviewCard preview={quote?.transactionPreview} /><pre>{jsonText(quote?.quote ?? quote?.error ?? 'No quote yet.')}</pre></DebugResultCard>
+        <DebugResultCard title="Unsigned transaction result" status={build?.status} summary={build?.swap?.swapTransaction ? 'Unsigned transaction built' : build?.error ?? 'No build yet'}><PreviewCard preview={build?.transactionPreview} /><pre>{jsonText(build?.swap ? { hasSwapTransaction: Boolean(build.swap.swapTransaction), lastValidBlockHeight: build.swap.lastValidBlockHeight, computeUnitLimit: build.swap.computeUnitLimit, prioritizationFeeLamports: build.swap.prioritizationFeeLamports } : build?.error ?? 'No build yet.')}</pre></DebugResultCard>
+        <DebugResultCard title="Simulation logs/result" status={simulation?.status} summary={simulationPassed ? 'Simulation passed' : simulationFailureText ?? 'No simulation yet'}><PreviewCard preview={simulation?.transactionPreview} /><pre>{jsonText(simulation?.simulation ?? simulation?.error ?? 'No simulation yet.')}</pre></DebugResultCard>
         <ResultCard title="Signer result" status={signer.status}><p>{signer.message}</p><small>{signer.signedTransaction ? `${signer.signedTransaction.length} base64 chars held client-side only; omitted from QA reports` : 'No signed transaction stored.'}</small></ResultCard>
-        <ResultCard title="Funding broadcast result" status={fundingResult ? 'ready' : 'not-run'}><p>Funding-only beta allows exactly 0.001 SOL from {short(FUNDING_TEST_SOURCE)} to {short(FUNDING_TEST_DESTINATION)} after simulation and browser-wallet signing.</p><pre>{jsonText(fundingResult ?? 'No funding test yet.')}</pre></ResultCard>
-        <ResultCard title="Wallet rail result" status={railSnapshot?.balanceStatus ?? 'not-loaded'}><pre>{jsonText({ connectedSigner: railSnapshot?.connectedSigner, selectedWallet: railSnapshot?.selectedWallet, inventoryMatch: railSnapshot?.inventoryMatch, selectedInventoryMatch: railSnapshot?.selectedInventoryMatch, solBalance: railSnapshot?.solBalance, selectedSolBalance: railSnapshot?.selectedSolBalance, tokenBalances: railSnapshot?.tokenBalances, selectedTokenBalances: railSnapshot?.selectedTokenBalances, warnings: railSnapshot?.warnings, blockers: railSnapshot?.blockers })}</pre></ResultCard>
+        <DebugResultCard title="Funding broadcast result" status={fundingResult ? 'ready' : 'not-run'} summary={fundingResult ? 'Funding result available' : 'No funding test yet'}><p>Funding-only beta allows exactly 0.001 SOL from {short(FUNDING_TEST_SOURCE)} to {short(FUNDING_TEST_DESTINATION)} after simulation and browser-wallet signing.</p><pre>{jsonText(fundingResult ?? 'No funding test yet.')}</pre></DebugResultCard>
+        <DebugResultCard title="Wallet rail result" status={railSnapshot?.balanceStatus ?? 'not-loaded'} summary={`Rail ${railSnapshot?.balanceStatus ?? 'not-loaded'} · signer ${short(railSnapshot?.connectedSigner ?? connectedWallet)}`}><pre>{jsonText({ connectedSigner: railSnapshot?.connectedSigner, selectedWallet: railSnapshot?.selectedWallet, inventoryMatch: railSnapshot?.inventoryMatch, selectedInventoryMatch: railSnapshot?.selectedInventoryMatch, solBalance: railSnapshot?.solBalance, selectedSolBalance: railSnapshot?.selectedSolBalance, tokenBalances: railSnapshot?.tokenBalances, selectedTokenBalances: railSnapshot?.selectedTokenBalances, warnings: railSnapshot?.warnings, blockers: railSnapshot?.blockers })}</pre></DebugResultCard>
         <ResultCard title="QA event log" status={`${events.length} events`}><div className="qaEventLog">{events.length ? events.map((event) => <div className={`qaEventRow ${event.status}`} key={event.id}><span>{event.at}</span><strong>{event.type}</strong><p>{event.message}</p></div>) : <p className="qaMuted">No QA events yet.</p>}</div></ResultCard>
       </div>
     </section>

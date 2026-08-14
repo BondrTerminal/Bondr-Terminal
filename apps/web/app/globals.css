@@ -13065,6 +13065,321 @@ body > .createProjectModal .professionalCreateProjectShell {
 .qaPreflightRow.blocked { border-color: rgba(255, 100, 100, .28) !important; }
 .qaPreflightRow.pending { border-color: rgba(249, 235, 224, .14) !important; }
 
+/* Broadcast QA / Terminal stability pass: keep operational panels readable before live swap testing. */
+.liveBetaTestShell,
+.qaHarnessPanel,
+.qaHarnessPanel *,
+.premiumExecutionDock,
+.premiumExecutionDock * {
+  min-width: 0;
+}
+.qaHarnessPanel {
+  gap: 12px;
+}
+.qaHarnessPanel code,
+.qaHarnessPanel pre,
+.qaHarnessPanel input,
+.premiumExecutionDock code,
+.premiumExecutionDock input,
+.premiumExecutionDock small,
+.premiumExecutionDock p,
+.terminalBlockReasonCard p,
+.transactionPreviewList li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.qaStatusGrid,
+.qaPreviewGrid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.qaResultGrid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: start;
+}
+.qaFormGrid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.qaChecklist {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.qaChecklistStep {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.qaChecklistStep strong,
+.qaChecklistStep span {
+  grid-column: 1;
+}
+.qaChecklistStep em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.qaActionStack {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) minmax(240px, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+.qaActionGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(249,235,224,.12);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(0,0,0,.18);
+}
+.qaActionGroup > span {
+  flex: 1 0 100%;
+  color: var(--muted, #9b8d84);
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+}
+.qaActionGroup .button {
+  flex: 1 1 128px;
+  min-height: 38px;
+  justify-content: center;
+  white-space: normal;
+  line-height: 1.15;
+}
+.qaPrimaryActions .button {
+  flex-basis: 118px;
+}
+.qaFundingActions {
+  border-color: rgba(255,177,93,.22);
+  background: rgba(255,177,93,.055);
+}
+.qaResultHeader {
+  align-items: flex-start;
+}
+.qaResultHeader span,
+.qaResultHeader strong,
+.qaDebugCard summary,
+.qaResultCard p,
+.qaResultCard small {
+  overflow-wrap: anywhere;
+}
+.qaDebugCard details {
+  display: grid;
+  gap: 8px;
+}
+.qaDebugCard summary {
+  cursor: pointer;
+  border: 1px solid rgba(249,235,224,.10);
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  line-height: 1.35;
+}
+.qaDebugCard details[open] summary {
+  margin-bottom: 8px;
+}
+.qaResultCard pre {
+  max-width: 100%;
+  max-height: 220px;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+.qaEventLog {
+  max-height: 220px;
+}
+
+.premiumExecutionDock .dockHeader,
+.premiumExecutionDock .tradePanelSectionHead,
+.premiumExecutionDock .transactionPreviewHeader,
+.premiumExecutionDock .ticketSignerRow,
+.premiumExecutionDock .axiomTicketFooter {
+  align-items: flex-start;
+  gap: 8px;
+}
+.premiumExecutionDock .dockHeader,
+.premiumExecutionDock .tradePanelSectionHead,
+.premiumExecutionDock .transactionPreviewHeader {
+  flex-wrap: wrap;
+}
+.premiumExecutionDock .dockHeader strong,
+.premiumExecutionDock .dockHeader small,
+.premiumExecutionDock .tradePanelSectionHead strong,
+.premiumExecutionDock .tradePanelSectionHead small,
+.premiumExecutionDock .transactionPreviewHeader strong,
+.premiumExecutionDock .transactionPreviewHeader em {
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.premiumExecutionDock .axiomOrderTicket,
+.premiumExecutionDock .terminalTradeOnlyPanel,
+.premiumExecutionDock .redesignedTradePanel {
+  display: grid;
+  gap: 10px;
+}
+.premiumExecutionDock .tradePanelSection,
+.premiumExecutionDock .transactionPreviewCard,
+.premiumExecutionDock .terminalBlockReasonCard,
+.premiumExecutionDock .routePreviewBox {
+  overflow: hidden;
+}
+.premiumExecutionDock .terminalWalletRoutingList,
+.premiumExecutionDock .cleanWalletList {
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.premiumExecutionDock .terminalWalletRoutingItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+.premiumExecutionDock .terminalWalletRoutingItem code,
+.premiumExecutionDock .ticketSignerRow strong,
+.premiumExecutionDock .ticketSignerMatchStatus small {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.premiumExecutionDock .ticketSignerRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.premiumExecutionDock .ticketSignerRow > span {
+  grid-column: 1 / -1;
+}
+.premiumExecutionDock .ticketSignerRow .button {
+  min-height: 32px;
+  white-space: normal;
+  line-height: 1.15;
+}
+.premiumExecutionDock .tradeActionBar,
+.premiumExecutionDock .primaryBuySellBar,
+.premiumExecutionDock .axiomActionRow {
+  display: grid;
+  gap: 8px;
+}
+.premiumExecutionDock .primaryBuySellBar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.premiumExecutionDock .axiomActionRow {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.premiumExecutionDock .axiomActionRow button,
+.premiumExecutionDock .terminalPresetMatrix button,
+.premiumExecutionDock .compactPresetMatrix button {
+  min-height: 36px;
+  white-space: normal;
+  line-height: 1.12;
+  text-align: center;
+}
+.premiumExecutionDock .terminalPresetMatrix {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.premiumExecutionDock .compactPresetMatrix {
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+}
+.premiumExecutionDock .executionSettingsMatrix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px !important;
+}
+.premiumExecutionDock .tradeInputGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.premiumExecutionDock .tradeInputGrid label {
+  margin-top: 0;
+}
+.premiumExecutionDock .tradeInputGrid input,
+.premiumExecutionDock .tradeInputGrid select {
+  min-height: 38px;
+}
+.premiumExecutionDock .routePreviewGrid,
+.premiumExecutionDock .transactionPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.premiumExecutionDock .routePreviewGrid small,
+.premiumExecutionDock .transactionPreviewGrid strong,
+.premiumExecutionDock .transactionPreviewGrid span {
+  overflow-wrap: anywhere;
+}
+.premiumExecutionDock .liveBetaStepLadder {
+  gap: 7px;
+  padding: 0;
+}
+.premiumExecutionDock .liveBetaStepLadder li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  margin: 0;
+}
+.premiumExecutionDock .liveBetaStepLadder strong,
+.premiumExecutionDock .liveBetaStepLadder span {
+  line-height: 1.25;
+}
+.premiumExecutionDock .terminalBlockReasonCard {
+  margin-top: 10px;
+}
+.premiumExecutionDock .terminalBlockReasonCard p {
+  margin: 6px 0;
+  line-height: 1.35;
+}
+.premiumExecutionDock .transactionPreviewList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.premiumExecutionDock .axiomTicketFooter {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  margin-top: 8px;
+}
+.premiumExecutionDock .axiomTicketFooter span {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+@media (max-width: 1180px) {
+  .qaActionStack,
+  .compactTradeGrid.premiumTradeGrid,
+  .axiomTradeGrid.premiumTradeGrid {
+    grid-template-columns: 1fr !important;
+  }
+  .compactTradeGrid .premiumExecutionDock,
+  .compactTradeGrid .executionDock {
+    max-height: none !important;
+  }
+}
+@media (max-width: 640px) {
+  .qaStatusGrid,
+  .qaPreviewGrid,
+  .qaResultGrid,
+  .qaFormGrid,
+  .qaChecklist,
+  .qaActionStack,
+  .premiumExecutionDock .routePreviewGrid,
+  .premiumExecutionDock .transactionPreviewGrid,
+  .premiumExecutionDock .axiomActionRow,
+  .premiumExecutionDock .ticketSignerRow {
+    grid-template-columns: 1fr;
+  }
+  .qaChecklistStep {
+    grid-template-columns: 1fr;
+  }
+  .qaChecklistStep em {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .qaActionGroup .button,
+  .premiumExecutionDock .axiomActionRow button {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
+
 .walletRailStatusCard {
   margin: 18px 0;
   padding: 18px;
@@ -13540,7 +13855,45 @@ body > .createProjectModal .professionalCreateProjectShell {
 @media (max-width: 560px) {
   .bondrPublicHeader { align-items: flex-start; gap: 14px; flex-direction: column; }
   .bondrPublicCardGrid { grid-template-columns: 1fr; }
-  .bondrPublicHero { text-align: left; }
+  .bondrPublicShell * { min-width: 0; }
+  .bondrPublicHero {
+    width: min(100%, calc(100vw - 28px));
+    padding-top: 72px;
+    text-align: left;
+    overflow: hidden;
+  }
+  .bondrPublicHero h1 {
+    max-width: 100%;
+    font-size: 28px;
+    line-height: 1.02;
+    letter-spacing: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+    text-wrap: auto;
+  }
+  .bondrPublicSlogan {
+    font-size: 17px;
+    line-height: 1.2;
+    letter-spacing: 0.05em;
+    overflow-wrap: anywhere;
+  }
+  .bondrPublicHero p,
+  .bondrHeroSafety,
+  .bondrPublicSectionHead h2,
+  .bondrPublicCardGrid p {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  .bondrPublicSectionHead h2,
+  .bondrPublicSecurity h2,
+  .bondrPublicDocs h2 {
+    font-size: 20px;
+    line-height: 1.08;
+    letter-spacing: 0;
+  }
   .bondrHeroActions { justify-items: start; }
 }
 
