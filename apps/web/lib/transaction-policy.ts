@@ -54,18 +54,20 @@ function uniqueBase58(keys: (PublicKey | undefined)[]) {
 }
 
 function decodeVersionedTransactionPolicy(tx: VersionedTransaction, lookupAccounts: AddressLookupTableAccount[] = []): DecodedTransactionPolicy {
-  const messageAccountKeys = tx.message.getAccountKeys({ addressLookupTableAccounts: lookupAccounts });
   const staticAccountKeys = tx.message.staticAccountKeys;
-  const lookupWritable = messageAccountKeys.accountKeysFromLookups?.writable ?? [];
-  const lookupReadonly = messageAccountKeys.accountKeysFromLookups?.readonly ?? [];
+  const hasResolvedLookupAccounts = lookupAccounts.length > 0 || tx.message.addressTableLookups.length === 0;
+  const messageAccountKeys = hasResolvedLookupAccounts ? tx.message.getAccountKeys({ addressLookupTableAccounts: lookupAccounts }) : null;
+  const lookupWritable = messageAccountKeys?.accountKeysFromLookups?.writable ?? [];
+  const lookupReadonly = messageAccountKeys?.accountKeysFromLookups?.readonly ?? [];
   const accountKeys = uniqueBase58([...staticAccountKeys, ...lookupWritable, ...lookupReadonly]);
-  const programs = Array.from(new Set(tx.message.compiledInstructions.map((ix) => messageAccountKeys.get(ix.programIdIndex)?.toBase58()).filter((program): program is string => Boolean(program))));
+  const getAccountKey = (index: number) => messageAccountKeys?.get(index) ?? staticAccountKeys[index];
+  const programs = Array.from(new Set(tx.message.compiledInstructions.map((ix) => getAccountKey(ix.programIdIndex)?.toBase58()).filter((program): program is string => Boolean(program))));
   const systemTransfers = tx.message.compiledInstructions.flatMap((ix) => {
-    const program = messageAccountKeys.get(ix.programIdIndex)?.toBase58();
+    const program = getAccountKey(ix.programIdIndex)?.toBase58();
     const lamports = program === SystemProgram.programId.toBase58() ? parseSystemTransfer(ix.data) : null;
     if (!lamports || ix.accountKeyIndexes.length < 2) return [];
-    const from = messageAccountKeys.get(ix.accountKeyIndexes[0])?.toBase58();
-    const to = messageAccountKeys.get(ix.accountKeyIndexes[1])?.toBase58();
+    const from = getAccountKey(ix.accountKeyIndexes[0])?.toBase58();
+    const to = getAccountKey(ix.accountKeyIndexes[1])?.toBase58();
     return from && to ? [{ from, to, lamports }] : [];
   });
   const unresolvedAddressLookupTables = tx.message.addressTableLookups

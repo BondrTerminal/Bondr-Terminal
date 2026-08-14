@@ -92,6 +92,38 @@ test('policy check allows resolved lookup table transactions', () => {
   assert.deepEqual(result.blockers, []);
 });
 
+test('sync decoder handles unresolved versioned lookup-table transactions for build hashing', async () => {
+  const { AddressLookupTableAccount, Keypair, SystemProgram, TransactionMessage, VersionedTransaction } = await import('@solana/web3.js');
+  const { decodeTransactionPolicy } = await import('../apps/web/lib/transaction-policy.js');
+  const payer = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const lookupTable = new AddressLookupTableAccount({
+    key: Keypair.generate().publicKey,
+    state: {
+      deactivationSlot: BigInt('18446744073709551615'),
+      lastExtendedSlot: 0,
+      lastExtendedSlotStartIndex: 0,
+      authority: null,
+      addresses: [destination]
+    }
+  });
+  const message = new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: destination, lamports: 1 })]
+  }).compileToV0Message([lookupTable]);
+  const tx = new VersionedTransaction(message);
+  tx.sign([payer]);
+
+  const decoded = decodeTransactionPolicy(Buffer.from(tx.serialize()));
+
+  assert.equal(decoded.kind, 'versioned');
+  assert.equal(decoded.usesAddressLookupTables, true);
+  assert.deepEqual(decoded.unresolvedAddressLookupTables, [lookupTable.key.toBase58()]);
+  assert.equal(typeof decoded.messageHash, 'string');
+  assert.ok(decoded.messageHash.length > 0);
+});
+
 test('policy check permits wallet assertion hash mismatch only when requested', () => {
   const decoded: DecodedTransactionPolicy = {
     kind: 'versioned',
