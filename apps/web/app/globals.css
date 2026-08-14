@@ -13822,8 +13822,9 @@ body > .createProjectModal .professionalCreateProjectShell {
 /* Deployment cockpit layout: tight launch command surface */
 .deploymentCockpitShell {
   display: grid;
-  gap: 14px;
-  padding-top: 12px;
+  gap: 18px;
+  width: min(1960px, calc(100vw - 18px));
+  padding-top: 10px;
 }
 .deploymentCommandBar {
   position: sticky;
@@ -13986,8 +13987,8 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .deploymentCockpitGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.95fr) minmax(330px, 0.8fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 2.85fr) minmax(280px, 0.62fr);
+  gap: 18px;
   align-items: start;
 }
 .deploymentCockpitMain,
@@ -13997,13 +13998,14 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .deploymentCockpitMain {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 .deploymentOperatorRail {
   position: sticky;
   top: 96px;
   display: grid;
   gap: 10px;
+  max-width: 380px;
   max-height: calc(100vh - 112px);
   overflow: auto;
   padding-right: 2px;
@@ -14173,7 +14175,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   overflow-wrap: anywhere;
 }
 .deploymentCockpitMain .cleanLaunchConfigEditor {
-  gap: 9px;
+  gap: 12px;
 }
 .launchWizardWindow {
   display: grid;
@@ -14186,10 +14188,10 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchWizardTopbar {
   display: grid;
-  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   align-items: stretch;
-  padding: 10px;
+  padding: 12px;
   border-bottom: 1px solid rgba(249, 235, 224, 0.1);
   background: rgba(0, 0, 0, 0.28);
 }
@@ -14222,8 +14224,8 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchWizardTabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 7px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
   min-width: 0;
 }
 .launchWizardTabs button {
@@ -14232,8 +14234,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   gap: 2px 7px;
   align-items: center;
   min-width: 0;
-  min-height: 58px;
-  padding: 8px;
+  min-height: 64px;
+  padding: 9px;
   border: 1px solid rgba(249, 235, 224, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
@@ -14267,10 +14269,10 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #ffb166;
 }
 .launchWizardViewport {
-  min-height: clamp(520px, 58vh, 820px);
-  max-height: min(76vh, 860px);
+  min-height: clamp(680px, 72vh, 1080px);
+  max-height: none;
   overflow: auto;
-  padding: 12px;
+  padding: 18px;
 }
 .launchWizardPanel {
   margin: 0;
@@ -14285,7 +14287,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
   border-top: 1px solid rgba(249, 235, 224, 0.1);
   background: rgba(0, 0, 0, 0.24);
 }
@@ -14302,8 +14304,8 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchTokenPanel {
   display: grid;
-  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
+  gap: 18px;
   min-width: 0;
 }
 .tokenImageDropzone {
@@ -14311,8 +14313,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   display: grid;
   gap: 8px;
   align-content: center;
-  min-height: 240px;
-  padding: 18px;
+  min-height: 340px;
+  padding: 22px;
   border: 1px dashed rgba(255, 127, 17, 0.46);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 127, 17, 0.12), rgba(0, 0, 0, 0.22));
@@ -14335,7 +14337,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   font-size: 1.1rem;
 }
 .tokenImageDropzone img {
-  width: min(180px, 100%);
+  width: min(240px, 100%);
   aspect-ratio: 1;
   justify-self: center;
   object-fit: cover;
@@ -14490,8 +14492,8 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchBuyModeGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 .launchBuyModeCard p {
   margin: 0;
@@ -14500,8 +14502,8 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchWalletSetupHeader {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.28fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.28fr);
+  gap: 12px;
   margin-bottom: 10px;
 }
 .launchWalletRoleStrip {
@@ -14564,7 +14566,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 .launchWalletList {
   display: grid;
   gap: 6px;
-  max-height: 240px;
+  max-height: 360px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -14646,55 +14648,56 @@ body > .createProjectModal .professionalCreateProjectShell {
   font-size: clamp(1.05rem, 1.6vw, 1.45rem);
 }
 .deploymentCockpitMain .sectionIntro.compactIntro p {
-  max-width: 880px;
-  font-size: 0.86rem;
+  max-width: 1120px;
+  font-size: 0.92rem;
 }
 .deploymentCockpitMain .launchConfigEditorGrid.compact {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 .deploymentCockpitMain .launchConfigEditorGrid label.wide {
-  grid-column: span 6;
+  grid-column: span 4;
 }
 .deploymentCockpitMain .launchConfigEditorGrid input,
 .deploymentCockpitMain .launchConfigEditorGrid select,
 .deploymentCockpitMain .launchConfigEditorGrid textarea,
 .deploymentCockpitMain .deploymentBuilderGrid input {
+  min-height: 40px;
   border-radius: 8px;
-  padding: 8px 9px;
-  font-size: 0.86rem;
+  padding: 10px 11px;
+  font-size: 0.92rem;
 }
 .deploymentWalletFlow {
-  gap: 8px;
+  gap: 12px;
 }
 .deploymentWalletFlowStep {
-  gap: 8px;
-  padding: 10px;
+  gap: 12px;
+  padding: 14px;
   border-radius: 8px;
 }
 .deploymentWalletFlowStep > div:first-child {
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 4px 8px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 6px 10px;
 }
 .deploymentWalletFlowStep > div:first-child span {
   grid-row: span 2;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
 }
 .deploymentWalletFlowStep > div:first-child h3 {
-  font-size: 0.98rem;
+  font-size: 1.06rem;
 }
 .deploymentWalletFlowStep > div:first-child p {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 .deploymentWalletFlowRow {
-  grid-template-columns: 26px minmax(118px, 0.7fr) minmax(96px, 0.45fr) minmax(0, 1.65fr);
-  gap: 7px;
-  padding: 8px;
+  grid-template-columns: 30px minmax(150px, 0.72fr) minmax(118px, 0.45fr) minmax(0, 1.8fr);
+  gap: 10px;
+  padding: 11px;
 }
 .deploymentWalletFlowRow:not(.selectable) {
-  grid-template-columns: minmax(118px, 0.7fr) minmax(96px, 0.45fr) minmax(110px, 0.55fr) minmax(0, 1.65fr);
+  grid-template-columns: minmax(150px, 0.72fr) minmax(118px, 0.45fr) minmax(130px, 0.55fr) minmax(0, 1.8fr);
 }
 .deploymentWalletFlowRow > input[type="checkbox"] {
   justify-self: center;
@@ -14702,16 +14705,16 @@ body > .createProjectModal .professionalCreateProjectShell {
 .launchWalletInputs,
 .launchWalletInputs.riskInputs,
 .launchWalletInputs.taskInputs {
-  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
 }
 .launchWalletInputs.riskInputs,
 .launchWalletInputs.taskInputs {
-  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
 }
 .deploymentTaskCommandPanel {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 14px;
+  padding: 14px;
   border: 1px solid rgba(255, 127, 17, 0.2);
   border-radius: 8px;
   background: rgba(255, 127, 17, 0.055);
@@ -14751,13 +14754,13 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: rgba(249, 235, 224, 0.66);
 }
 .deploymentTaskCommandHeader button {
-  min-height: 34px;
+  min-height: 40px;
   white-space: nowrap;
 }
 .deploymentTaskCommandGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 .deploymentTaskCommandGrid label {
   display: grid;
@@ -14773,10 +14776,11 @@ body > .createProjectModal .professionalCreateProjectShell {
   min-width: 0;
   border: 1px solid rgba(249, 235, 224, 0.12);
   border-radius: 8px;
-  padding: 8px 9px;
+  min-height: 40px;
+  padding: 10px 11px;
   background: rgba(0, 0, 0, 0.24);
   color: #f9ebe0;
-  font-size: 0.84rem;
+  font-size: 0.92rem;
 }
 .deploymentTaskPresetRail {
   display: flex;
@@ -14799,10 +14803,11 @@ body > .createProjectModal .professionalCreateProjectShell {
   min-width: 0;
   border: 1px solid rgba(249, 235, 224, 0.12);
   border-radius: 8px;
-  padding: 7px;
+  min-height: 36px;
+  padding: 8px;
   background: rgba(0, 0, 0, 0.24);
   color: #f9ebe0;
-  font-size: 12px;
+  font-size: 13px;
 }
 .deploymentAdvancedDetails {
   display: grid;
@@ -14894,6 +14899,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchTokenPanel,
   .routeAdapterStrip,
   .launchSegmentGrid.five,
+  .launchSegmentGrid.three,
   .launchSegmentGrid.two,
   .launchWalletSetupHeader,
   .launchBuyModeGrid,
