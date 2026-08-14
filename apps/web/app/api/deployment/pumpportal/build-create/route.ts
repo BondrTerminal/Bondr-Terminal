@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 type Body = {
   projectId?: unknown;
   mintPublicKey?: unknown;
+  connectedSigner?: unknown;
   confirmBuild?: unknown;
 };
 
@@ -16,6 +17,7 @@ function inputFrom(request: Request, body?: Body | null) {
   return {
     projectId: (typeof body?.projectId === 'string' ? body.projectId : searchParams.get('project'))?.trim() || null,
     mintPublicKey: (typeof body?.mintPublicKey === 'string' ? body.mintPublicKey : searchParams.get('mint'))?.trim() || null,
+    connectedSigner: (typeof body?.connectedSigner === 'string' ? body.connectedSigner : searchParams.get('connectedSigner'))?.trim() || null,
     confirmBuild: body?.confirmBuild === true || searchParams.get('confirmBuild') === 'true'
   };
 }

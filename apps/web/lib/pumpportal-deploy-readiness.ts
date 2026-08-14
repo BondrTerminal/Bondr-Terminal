@@ -77,6 +77,7 @@ export type PumpPortalCreatePreview = {
 
 export type PumpPortalBuildCreateInput = {
   mintPublicKey?: string | null;
+  connectedSigner?: string | null;
   confirmBuild?: boolean;
 };
 
@@ -313,11 +314,14 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
   const preview = buildPumpPortalCreatePreview(project, wallets, activation, { mintPublicKey: input.mintPublicKey });
   const structuralBlockers = buildStructuralBlockers(preview);
   const mint = preview.payloadPreview.mint;
+  const connectedSigner = input.connectedSigner?.trim() || null;
   const requestBody = preview.payloadPreview;
   const blockers = [
     ...structuralBlockers,
     mint && validPublicKey(mint) ? null : 'client-mint-public-key-invalid',
-    requestBody.publicKey && validPublicKey(requestBody.publicKey) ? null : 'dev-wallet-public-key-invalid'
+    requestBody.publicKey && validPublicKey(requestBody.publicKey) ? null : 'dev-wallet-public-key-invalid',
+    connectedSigner ? null : 'browser-signer-proof-required',
+    connectedSigner && requestBody.publicKey && connectedSigner !== requestBody.publicKey ? 'browser-signer-dev-wallet-mismatch' : null
   ].filter((item): item is string => Boolean(item));
   const enabled = providerBuildEnabled();
   const confirmBuild = input.confirmBuild === true;

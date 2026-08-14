@@ -165,7 +165,7 @@ test('pumpportal build-create stays provider-disabled without signing or broadca
       metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
     }
   };
-  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
+  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111', connectedSigner: wallet.address });
   assert.equal(result.contract, 'bondr-pumpportal-build-create-v1');
   assert.equal(result.status, 'provider-build-disabled');
   assert.equal(result.execution, 'provider-build-disabled-no-call');
@@ -185,10 +185,25 @@ test('pumpportal build-create blocks bad mint before provider call', async () =>
       metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
     }
   };
-  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'bad-mint' });
+  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'bad-mint', connectedSigner: wallet.address });
   assert.equal(result.status, 'blocked');
   assert.ok(result.blockers.includes('client-mint-public-key-invalid'));
   assert.equal(result.execution, 'blocked-no-provider-call');
+});
+
+test('pumpportal build-create requires browser signer proof to match dev wallet', async () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const missing = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
+  assert.ok(missing.blockers.includes('browser-signer-proof-required'));
+  const mismatch = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111', connectedSigner: '11111111111111111111111111111111' });
+  assert.ok(mismatch.blockers.includes('browser-signer-dev-wallet-mismatch'));
 });
 
 test('ipfs metadata readiness validates token metadata without pinning', () => {

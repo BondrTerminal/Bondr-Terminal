@@ -76,6 +76,12 @@ type IpfsMetadataState = {
   error?: string;
 };
 
+type BrowserSolanaProvider = {
+  publicKey?: { toString(): string; toBase58?: () => string };
+  connect(): Promise<{ publicKey: { toString(): string; toBase58?: () => string } }>;
+};
+type BrowserWindowWithSolana = Window & { solana?: BrowserSolanaProvider };
+
 function short(value?: string | null) {
   return value ? `${value.slice(0, 6)}...${value.slice(-5)}` : 'not set';
 }
@@ -95,6 +101,8 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [ipfsLoading, setIpfsLoading] = useState(false);
   const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
   const [clientMintKeypair, setClientMintKeypair] = useState<Keypair | null>(null);
+  const [connectedSigner, setConnectedSigner] = useState('');
+  const [signerProofMessage, setSignerProofMessage] = useState('Connect browser wallet to prove the deployer signer before building.');
 
   async function buildUnsigned() {
     setLoading(true);
@@ -147,7 +155,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       const response = await fetch('/api/deployment/pumpportal/build-create', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null, confirmBuild })
+        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null, connectedSigner: connectedSigner.trim() || null, confirmBuild })
       });
       const payload = await response.json().catch(() => ({})) as PumpPortalBuildState;
       setPumpPortalBuild(payload);
@@ -166,6 +174,25 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     setPumpPortalPreview(null);
     setPumpPortalBuild(null);
   }
+
+  async function connectBrowserSigner() {
+    const provider = typeof window !== 'undefined' ? (window as BrowserWindowWithSolana).solana : undefined;
+    if (!provider) {
+      setSignerProofMessage('No browser Solana wallet provider found.');
+      return;
+    }
+    try {
+      const response = await provider.connect();
+      const address = response.publicKey.toBase58?.() ?? response.publicKey.toString();
+      setConnectedSigner(address);
+      setPayer((current) => current || address);
+      setSignerProofMessage(address === payer || !payer ? 'Browser signer connected.' : 'Connected signer does not match the selected deployer.');
+    } catch (error) {
+      setSignerProofMessage(error instanceof Error ? error.message : 'Browser signer connection failed.');
+    }
+  }
+
+  const signerMatches = Boolean(connectedSigner && payer && connectedSigner === payer);
 
   async function requestIpfsMetadata(confirmPin: boolean) {
     setIpfsLoading(true);
@@ -213,6 +240,16 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         </div>
         <button className="button secondary" type="button" onClick={generateClientMintKeypair}>
           Generate Client Mint
+        </button>
+      </div>
+      <div className="pumpPortalPreviewPanel">
+        <div>
+          <span>Signer proof</span>
+          <strong className={signerMatches ? 'profitText' : 'dangerText'}>{signerMatches ? 'Deployer signer matched' : short(connectedSigner) || 'Not connected'}</strong>
+          <small>{signerProofMessage}</small>
+        </div>
+        <button className="button secondary" type="button" onClick={() => void connectBrowserSigner()}>
+          Connect Signer
         </button>
       </div>
       <div className="deploymentBuilderActionRow">
