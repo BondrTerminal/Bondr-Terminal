@@ -345,6 +345,93 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     finally { setLiveLoading(false); }
   }
 
+  function buildTerminalQaReport() {
+    const observedAt = new Date().toISOString();
+    const report = {
+      timestamp: observedAt,
+      path: '/sniper',
+      gates: {
+        liveTradingEnabled: Boolean(capabilities?.liveTradingEnabled),
+        signingEnabled: Boolean(capabilities?.signingEnabled),
+        broadcastEnabled: Boolean(capabilities?.broadcastEnabled),
+        readinessLevel: capabilities?.readinessLevel ?? 'unknown',
+        simulationRequired: capabilities?.requireSimulation !== false
+      },
+      authAndWallet: {
+        auth: operatorAuthRequired ? 'operator-login-required' : 'ready-or-not-configured',
+        selectedWallet: selectedExecutionAddress ?? null,
+        connectedSigner: walletPublicKey,
+        walletMatch: selectedSignerMatched,
+        signerMismatch
+      },
+      testInput: {
+        side,
+        mint: activeMint,
+        amount,
+        spendAsset,
+        slippageBps: parseSlippage(slippage),
+        route: routeLabel
+      },
+      phaseSummary: {
+        quoteStatus: quote?.status ?? 'not-run',
+        buildStatus: swapBuild?.swap?.swapTransaction ? 'unsigned-built' : swapBuild?.error ? 'error' : 'not-run',
+        simulationStatus: simulation?.status ?? 'not-run',
+        signerStatus: signedSwap?.signedTransaction ? 'signed' : canSign ? 'eligible' : 'idle',
+        broadcastStatus: signedSwap?.submitted ? 'sent' : capabilities?.broadcastEnabled ? 'enabled-not-sent' : 'disabled',
+        signature: signedSwap?.signature ?? null,
+        explorerUrl: signedSwap?.explorerUrl ?? null,
+        messageHash: swapBuild?.transactionMessageHash ?? signedReview?.review?.transactionMessageHash ?? null,
+        intentId: swapBuild?.intentId ?? null,
+        expectedSigner: swapBuild?.expectedSigner ?? selectedExecutionAddress ?? null,
+        expectedMint: swapBuild?.expectedMint ?? activeMint,
+        routeLabels: quote?.quote?.routeLabels ?? [],
+        priceImpactPct: quote?.quote?.priceImpactPct ?? null,
+        estimatedOutAmount: quote?.quote?.outAmount ?? null
+      },
+      review: {
+        status: signedReview?.status ?? 'not-run',
+        execution: signedReview?.execution ?? null,
+        broadcast: signedReview?.broadcast ?? null,
+        signerMatched: signedReview?.review?.signerMatched ?? null,
+        expectedMintReferenced: signedReview?.review?.expectedMintReferenced ?? null,
+        requiredAccountsMatched: signedReview?.review?.requiredAccountsMatched ?? null,
+        programsAllowed: signedReview?.review?.programsAllowed ?? null,
+        safeToBroadcastIfLiveEnabled: signedReview?.review?.safeToBroadcastIfLiveEnabled ?? null,
+        blockers: signedReview?.blockers ?? [],
+        warnings: signedReview?.warnings ?? []
+      },
+      localBlockReasons: blockReasons,
+      omittedIntentionally: [
+        'private keys / seed phrases',
+        'full unsigned transaction base64',
+        'full signed transaction bytes',
+        'cookies / session secrets / auth tokens'
+      ]
+    };
+    return `# BONDR Terminal QA report\n\n\`\`\`json\n${JSON.stringify(report, null, 2)}\n\`\`\``;
+  }
+
+  async function copyTerminalQaReport() {
+    const report = buildTerminalQaReport();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(report);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = report;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      setLiveMessage('Terminal QA report copied. Paste it back here after the final test.');
+    } catch {
+      setLiveMessage('Could not copy report automatically. Open signed review details and paste the signature or error.');
+    }
+  }
+
   return (
     <aside className="executionDock premiumExecutionDock freshTradingDock">
       <section className="dockCard orderTicketCard premiumOrderCard freshTradingTicket">
@@ -480,6 +567,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
               <button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working...' : 'Build + Simulate'}</button>
               <button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign Locally</button>
               <button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Broadcast' : 'Broadcast Disabled'}</button>
+              <button className="axiomPreviewButton freshWideAction" type="button" onClick={() => void copyTerminalQaReport()}>Copy QA Report</button>
             </div>
             <div className="freshMessageLine" role="status">{liveMessage ?? quote?.error ?? 'Ready. Broadcast remains disabled until explicit activation.'}</div>
             <details className="freshAdvancedSettings">

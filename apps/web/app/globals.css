@@ -14544,6 +14544,9 @@ body > .createProjectModal .professionalCreateProjectShell {
   padding: 10px;
   border-radius: 10px;
 }
+.freshPrimaryActions .freshWideAction {
+  grid-column: 1 / -1;
+}
 .freshMessageLine {
   padding: 9px;
   border-radius: 10px;
