@@ -3,6 +3,7 @@ import {
   eventsForProject,
   getProject,
   launchPreflight,
+  portfolioWalletHref,
   projectFlow,
   readinessScore,
   walletBalanceSummary,
@@ -137,6 +138,10 @@ function defaultWalletPlan(wallets: Wallet[]): WalletPlanEntry[] {
 function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchConfig {
   return {
     route: {
+      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      quoteToken: 'SOL',
+      tokenMode: 'classic',
+      buyMode: 'snipe',
       initialBuySol: project.fundingPlan.devBuySol,
       slippageBps: 500,
       priorityFeeMode: 'auto capped',
@@ -160,6 +165,16 @@ function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchCo
       trailingActivationPct: 60,
       maxDevExposureSol: Math.max(project.fundingPlan.devBuySol, 0.4),
       maxDevSupplyPct: 8
+    }
+  };
+}
+
+function normalizedProject(project: Project): Project {
+  return {
+    ...project,
+    moduleLinks: {
+      ...project.moduleLinks,
+      wallets: portfolioWalletHref(project.id)
     }
   };
 }
@@ -237,10 +252,11 @@ function terminalHandoff(project: Project, wallets: Wallet[]): TerminalHandoff {
 }
 
 export function buildMeridianProjectContext(project: Project, store: MeridianStore, observedAt = new Date().toISOString()): MeridianProjectContext {
-  const walletGroup = store.walletGroups.find((group) => group.id === project.walletGroupId) ?? null;
-  const wallets = walletsForGroup(project.walletGroupId, store).filter((wallet) => !wallet.archived);
-  const readiness = readinessScore(project, store);
-  const preflight = launchPreflight(project, store);
+  const currentProject = normalizedProject(project);
+  const walletGroup = store.walletGroups.find((group) => group.id === currentProject.walletGroupId) ?? null;
+  const wallets = walletsForGroup(currentProject.walletGroupId, store).filter((wallet) => !wallet.archived);
+  const readiness = readinessScore(currentProject, store);
+  const preflight = launchPreflight(currentProject, store);
   const blockers = preflight.filter((check) => check.status === 'blocked').map((check) => `${check.label}: ${check.detail}`);
   const nextActions = preflight.filter((check) => check.status !== 'ready').slice(0, 5).map((check) => ({ label: check.label, href: check.href, owner: check.owner, status: check.status }));
   const activityIds = new Set(wallets.map((wallet) => wallet.id));
@@ -250,7 +266,7 @@ export function buildMeridianProjectContext(project: Project, store: MeridianSto
   return {
     contract: 'meridian-project-context-v1',
     observedAt,
-    project,
+    project: currentProject,
     walletGroup,
     wallets,
     balances: {
@@ -259,22 +275,22 @@ export function buildMeridianProjectContext(project: Project, store: MeridianSto
       sourceStatus: source('modeled', 'meridian-store.wallets.balanceSol', observedAt, 'Modeled balances are planning values shared across Deployment, Terminal, Portfolio, and Wallet Ops; they are not live funds. Hydrate live RPC balances before signed execution.')
     },
     deployment: {
-      stage: project.deploymentState.stage,
-      ready: project.deploymentState.ready,
+      stage: currentProject.deploymentState.stage,
+      ready: currentProject.deploymentState.ready,
       readinessScore: readiness.score,
       readyChecks: readiness.ready,
       totalChecks: readiness.total,
       missing: readiness.missing,
-      disabledReason: project.deploymentState.disabledReason
+      disabledReason: currentProject.deploymentState.disabledReason
     },
-    fundingPlan: fundingReadiness(project, wallets),
-    launchConfig: normalizedLaunchConfig(project, wallets),
+    fundingPlan: fundingReadiness(currentProject, wallets),
+    launchConfig: normalizedLaunchConfig(currentProject, wallets),
     portfolio: {
-      flow30d: projectFlow(project.id, store),
+      flow30d: projectFlow(currentProject.id, store),
       accountingSource: 'meridian-flow-events',
       note: 'Portfolio accounting is currently derived from Meridian flow events plus portfolio snapshot enrichment where available.'
     },
-    terminal: terminalHandoff(project, wallets),
+    terminal: terminalHandoff(currentProject, wallets),
     preflight,
     blockers,
     nextActions,
