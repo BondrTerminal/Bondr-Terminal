@@ -7383,11 +7383,13 @@ html, body { max-width: 100%; overflow-x: clip; }
 .walletBoardActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .walletBoardActions button { border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 11px 10px; background: rgba(255,255,255,0.07); color: var(--text); font-weight: 900; cursor: pointer; }
 .walletBoardActions button:nth-child(3), .walletBoardActions button:nth-child(4) { border-color: rgba(85,240,168,0.36); background: rgba(85,240,168,0.10); color: #dfffee; }
-.walletBoardMetrics { display: grid; grid-template-columns: 1.2fr repeat(3, 1fr); gap: 10px; }
-.walletBoardMetrics div { min-width: 0; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,0.055); }
-.walletBoardMetrics span, .walletListHead span, .walletDrawerGrid span, .walletDrawerAddress span { display: block; color: var(--muted); font-size: 11px; font-weight: 950; letter-spacing: .10em; text-transform: uppercase; }
-.walletBoardMetrics strong { display: block; margin: 7px 0 3px; font-size: clamp(24px, 3vw, 38px); line-height: 1; letter-spacing: -.05em; overflow-wrap: anywhere; }
-.walletBoardMetrics small { color: var(--muted); font-size: 12px; }
+.walletBoardMetrics, .walletReadinessRail { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.walletBoardMetrics div, .walletReadinessRail div { min-width: 0; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,0.055); }
+.walletReadinessRail div { background: rgba(0,0,0,0.24); }
+.walletBoardMetrics span, .walletReadinessRail span, .walletListHead span, .walletDrawerGrid span, .walletDrawerAddress span { display: block; color: var(--muted); font-size: 11px; font-weight: 950; letter-spacing: .10em; text-transform: uppercase; }
+.walletBoardMetrics strong, .walletReadinessRail strong { display: block; margin: 7px 0 3px; font-size: clamp(24px, 3vw, 38px); line-height: 1; letter-spacing: -.05em; overflow-wrap: anywhere; }
+.walletReadinessRail strong { font-size: clamp(18px, 2vw, 28px); }
+.walletBoardMetrics small, .walletReadinessRail small { color: var(--muted); font-size: 12px; }
 .walletBoardTabs { display: flex; gap: 8px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; padding: 8px; background: rgba(0,0,0,0.24); }
 .walletBoardTabs button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: rgba(255,255,255,0.055); color: var(--muted); font-size: 12px; font-weight: 950; cursor: pointer; }
 .walletBoardTabs button.active { background: var(--green); color: #06110d; border-color: transparent; }

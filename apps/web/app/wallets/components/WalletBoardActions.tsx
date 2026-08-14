@@ -33,6 +33,15 @@ type BoardWallet = {
 
 type BoardGroup = { id: string; name: string; scope: string; walletCount: number; activeCount: number; archivedCount: number; projectNames: string[] };
 type CreatedManagedWallet = { id: string; role: string; address: string; custodyMode?: 'managed-local' | 'watch-only'; vaultKeyId?: string | null };
+type ExecutionCapabilities = {
+  readiness?: string;
+  readinessLevel?: string;
+  liveTradingEnabled?: boolean;
+  signingEnabled?: boolean;
+  broadcastEnabled?: boolean;
+  fundingBroadcastEnabled?: boolean;
+  walletVaultEnabled?: boolean;
+};
 
 type Props = {
   wallets: BoardWallet[];
@@ -45,6 +54,7 @@ type Props = {
   archivedCount: number;
   hydrationStatus: string;
   hydrationProvider: string;
+  managedLocalEnabled?: boolean;
 };
 
 function actionTitle(action: WalletAction) {
@@ -73,8 +83,6 @@ function matchesFilter(wallet: BoardWallet, filter: WalletFilter, selectedGroupI
   return true;
 }
 
-const MANAGED_LOCAL_WALLET_BETA_ENABLED = false;
-
 function ActionButton({ children, onClick, disabled, title }: { children: string; onClick: () => void; disabled?: boolean; title?: string }) {
   return <button type="button" onClick={onClick} disabled={disabled} title={title}>{children}</button>;
 }
@@ -85,7 +93,11 @@ function walletSolDisplay(wallet?: Pick<BoardWallet, 'balanceSol' | 'balanceStat
   return `${wallet.balanceSol.toFixed(4)} SOL`;
 }
 
-export function WalletBoardActions({ wallets, groups, selectedProjectName, selectedProjectId, selectedGroupId, totalSol, activeCount, archivedCount, hydrationStatus, hydrationProvider }: Props) {
+const FUNDING_TEST_SOURCE = '8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz';
+const FUNDING_TEST_DESTINATION = '6oaGmdSBmMq7qCAc36cjivzgMVrozQq35ukka4EHGBuy';
+const FUNDING_TEST_AMOUNT_SOL = '0.001';
+
+export function WalletBoardActions({ wallets, groups, selectedProjectName, selectedProjectId, selectedGroupId, totalSol, activeCount, archivedCount, hydrationStatus, hydrationProvider, managedLocalEnabled = false }: Props) {
   const router = useRouter();
   const [filter, setFilter] = useState<WalletFilter>(selectedGroupId ? 'project' : 'all');
   const [action, setAction] = useState<WalletAction>(null);
@@ -110,6 +122,8 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const [exportedSecret, setExportedSecret] = useState('');
   const [message, setMessage] = useState<{ type: 'ok' | 'error' | 'warn'; text: string } | null>(null);
   const [lastManagedWallet, setLastManagedWallet] = useState<CreatedManagedWallet | null>(null);
+  const [activeWalletAddress, setActiveWalletAddress] = useState('');
+  const [executionCapabilities, setExecutionCapabilities] = useState<ExecutionCapabilities | null>(null);
   const [loading, setLoading] = useState(false);
   const visibleWallets = useMemo(() => wallets.filter((wallet) => matchesFilter(wallet, filter, selectedGroupId)), [wallets, filter, selectedGroupId]);
   const activeWallets = wallets.filter((wallet) => !wallet.archived);
@@ -122,13 +136,14 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const terminalHref = selectedProjectId ? `/sniper?project=${selectedProjectId}` : '/sniper';
   const portfolioHref = selectedProjectId ? `/portfolio?project=${selectedProjectId}` : '/portfolio';
   const tabs: Array<[WalletFilter, string]> = [['all', 'All'], ['project', 'Project'], ['global', 'Global'], ['trading', 'Trading'], ['treasury', 'Treasury'], ['archived', 'Archived'], ['deployer', 'Deployer'], ['launch', 'Launch'], ['reserve', 'Reserve']];
+  const selectedActiveWallet = activeWalletAddress;
+  const selectedWallet = wallets.find((wallet) => wallet.address === selectedActiveWallet) ?? null;
+  const fundingTestShape = Boolean(fromWallet && fromWallet.address === FUNDING_TEST_SOURCE && receiver === FUNDING_TEST_DESTINATION && amount === FUNDING_TEST_AMOUNT_SOL);
+  const fundingGateEnabled = Boolean(executionCapabilities?.fundingBroadcastEnabled);
+  const generalBroadcastEnabled = Boolean(executionCapabilities?.broadcastEnabled);
 
   function openAction(nextAction: Exclude<WalletAction, null>) {
-    if (!MANAGED_LOCAL_WALLET_BETA_ENABLED && (nextAction === 'create' || nextAction === 'import')) {
-      setMessage({ type: 'warn', text: 'Managed local wallet create/import is disabled for browser-wallet beta. Use Connect Phantom or Track Address/watch-only instead.' });
-      setAction(null);
-      return;
-    }
+    if (!managedLocalEnabled && (nextAction === 'create' || nextAction === 'import')) setMessage({ type: 'warn', text: 'Managed local wallet create/import is disabled for browser-wallet beta. Use Connect Phantom or Track Address/watch-only instead.' });
     setExportedSecret('');
     setExportConfirmation('');
     setPrivateKeyInput('');
@@ -153,6 +168,26 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     }
     setAction(nextAction);
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setActiveWalletAddress(window.localStorage.getItem('bondr.activeWallet') ?? '');
+    const updateActiveWallet = (event: Event) => {
+      const detail = (event as CustomEvent<{ address?: string }>).detail;
+      setActiveWalletAddress(detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? '');
+    };
+    window.addEventListener('bondr-active-wallet-changed', updateActiveWallet);
+    return () => window.removeEventListener('bondr-active-wallet-changed', updateActiveWallet);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/execution-capabilities', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((json: ExecutionCapabilities) => { if (!cancelled) setExecutionCapabilities(json); })
+      .catch(() => { if (!cancelled) setExecutionCapabilities({ readiness: 'unavailable' }); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setExportedSecret('');
@@ -223,7 +258,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   }
 
   async function previewImportPrivateKey() {
-    if (!MANAGED_LOCAL_WALLET_BETA_ENABLED) {
+    if (!managedLocalEnabled) {
       setMessage({ type: 'warn', text: 'Private-key import is disabled for browser-wallet beta.' });
       return null;
     }
@@ -235,7 +270,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   }
 
   async function createManagedWallet(importing: boolean) {
-    if (!MANAGED_LOCAL_WALLET_BETA_ENABLED) {
+    if (!managedLocalEnabled) {
       setMessage({ type: 'warn', text: 'Managed local wallets are disabled for browser-wallet beta. Use Phantom/Solflare plus watch-only public records.' });
       return null;
     }
@@ -264,7 +299,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   }
 
   async function exportPrivateKey() {
-    if (!MANAGED_LOCAL_WALLET_BETA_ENABLED) {
+    if (!managedLocalEnabled) {
       setMessage({ type: 'warn', text: 'Private-key export is disabled for browser-wallet beta.' });
       return null;
     }
@@ -285,21 +320,46 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
 
   async function runSendPreflight() {
     if (!fromWallet) return;
+    if (!fundingTestShape) {
+      setMessage({ type: 'warn', text: 'Only the approved 0.001 SOL funding test shape can be built from Wallet Center. Load the capped funding test before running preflight.' });
+      return;
+    }
     const json = await mutate('/api/wallet-ops-engine', { method: 'POST', body: JSON.stringify({ operation: 'fund', from: fromWallet.address, to: receiver, amountSol: Number(amount) }) }, 'Unsigned transfer built. Browser signing would be required next.');
     if (!json) setMessage((current) => current ?? { type: 'warn', text: 'Live send remains disabled by gate.' });
+  }
+
+  function selectWallet(wallet: BoardWallet) {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('bondr.activeWallet', wallet.address);
+      window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } }));
+      setActiveWalletAddress(wallet.address);
+    }
+    setFromWalletId(wallet.id);
+    setReceiveWalletId(wallet.id);
+    setMessage({ type: 'ok', text: `${wallet.role} selected as the active wallet for this browser.` });
+  }
+
+  function useFundingTest() {
+    const source = wallets.find((wallet) => wallet.address === FUNDING_TEST_SOURCE);
+    if (source) setFromWalletId(source.id);
+    setReceiver(FUNDING_TEST_DESTINATION);
+    setAmount(FUNDING_TEST_AMOUNT_SOL);
+    setMessage({ type: 'warn', text: 'Loaded the capped funding test: 0.001 SOL to the approved receiver. Build/simulate/sign/broadcast still require the Live Beta flow and gates.' });
   }
 
   return (
     <section className="walletBoardShell">
       <header className="walletBoardHeader">
         <div className="walletBoardTitleBlock">
-          <span>Bond.Terminal wallet operations</span>
-          <h1>Wallet Operations</h1>
-          <p>{selectedProjectName ? `${selectedProjectName} · ${selectedGroupId}` : 'All wallet groups'} · Wallet setup: connect Phantom/browser wallet or track public watch-only records. Real sends/trading/broadcasts stay live-gated; Wallet Ops records do not sign.</p>
+          <span>Bond.Terminal wallet center</span>
+          <h1>Portfolio Wallets</h1>
+          <p>{selectedProjectName ? `${selectedProjectName} · ${selectedGroupId}` : 'All wallet groups'} · Browser wallets sign in the wallet extension; watch-only records track public addresses; managed-local wallets require encrypted vault backup before funding.</p>
         </div>
         <div className="walletBoardActions">
           <ActionButton onClick={() => openAction('phantom')}>Connect Phantom</ActionButton>
           <ActionButton onClick={() => openAction('track')}>Track Address</ActionButton>
+          <ActionButton onClick={() => openAction('create')} title={managedLocalEnabled ? 'Create encrypted managed-local wallet' : 'Managed-local wallet vault is disabled in this environment'}>Create Managed</ActionButton>
+          <ActionButton onClick={() => openAction('import')} title={managedLocalEnabled ? 'Import encrypted managed-local wallet' : 'Managed-local wallet vault is disabled in this environment'}>Import Managed</ActionButton>
           <ActionButton onClick={() => openAction('send')}>Send</ActionButton>
           <ActionButton onClick={() => openAction('receive')}>Receive</ActionButton>
           <ActionButton onClick={() => openAction('archive')}>Archive</ActionButton>
@@ -313,6 +373,15 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
         <div><span>Active</span><strong>{activeCount}</strong><small>wallets available</small></div>
         <div><span>Archived</span><strong>{archivedCount}</strong><small>audit retained</small></div>
         <div><span>Hydration</span><strong>{hydrationStatus}</strong><small>{hydrationProvider}</small></div>
+        <div><span>Managed local</span><strong>{managedLocalEnabled ? 'enabled' : 'disabled'}</strong><small>private-key vault gate</small></div>
+      </div>
+
+      <div className="walletReadinessRail" aria-label="Wallet readiness">
+        <div><span>Selected wallet</span><strong>{selectedWallet ? selectedWallet.shortAddress : 'none'}</strong><small>{selectedWallet ? selectedWallet.role : 'Select a wallet row'}</small></div>
+        <div><span>Signer match</span><strong>{fromWallet && selectedActiveWallet === fromWallet.address ? 'matched' : 'review'}</strong><small>{fromWallet ? `Send source ${fromWallet.shortAddress}` : 'No send source'}</small></div>
+        <div><span>Signing</span><strong>{executionCapabilities?.signingEnabled ? 'enabled' : 'disabled'}</strong><small>{executionCapabilities?.readinessLevel ?? executionCapabilities?.readiness ?? 'checking readiness'}</small></div>
+        <div><span>General broadcast</span><strong>{generalBroadcastEnabled ? 'enabled' : 'disabled'}</strong><small>Broad sends remain policy-gated</small></div>
+        <div><span>Funding test</span><strong>{fundingGateEnabled ? 'enabled' : 'disabled'}</strong><small>{fundingTestShape ? 'approved shape loaded' : 'load capped test'}</small></div>
       </div>
 
       <nav className="walletBoardTabs" aria-label="Wallet board filters">
@@ -328,7 +397,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
           </div>
           {visibleWallets.map((wallet) => (
             <div className="walletListRow" role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
-              <label className="walletSelectCell"><input type="checkbox" disabled title="Selection actions are not wired yet" /></label>
+              <label className="walletSelectCell"><input type="checkbox" checked={selectedActiveWallet === wallet.address} readOnly title={selectedActiveWallet === wallet.address ? 'Active in this browser' : 'Not active'} /></label>
               <button type="button" className="walletIdentityCell" onClick={() => setDetailWalletId(wallet.id)}>
                 <strong>{wallet.role}</strong>
                 <em className={`walletRoleBadge ${wallet.roleBadge}`}>{wallet.roleBadge}</em><em className={`walletCustodyBadge ${wallet.custodyMode === 'managed-local' ? 'managed' : ''}`}>{wallet.custodyMode === 'managed-local' ? 'managed local' : 'watch-only'}</em>
@@ -340,9 +409,10 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
               <div><span className={wallet.archived ? 'statusChip warn' : wallet.status === 'active' ? 'statusChip good' : 'statusChip'}>{wallet.archived ? 'archived' : wallet.status}</span></div>
               <div className="walletRowActions">
                 <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('send'); }}>Send</button>
+                <button type="button" onClick={() => selectWallet(wallet)}>{selectedActiveWallet === wallet.address ? 'Selected' : 'Select'}</button>
                 <button type="button" onClick={() => { setReceiveWalletId(wallet.id); openAction('receive'); }}>Receive</button>
                 <button type="button" onClick={() => setDetailWalletId(wallet.id)}>Details</button>
-                <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('export'); }}>{wallet.custodyMode === 'managed-local' && MANAGED_LOCAL_WALLET_BETA_ENABLED ? 'Public Record' : 'Public Record'}</button>
+                <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('export'); }}>{wallet.custodyMode === 'managed-local' && managedLocalEnabled ? 'Backup / Export' : 'Public Record'}</button>
                 <button type="button" onClick={() => updateWallet(wallet.id, { archived: !wallet.archived, archiveReason: wallet.archived ? '' : 'Archived from Wallet Board row action.' }, wallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{wallet.archived ? 'Restore' : 'Archive'}</button>
                 <a href={deploymentHref}>Launch Prep</a><a href={terminalHref}>Terminal</a><a href={portfolioHref}>Portfolio</a>
               </div>
@@ -371,7 +441,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
               <button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Save safe fields'}</button>
             </form>
             <div className="walletDrawerLinks"><a href={deploymentHref}>Open Deployment</a><a href={terminalHref}>Open Terminal</a><a href={portfolioHref}>View Portfolio</a></div>
-            <div className="walletDisabledMutations"><button type="button" onClick={() => updateWallet(detailWallet.id, { archived: !detailWallet.archived, archiveReason: detailWallet.archived ? '' : 'Archived from detail drawer.' }, detailWallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{detailWallet.archived ? 'Restore wallet' : 'Archive wallet'}</button><button type="button" onClick={() => { setFromWalletId(detailWallet.id); openAction('export'); }}>{detailWallet.custodyMode === 'managed-local' && MANAGED_LOCAL_WALLET_BETA_ENABLED ? 'Public record key' : 'Export public record'}</button></div>
+            <div className="walletDisabledMutations"><button type="button" onClick={() => selectWallet(detailWallet)}>Select wallet</button><button type="button" onClick={() => updateWallet(detailWallet.id, { archived: !detailWallet.archived, archiveReason: detailWallet.archived ? '' : 'Archived from detail drawer.' }, detailWallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{detailWallet.archived ? 'Restore wallet' : 'Archive wallet'}</button><button type="button" onClick={() => { setFromWalletId(detailWallet.id); openAction('export'); }}>{detailWallet.custodyMode === 'managed-local' && managedLocalEnabled ? 'Backup / export key' : 'Export public record'}</button></div>
           </aside>
         </div>
       )}
@@ -387,24 +457,25 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
               <div className="walletModalGrid sendModalGrid">
                 <label><span>From wallet</span><select value={fromWallet.id} onChange={(event) => setFromWalletId(event.currentTarget.value)}>{activeWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.role} · {wallet.shortAddress} · {walletSolDisplay(wallet)}</option>)}</select></label>
                 <label><span>Asset</span><select value="SOL" disabled><option>SOL</option><option>SPL token support pending</option></select></label>
-                <label><span>Amount</span><input value={amount} onChange={(event) => setAmount(event.currentTarget.value)} inputMode="decimal" placeholder="0.00" /></label>
+                <label><span>Amount</span><input value={amount} onChange={(event) => setAmount(event.currentTarget.value)} inputMode="decimal" placeholder="0.001" /></label>
                 <div className="walletQuickAmounts"><button type="button" onClick={() => setAmount((fromWallet.balanceSol * 0.25).toFixed(4))}>25%</button><button type="button" onClick={() => setAmount((fromWallet.balanceSol * 0.5).toFixed(4))}>50%</button><button type="button" onClick={() => setAmount(Math.max(0, fromWallet.balanceSol - 0.002).toFixed(4))}>Max</button></div>
                 <label className="wide"><span>Receiver address</span><input value={receiver} onChange={(event) => setReceiver(event.currentTarget.value)} placeholder="Solana receiver address" /></label>
                 <label className="wide"><span>Memo / note</span><input placeholder="Optional local note" /></label>
-                <div className="walletPreflightSummary wide"><strong>Preflight summary</strong><span>From: {fromWallet.role} · {fromWallet.shortAddress}</span><span>To: {receiver || 'Missing receiver address'}</span><span>Amount: {amount || '0'} SOL</span><span>Estimated fee: provider-calculated later</span><span>Remaining balance: {fromWallet.balanceStatus === 'live' ? `${remaining.toFixed(4)} SOL` : fromWallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : 'provider-limited'}</span><span>Signer: browser wallet required</span><span>Live gate: disabled</span><em>Future real send requires live gate, browser-wallet signing, explicit confirmation, and unsigned transaction build.</em></div>
-                <button className="walletModalPrimary wide" type="button" onClick={runSendPreflight} disabled={loading || !receiver || !amount}>{loading ? 'Checking…' : 'Run gated unsigned-build check'}</button>
+                <div className="walletPreflightSummary wide"><strong>Preflight summary</strong><span>From: {fromWallet.role} · {fromWallet.shortAddress}</span><span>To: {receiver || 'Missing receiver address'}</span><span>Amount: {amount || '0'} SOL</span><span>Estimated fee: provider-calculated later</span><span>Remaining balance: {fromWallet.balanceStatus === 'live' ? `${remaining.toFixed(4)} SOL` : fromWallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : 'provider-limited'}</span><span>Signer: {selectedActiveWallet === fromWallet.address ? 'selected wallet matches source' : 'browser selected wallet must match source'}</span><span>Funding gate: {fundingGateEnabled ? 'enabled' : 'disabled'}</span><span>Funding test: {fundingTestShape ? 'approved shape' : 'not approved shape'}</span><em>This Wallet Center only builds the approved funding-test transfer. Arbitrary sends stay disabled until a broader send policy exists.</em></div>
+                <button className="walletModalPrimary wide" type="button" onClick={useFundingTest}>Load capped funding test</button>
+                <button className="walletModalPrimary wide" type="button" onClick={runSendPreflight} disabled={loading || !fundingTestShape}>{loading ? 'Checking…' : fundingTestShape ? 'Run gated unsigned-build check' : 'Load approved funding test first'}</button>
               </div>
             )}
             {action === 'receive' && receiveWallet && (
               <div className="walletReceivePanel"><label><span>Wallet</span><select value={receiveWallet.id} onChange={(event) => setReceiveWalletId(event.currentTarget.value)}>{activeWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.role} · {wallet.shortAddress}</option>)}</select></label><div className="walletQrPlaceholder">QR</div><div className="walletAddressBlock"><span>Receive address</span><strong>{receiveWallet.address}</strong><input readOnly value={receiveWallet.address} /></div><div className="walletPreflightSummary"><span>Balance: {walletSolDisplay(receiveWallet)}</span><span>Status: {receiveWallet.status}</span><span>Group: {receiveWallet.groupName}</span><em>Only send Solana assets to this address.</em></div><div className="walletDrawerLinks"><a href={`https://solscan.io/account/${receiveWallet.address}`} target="_blank" rel="noreferrer">Solscan</a><a href={portfolioHref}>Portfolio</a><a href={terminalHref}>Terminal</a></div></div>
             )}
             {action === 'group' && <div className="walletScaffoldPanel"><strong>Manage wallet groups</strong><p>Create local wallet groups and review membership. Project assignment remains preserved until explicitly changed elsewhere.</p><div className="walletModalGrid"><label><span>New group name</span><input value={groupNameInput} onChange={(event) => setGroupNameInput(event.currentTarget.value)} placeholder="Launch group" /></label><label><span>Scope</span><input value="project" disabled onChange={() => {}} /></label></div><button className="walletModalPrimary" type="button" disabled={loading || !groupNameInput} onClick={createGroup}>{loading ? 'Creating…' : 'Create group'}</button><div className="walletGroupSummaryList">{groups.map((group) => <div key={group.id}><strong>{group.name}</strong><span>{group.activeCount} active · {group.archivedCount} archived · {group.projectNames.join(', ') || 'unassigned'}</span></div>)}</div></div>}
-            {['create', 'import'].includes(action) && !MANAGED_LOCAL_WALLET_BETA_ENABLED && <div className="walletScaffoldPanel"><strong>Managed local wallets disabled for beta</strong><p>Browser-wallet beta only supports Phantom/Solflare custody and watch-only public address records. No private-key import, generation, reveal, or vault custody is available in this beta lane.</p><button className="walletModalPrimary" type="button" onClick={() => setAction('phantom')}>Connect Phantom instead</button><button className="walletModalPrimary" type="button" onClick={() => setAction('track')}>Track watch-only address</button></div>}
-            {['create', 'import'].includes(action) && MANAGED_LOCAL_WALLET_BETA_ENABLED && <div className="walletScaffoldPanel"><strong>{action === 'create' ? 'Create Local Wallet' : 'Import Local Wallet'}</strong><p>{action === 'create' ? 'Generate a new Solana wallet, encrypt it into Bond.Terminal’s local vault, then immediately back up/export the private key before funding.' : 'Paste an existing Solana private key, preview the derived public address, then encrypt it into Bond.Terminal’s local vault. Public address tracking belongs under Track Address.'}</p><div className="walletCustodyExplainer"><span>Custody mode</span><strong>Managed local vault</strong><em>{action === 'create' ? 'New keypair generated by Bond.Terminal local vault' : 'Existing private key encrypted into Bond.Terminal local vault'} · no signing · no broadcast</em></div><div className="walletModalGrid"><label><span>Wallet name</span><input value={roleInput} onChange={(event) => setRoleInput(event.currentTarget.value)} placeholder="Launch Wallet 01" /></label><label><span>Wallet group</span><select value={groupInput} onChange={(event) => setGroupInput(event.currentTarget.value)}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{action === 'import' && <><label className="wide"><span>Private key</span><textarea value={privateKeyInput} onChange={(event) => { setPrivateKeyInput(event.currentTarget.value); setImportPreview(null); }} placeholder="Paste base58 Solana private key or JSON byte array. Seed phrases are intentionally not accepted yet." autoComplete="off" /></label><div className="walletImportPreview wide"><button type="button" onClick={previewImportPrivateKey} disabled={loading || !privateKeyInput}>{loading ? 'Checking…' : 'Preview derived address'}</button>{importPreview && <span>{importPreview.exists ? 'Already tracked — cannot import duplicate: ' : 'Derived address: '}{importPreview.publicKey}</span>}</div></>}<label><span>Bond.Terminal vault password</span><input type="password" value={vaultPassphrase} onChange={(event) => setVaultPassphrase(event.currentTarget.value)} autoComplete="new-password" placeholder="8+ characters" /></label><label><span>Confirm Bond.Terminal vault password</span><input type="password" value={vaultPassphraseConfirm} onChange={(event) => setVaultPassphraseConfirm(event.currentTarget.value)} autoComplete="new-password" /></label><label className="wide"><span>Purpose / note</span><input value={purposeInput} onChange={(event) => setPurposeInput(event.currentTarget.value)} /></label></div><button className="walletModalPrimary danger" type="button" disabled={loading || !groupInput || vaultPassphrase.length < 8 || vaultPassphrase !== vaultPassphraseConfirm || (action === 'import' && (!privateKeyInput || !importPreview || importPreview.exists))} onClick={() => createManagedWallet(action === 'import')}>{loading ? 'Encrypting…' : action === 'create' ? 'Create Local Wallet' : 'Import Local Wallet'}</button>{lastManagedWallet && <div className="walletPostCreatePanel"><strong>{lastManagedWallet.role} is in the vault</strong><span>{lastManagedWallet.address}</span><p>Next required step: export/backup the private key before funding this wallet.</p><button className="walletModalPrimary" type="button" onClick={() => { setFromWalletId(lastManagedWallet.id); setAction('export'); }}>Back up this wallet now</button></div>}<p className="walletSecurityFootnote">Bond.Terminal stores no seed phrase and does not sign/broadcast. This password encrypts Bond.Terminal-managed wallets only. Phantom/browser wallets are separate and authorize by signing in the browser.</p></div>}
+            {['create', 'import'].includes(action) && !managedLocalEnabled && <div className="walletScaffoldPanel"><strong>Managed local wallets disabled</strong><p>The encrypted vault UI is present, but the production/local environment must set WALLET_VAULT_BETA_ENABLED=true before creating, importing, or exporting managed-local private keys. Use Phantom/Solflare or Track Address until that gate is deliberately enabled.</p><button className="walletModalPrimary" type="button" onClick={() => setAction('phantom')}>Connect Phantom instead</button><button className="walletModalPrimary" type="button" onClick={() => setAction('track')}>Track watch-only address</button></div>}
+            {['create', 'import'].includes(action) && managedLocalEnabled && <div className="walletScaffoldPanel"><strong>{action === 'create' ? 'Create Managed-Local Wallet' : 'Import Managed-Local Wallet'}</strong><p>{action === 'create' ? 'Generate a new Solana wallet, encrypt it into Bond.Terminal’s local vault, then immediately back up/export the private key before funding.' : 'Paste an existing Solana private key, preview the derived public address, then encrypt it into Bond.Terminal’s local vault. Public address tracking belongs under Track Address.'}</p><div className="walletCustodyExplainer"><span>Custody mode</span><strong>Managed local vault</strong><em>{action === 'create' ? 'New keypair generated by Bond.Terminal local vault' : 'Existing private key encrypted into Bond.Terminal local vault'} · no signing · no broadcast</em></div><div className="walletModalGrid"><label><span>Wallet name</span><input value={roleInput} onChange={(event) => setRoleInput(event.currentTarget.value)} placeholder="Launch Wallet 01" /></label><label><span>Wallet group</span><select value={groupInput} onChange={(event) => setGroupInput(event.currentTarget.value)}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{action === 'import' && <><label className="wide"><span>Private key</span><textarea value={privateKeyInput} onChange={(event) => { setPrivateKeyInput(event.currentTarget.value); setImportPreview(null); }} placeholder="Paste base58 Solana private key or JSON byte array. Seed phrases are intentionally not accepted yet." autoComplete="off" /></label><div className="walletImportPreview wide"><button type="button" onClick={previewImportPrivateKey} disabled={loading || !privateKeyInput}>{loading ? 'Checking…' : 'Preview derived address'}</button>{importPreview && <span>{importPreview.exists ? 'Already tracked — cannot import duplicate: ' : 'Derived address: '}{importPreview.publicKey}</span>}</div></>}<label><span>Bond.Terminal vault password</span><input type="password" value={vaultPassphrase} onChange={(event) => setVaultPassphrase(event.currentTarget.value)} autoComplete="new-password" placeholder="8+ characters" /></label><label><span>Confirm Bond.Terminal vault password</span><input type="password" value={vaultPassphraseConfirm} onChange={(event) => setVaultPassphraseConfirm(event.currentTarget.value)} autoComplete="new-password" /></label><label className="wide"><span>Purpose / note</span><input value={purposeInput} onChange={(event) => setPurposeInput(event.currentTarget.value)} /></label></div><button className="walletModalPrimary danger" type="button" disabled={loading || !groupInput || vaultPassphrase.length < 8 || vaultPassphrase !== vaultPassphraseConfirm || (action === 'import' && (!privateKeyInput || !importPreview || importPreview.exists))} onClick={() => createManagedWallet(action === 'import')}>{loading ? 'Encrypting…' : action === 'create' ? 'Create Managed Wallet' : 'Import Managed Wallet'}</button>{lastManagedWallet && <div className="walletPostCreatePanel"><strong>{lastManagedWallet.role} is in the vault</strong><span>{lastManagedWallet.address}</span><p>Next required step: export/backup the private key before funding this wallet.</p><button className="walletModalPrimary" type="button" onClick={() => { setFromWalletId(lastManagedWallet.id); setAction('export'); }}>Back up this wallet now</button></div>}<p className="walletSecurityFootnote">Bond.Terminal stores no seed phrase and does not sign/broadcast. This password encrypts Bond.Terminal-managed wallets only. Phantom/browser wallets are separate and authorize by signing in the browser.</p></div>}
 
             {action === 'track' && <div className="walletScaffoldPanel"><strong>Track public address</strong><p>Use this for watch-only monitoring. It stores only a public Solana address and cannot sign, trade, or export a private key.</p><div className="walletCustodyExplainer"><span>Custody mode</span><strong>Watch-only record</strong><em>Public address only · no key material · no recovery export</em></div><div className="walletModalGrid"><label><span>Role / label</span><input value={roleInput} onChange={(event) => setRoleInput(event.currentTarget.value)} placeholder="observed wallet" /></label><label><span>Group</span><select value={groupInput} onChange={(event) => setGroupInput(event.currentTarget.value)}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label className="wide"><span>Public address</span><input value={addressInput} onChange={(event) => setAddressInput(event.currentTarget.value)} placeholder="Solana public address only" /></label><label className="wide"><span>Purpose</span><input value={purposeInput} onChange={(event) => setPurposeInput(event.currentTarget.value)} /></label></div><button className="walletModalPrimary" type="button" disabled={loading || !addressInput || !groupInput} onClick={() => createWatchOnlyWallet('imported')}>{loading ? 'Saving…' : 'Track watch-only address'}</button></div>}
 
-            {action === 'export' && fromWallet && <div className="walletScaffoldPanel"><strong>{fromWallet.custodyMode === 'managed-local' ? 'Public record managed wallet' : 'Export watch-only record'}</strong><p>{fromWallet.custodyMode === 'managed-local' ? 'This is the recovery path for a managed-local wallet. Unlock the vault, type the exact confirmation, copy the key, then store it somewhere safe before funding.' : 'This wallet is watch-only. Bond.Terminal can export the public tracking record, but there is no private key to recover.'}</p><div className="walletPreflightSummary"><span>Wallet: {fromWallet.role}</span><span>Address: {fromWallet.address}</span><span>Custody: {fromWallet.custodyMode ?? 'watch-only'}</span><span>Backup status: {fromWallet.custodyMode === 'managed-local' ? fromWallet.keyExportedAt ? `exported ${fromWallet.keyExportedAt}` : 'backup needed' : 'watch-only no key'}</span><em>Anyone with a private key controls funds. Phantom cannot authorize export of a Bond.Terminal vault key; this export decrypts the local vault only.</em></div><textarea className="walletExportRecord" readOnly value={JSON.stringify({ id: fromWallet.id, role: fromWallet.role, address: fromWallet.address, groupId: fromWallet.groupId, groupName: fromWallet.groupName, status: fromWallet.status, scope: fromWallet.scope, custodyMode: fromWallet.custodyMode ?? 'watch-only', purpose: fromWallet.purpose, archived: fromWallet.archived }, null, 2)} /><button className="walletModalPrimary" type="button" onClick={() => navigator.clipboard?.writeText(JSON.stringify({ id: fromWallet.id, role: fromWallet.role, address: fromWallet.address, groupId: fromWallet.groupId, custodyMode: fromWallet.custodyMode ?? 'watch-only' }, null, 2)).then(() => setMessage({ type: 'ok', text: 'Public wallet record copied.' })).catch(() => setMessage({ type: 'warn', text: 'Copy failed in this browser context.' }))}>Copy public record</button>{fromWallet.custodyMode === 'managed-local' && MANAGED_LOCAL_WALLET_BETA_ENABLED ? <><label><span>Bond.Terminal vault password</span><input type="password" value={vaultPassphrase} onChange={(event) => setVaultPassphrase(event.currentTarget.value)} autoComplete="off" /></label><label><span>Type confirmation</span><input value={exportConfirmation} onChange={(event) => setExportConfirmation(event.currentTarget.value)} placeholder="EXPORT PRIVATE KEY" /></label><button className="walletModalPrimary danger" type="button" disabled={loading || !vaultPassphrase || exportConfirmation !== 'EXPORT PRIVATE KEY'} onClick={exportPrivateKey}>{loading ? 'Decrypting…' : 'Reveal private key for backup'}</button>{exportedSecret && <div className="walletSecretReveal"><strong>Private key — copy now and store securely</strong><textarea readOnly value={exportedSecret} /><button type="button" onClick={() => navigator.clipboard?.writeText(exportedSecret)}>Copy private key</button><button type="button" onClick={() => { setExportedSecret(''); setVaultPassphrase(''); setExportConfirmation(''); }}>Clear revealed key</button><em>For safety, Bond.Terminal clears this reveal from browser state after 60 seconds or when you close/switch actions.</em></div>}</> : <button className="walletModalPrimary danger" type="button" disabled>{fromWallet.custodyMode === 'managed-local' ? 'Private-key export disabled for browser-wallet beta' : 'No private key: watch-only record'}</button>}</div>}
+            {action === 'export' && fromWallet && <div className="walletScaffoldPanel"><strong>{fromWallet.custodyMode === 'managed-local' ? 'Backup managed-local wallet' : 'Export public wallet record'}</strong><p>{fromWallet.custodyMode === 'managed-local' ? 'This is the recovery path for a managed-local wallet. Unlock the vault, type the exact confirmation, copy the key, then store it somewhere safe before funding.' : 'This wallet is watch-only or browser-wallet linked. Bond.Terminal can export the public tracking record, but there is no private key to recover.'}</p><div className="walletPreflightSummary"><span>Wallet: {fromWallet.role}</span><span>Address: {fromWallet.address}</span><span>Custody: {fromWallet.custodyMode ?? 'watch-only'}</span><span>Backup status: {fromWallet.custodyMode === 'managed-local' ? fromWallet.keyExportedAt ? `exported ${fromWallet.keyExportedAt}` : 'backup needed' : 'no Bond.Terminal private key'}</span><em>Anyone with a private key controls funds. Phantom cannot authorize export of a Bond.Terminal vault key; this export decrypts the local vault only.</em></div><textarea className="walletExportRecord" readOnly value={JSON.stringify({ id: fromWallet.id, role: fromWallet.role, address: fromWallet.address, groupId: fromWallet.groupId, groupName: fromWallet.groupName, status: fromWallet.status, scope: fromWallet.scope, custodyMode: fromWallet.custodyMode ?? 'watch-only', purpose: fromWallet.purpose, archived: fromWallet.archived }, null, 2)} /><button className="walletModalPrimary" type="button" onClick={() => navigator.clipboard?.writeText(JSON.stringify({ id: fromWallet.id, role: fromWallet.role, address: fromWallet.address, groupId: fromWallet.groupId, custodyMode: fromWallet.custodyMode ?? 'watch-only' }, null, 2)).then(() => setMessage({ type: 'ok', text: 'Public wallet record copied.' })).catch(() => setMessage({ type: 'warn', text: 'Copy failed in this browser context.' }))}>Copy public record</button>{fromWallet.custodyMode === 'managed-local' && managedLocalEnabled ? <><label><span>Bond.Terminal vault password</span><input type="password" value={vaultPassphrase} onChange={(event) => setVaultPassphrase(event.currentTarget.value)} autoComplete="off" /></label><label><span>Type confirmation</span><input value={exportConfirmation} onChange={(event) => setExportConfirmation(event.currentTarget.value)} placeholder="EXPORT PRIVATE KEY" /></label><button className="walletModalPrimary danger" type="button" disabled={loading || !vaultPassphrase || exportConfirmation !== 'EXPORT PRIVATE KEY'} onClick={exportPrivateKey}>{loading ? 'Decrypting…' : 'Reveal private key for backup'}</button>{exportedSecret && <div className="walletSecretReveal"><strong>Private key — copy now and store securely</strong><textarea readOnly value={exportedSecret} /><button type="button" onClick={() => navigator.clipboard?.writeText(exportedSecret)}>Copy private key</button><button type="button" onClick={() => { setExportedSecret(''); setVaultPassphrase(''); setExportConfirmation(''); }}>Clear revealed key</button><em>For safety, Bond.Terminal clears this reveal from browser state after 60 seconds or when you close/switch actions.</em></div>}</> : <button className="walletModalPrimary danger" type="button" disabled>{fromWallet.custodyMode === 'managed-local' ? 'Private-key export disabled until vault gate is enabled' : 'No private key: public record only'}</button>}</div>}
             {action === 'archive' && <div className="walletScaffoldPanel"><strong>Archive / restore wallet</strong><p>Select a wallet and toggle archived state. This only changes the local Bond.Terminal record and activity log.</p><label><span>Wallet</span><select value={fromWallet?.id ?? ''} onChange={(event) => setFromWalletId(event.currentTarget.value)}>{wallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.role} · {wallet.shortAddress} · {wallet.archived ? 'archived' : 'active'}</option>)}</select></label>{fromWallet && <button className="walletModalPrimary" type="button" disabled={loading} onClick={() => updateWallet(fromWallet.id, { archived: !fromWallet.archived, archiveReason: fromWallet.archived ? '' : 'Archived from Wallet Ops modal.' }, fromWallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{fromWallet.archived ? 'Restore wallet' : 'Archive wallet'}</button>}</div>}
           </section>
         </div>

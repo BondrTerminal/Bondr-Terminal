@@ -8,7 +8,7 @@ import { getSolanaRpcHealth } from '../../lib/rpc-health';
 import { MeridianStatusBadge } from '../components/MeridianStatusBadge';
 import { PortfolioPnlChart } from './components/PortfolioPnlChart';
 import { WalletRailStatus } from '../components/WalletRailStatus';
-import { PortfolioWalletGrid } from './components/PortfolioWalletGrid';
+import { WalletBoardActions } from '../wallets/components/WalletBoardActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +53,16 @@ function safeDisplay(value: unknown, fallback = '—') {
     .replace(/SOLANA_RPC_URL\.rtf/g, 'local RPC note');
 }
 
+function walletRoleBadge(role: unknown) {
+  const value = String(role ?? '').toLowerCase();
+  if (value.includes('treasury')) return 'treasury';
+  if (value.includes('deployer')) return 'deployer';
+  if (value.includes('launch')) return 'launch';
+  if (value.includes('reserve')) return 'reserve';
+  if (value.includes('dev')) return 'deployer';
+  return 'trading';
+}
+
 export default async function PortfolioPage({ searchParams }: PortfolioPageProps) {
   const params = await searchParams;
   const view = params?.view ?? 'spot';
@@ -72,6 +82,14 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
   const snapshotWallets = asRows(snapshot.wallets.data.rows);
   const holdings = asRows(snapshot.holdings.data.rows);
   const walletSnapshotById = new Map(snapshotWallets.map((wallet) => [String(wallet.id), wallet]));
+  const walletGroupById = new Map(store.walletGroups.map((group) => [group.id, group]));
+  const projectByWalletGroupId = new Map(store.projects.map((project) => [project.walletGroupId, project]));
+  const walletActivity = asRows(store.walletActivity ?? []);
+  const walletActivityByWalletId = new Map<string, Json>();
+  for (const entry of walletActivity) {
+    const walletId = String(entry.walletId ?? '');
+    if (walletId && !walletActivityByWalletId.has(walletId)) walletActivityByWalletId.set(walletId, entry);
+  }
   const tokenStatsByWallet = new Map<string, { tokenCount: number; tokenValueUsd: number | null; status: string }>();
   for (const holding of holdings) {
     for (const account of asRows(holding.tokenAccounts)) {
@@ -94,17 +112,43 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
         id: wallet.id,
         role: wallet.role,
         address: wallet.address,
+        shortAddress: shortAddress(wallet.address),
         scope: wallet.scope,
         groupId: wallet.groupId,
+        groupName: walletGroupById.get(wallet.groupId)?.name ?? wallet.groupId,
+        projectName: projectByWalletGroupId.get(wallet.groupId)?.name ?? null,
+        projectId: projectByWalletGroupId.get(wallet.groupId)?.id ?? null,
         status: wallet.status,
         purpose: wallet.purpose,
+        roleBadge: walletRoleBadge(wallet.role),
         custodyMode: wallet.custodyMode ?? 'watch-only',
+        vaultKeyId: wallet.vaultKeyId ?? null,
+        keyExportedAt: wallet.keyExportedAt ?? null,
         archived: Boolean(wallet.archived),
+        balanceSol: Number(hydrated.solBalance ?? hydrated.balanceSol ?? wallet.balanceSol ?? 0),
+        balanceStatus: text(hydrated.balanceStatus, snapshot.wallets.status),
+        balanceSource: text(hydrated.balanceSource, snapshot.wallets.source),
+        balanceNote: text(hydrated.balanceNote ?? hydrated.note, snapshot.wallets.note ?? 'Wallet balance source unavailable.'),
         tokenCount: tokenStats?.tokenCount ?? 0,
         tokenValueUsd: tokenStats?.tokenValueUsd ?? null,
-        tokenStatus: tokenStats?.status ?? (holdings.length ? 'zero-current-holdings' : snapshot.holdings.status)
+        tokenStatus: tokenStats?.status ?? (holdings.length ? 'zero-current-holdings' : snapshot.holdings.status),
+        lastActivity: String((walletActivityByWalletId.get(wallet.id)?.timestamp ?? wallet.lastActivityAt ?? wallet.createdAt ?? '—')).slice(0, 10),
+        lastActivityDetail: text(walletActivityByWalletId.get(wallet.id)?.message, wallet.purpose)
       };
     });
+  const walletGroups = store.walletGroups.map((group) => {
+    const groupWallets = store.wallets.filter((wallet) => wallet.groupId === group.id);
+    const projectNames = store.projects.filter((project) => project.walletGroupId === group.id).map((project) => project.name);
+    return {
+      id: group.id,
+      name: group.name,
+      scope: group.scope,
+      walletCount: groupWallets.length,
+      activeCount: groupWallets.filter((wallet) => !wallet.archived).length,
+      archivedCount: groupWallets.filter((wallet) => wallet.archived).length,
+      projectNames
+    };
+  });
   const activePositions = asRows(snapshot.positions.data.active).filter((row) => {
     if (!search) return true;
     return [row.name, row.symbol, row.mint].some((value) => String(value ?? '').toLowerCase().includes(search));
@@ -177,9 +221,19 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
 
         {view === 'wallets' ? (
           <section className="portfolioWalletsView">
-            <div className="portfolioPanelTitle"><div><span>BONDR Portfolio</span><strong>Wallets</strong><small>Canonical wallet/spot interface. Public records only; browser signer custody stays in the browser wallet.</small></div><div className="portfolioActionStack"><a href="/profile">Connect signer</a></div></div>
-            <PortfolioWalletGrid wallets={walletRows} projectId={selectedContext?.project.id ?? null} />
-
+            <WalletBoardActions
+              wallets={walletRows}
+              groups={walletGroups}
+              selectedProjectName={selectedContext?.project.name}
+              selectedProjectId={selectedContext?.project.id}
+              selectedGroupId={selectedContext?.project.walletGroupId}
+              totalSol={Number(snapshot.wallets.data.totalSol ?? 0)}
+              activeCount={walletRows.filter((wallet) => !wallet.archived).length}
+              archivedCount={walletRows.filter((wallet) => wallet.archived).length}
+              hydrationStatus={snapshot.wallets.status}
+              hydrationProvider={snapshot.wallets.source}
+              managedLocalEnabled={process.env.WALLET_VAULT_BETA_ENABLED === 'true'}
+            />
           </section>
         ) : (
           <>
