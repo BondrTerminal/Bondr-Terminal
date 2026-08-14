@@ -38,7 +38,7 @@ export function AccountNavButton() {
       </summary>
       <div className="accountNavPanel">
         <div className="accountNavPanelHead">
-          <span>{account.authenticated ? 'Operator identity' : 'Bond.Terminal account'}</span>
+          <span>{account.authenticated ? 'Operator identity' : 'Bondr.terminal account'}</span>
           <strong>{account.authenticated ? 'Connected' : account.configured ? 'Ready to log in' : 'Configuration needed'}</strong>
         </div>
         <div className="accountNavMeta">

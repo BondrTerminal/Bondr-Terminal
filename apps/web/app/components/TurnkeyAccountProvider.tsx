@@ -246,7 +246,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     login: async () => {
       sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
       setDebug((current) => ({ ...current, lastEvent: 'login-modal-opened', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, 'login modal opened') }));
-      await turnkey.handleLogin({ title: 'Log in to Bond.Terminal' });
+      await turnkey.handleLogin({ title: 'Log in to Bondr.terminal' });
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
     logout: async () => {
