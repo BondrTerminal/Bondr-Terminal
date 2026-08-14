@@ -1,4 +1,5 @@
 import { allProjectFlow, eventsForProject, formatSol, projectFlow, projectNextAction, readinessScore } from '../../lib/meridian-store';
+import Link from 'next/link';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { CreateProjectForm } from './components/CreateProjectForm';
 
@@ -37,7 +38,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           <div className="eyebrow">Projects</div>
           <h1>{selectedProject ? `${selectedProject.name} command view.` : 'Real project command center.'}</h1>
           <p>Track real project records, launch configuration, stored flow events, and routing into Deployment, Terminal, Wallets, and Portfolio. Empty state is intentional until you create a project.</p>
-          <div className="projectHeroActions"><a href="/deployment">Open Launch Prep</a><a href="/sniper">Open Terminal</a><a href="/portfolio">Open Portfolio</a></div>
+          <div className="projectHeroActions"><Link href="/deployment">Open Launch Prep</Link><Link href="/sniper">Open Terminal</Link><Link href="/portfolio">Open Portfolio</Link></div>
         </section>
 
         <section className="projectDashboardKpiGrid" aria-label="Project dashboard KPIs">
@@ -65,17 +66,17 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
               const readiness = readinessScore(project, store);
               const terminalHref = `/sniper?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`;
               return <div className="projectRow projectDashboardRow" role="row" key={project.id}>
-                <a href={`/projects/${project.id}`}><strong>{project.name}</strong><small>{project.ticker}</small></a>
+                <Link href={`/projects/${project.id}`}><strong>{project.name}</strong><small>{project.ticker}</small></Link>
                 <span>{project.status}</span><span>{project.launchPath}</span><span>{project.tokenMint ? `${project.tokenMint.slice(0, 6)}…${project.tokenMint.slice(-5)}` : 'Not launched'}</span><span>{project.pool ? `${project.pool.slice(0, 6)}…${project.pool.slice(-5)}` : 'Not created'}</span>
                 <span className={flow.netSol >= 0 ? 'profitText' : 'dangerText'}>{formatSol(flow.netSol)}</span><span>{(flow.buysSol + flow.sellsSol).toFixed(2)} SOL</span><span>{readiness.score}%</span>
-                <span className="inlineActionStack"><a href={`/projects/${project.id}`}>Inspect</a><a href={terminalHref}>Terminal</a><a href={`/deployment?project=${project.id}`}>Launch Prep</a><a href={`/portfolio?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`}>Portfolio</a></span>
+                <span className="inlineActionStack"><Link href={`/projects/${project.id}`}>Inspect</Link><Link href={terminalHref}>Terminal</Link><Link href={`/deployment?project=${project.id}`}>Launch Prep</Link><Link href={`/portfolio?project=${project.id}${project.tokenMint ? `&mint=${project.tokenMint}` : ''}`}>Portfolio</Link></span>
               </div>;
             }) : <div className="emptyPortfolioState">No projects yet. Create a project to start configuring launch state.</div>}
           </div>
         </section>
 
         <section className="projectOpsGrid projectDashboardOpsGrid">
-          <section className="documentCard projectActionQueue"><div className="sectionIntro compactIntro"><span>Next actions</span><h2>Operator routing</h2><p>Routes only appear for stored project records.</p></div><div className="linkStack projectActionLinks">{store.projects.length ? store.projects.map((project) => { const action = projectNextAction(project, store); return <a href={action.href} key={`${project.id}-${action.label}`}><strong>{project.name}</strong><span>{action.label}</span></a>; }) : <p>No stored project actions yet.</p>}</div></section>
+          <section className="documentCard projectActionQueue"><div className="sectionIntro compactIntro"><span>Next actions</span><h2>Operator routing</h2><p>Routes only appear for stored project records.</p></div><div className="linkStack projectActionLinks">{store.projects.length ? store.projects.map((project) => { const action = projectNextAction(project, store); return <Link href={action.href} key={`${project.id}-${action.label}`}><strong>{project.name}</strong><span>{action.label}</span></Link>; }) : <p>No stored project actions yet.</p>}</div></section>
           <section className="documentCard projectCoveragePanel"><div className="sectionIntro compactIntro"><span>Recent history</span><h2>Audit feed</h2><p>Latest stored project events.</p></div><div className="infoGrid deploymentChecklist">{store.projects.flatMap((project) => eventsForProject(project.id, store).slice(0, 1).map((event) => <div className="sideRow" key={event.id}><span>{project.name}</span><strong>{event.module}: {event.message}</strong></div>)).length ? store.projects.flatMap((project) => eventsForProject(project.id, store).slice(0, 1).map((event) => <div className="sideRow" key={event.id}><span>{project.name}</span><strong>{event.module}: {event.message}</strong></div>)) : <p>No project events yet.</p>}</div></section>
         </section>
       </div>

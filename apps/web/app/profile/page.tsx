@@ -1,4 +1,5 @@
 import { ProfileLogin } from './components/ProfileLogin';
+import Link from 'next/link';
 import { TurnkeyProfileLogin } from './components/TurnkeyProfileLogin';
 import { OperatorSessionLogin } from './components/OperatorSessionLogin';
 import { LiveBetaStatus } from '../components/LiveBetaStatus';
@@ -18,7 +19,7 @@ export default function ProfilePage() {
         <LiveBetaStatus surface="profile" />
         <OperatorSessionLogin />
         <WalletRailStatus surface="profile" />
-        <section className="documentCard"><div className="sectionIntro compactIntro"><span>Readiness</span><h2>Signing readiness harness</h2><p>Use the harness to verify quote, unsigned build, simulation, and browser-wallet signing as separate phases before any live execution approval.</p></div><a className="button secondary" href="/live-beta-test">Open signing test harness</a></section>
+        <section className="documentCard"><div className="sectionIntro compactIntro"><span>Readiness</span><h2>Signing readiness harness</h2><p>Use the harness to verify quote, unsigned build, simulation, and browser-wallet signing as separate phases before any live execution approval.</p></div><Link className="button secondary" href="/live-beta-test">Open signing test harness</Link></section>
         <TurnkeyProfileLogin />
         <ProfileLogin />
       </div>

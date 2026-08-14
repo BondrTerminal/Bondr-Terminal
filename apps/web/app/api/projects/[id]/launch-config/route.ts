@@ -72,6 +72,10 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
   if (!walletId) return null;
   const executionPhase = ['dev', 'bundle', 'sniper', 'task', 'observe'].includes(String(item.executionPhase)) ? item.executionPhase : undefined;
   const taskType = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'].includes(String(item.taskType)) ? item.taskType : undefined;
+  const taskPreset = ['fast-paced-balance', 'smooth-flow', 'custom'].includes(String(item.taskPreset)) ? item.taskPreset : 'custom';
+  const taskWalletRotation = ['random', 'sequential', 'balanced'].includes(String(item.taskWalletRotation)) ? item.taskWalletRotation : 'random';
+  const taskTradeSizeMode = ['mixed', 'fixed', 'randomized'].includes(String(item.taskTradeSizeMode)) ? item.taskTradeSizeMode : 'mixed';
+  const taskExternalResponse = ['off', 'defensive', 'follow-flow'].includes(String(item.taskExternalResponse)) ? item.taskExternalResponse : 'off';
   return {
     walletId,
     role: stringField(item.role, fallbackRole, 80),
@@ -86,12 +90,26 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
     perTxSellCapPct: numberField(item.perTxSellCapPct, 25, 0, 100),
     cooldownSeconds: numberField(item.cooldownSeconds, 60, 0, 86400),
     taskType,
+    taskName: stringField(item.taskName, '', 120),
+    taskPreset,
     taskAmountSol: numberField(item.taskAmountSol, 0, 0, 1000),
     taskSellPercent: numberField(item.taskSellPercent, 0, 0, 100),
     taskMaxTotalSol: numberField(item.taskMaxTotalSol, 0, 0, 1000),
     taskDelaySeconds: numberField(item.taskDelaySeconds, 0, 0, 604800),
     taskIntervalSeconds: numberField(item.taskIntervalSeconds, 0, 0, 604800),
-    taskMaxExecutions: numberField(item.taskMaxExecutions, 1, 1, 1000)
+    taskMaxExecutions: numberField(item.taskMaxExecutions, 1, 1, 1000),
+    taskBuyPowerPct: numberField(item.taskBuyPowerPct, 50, 0, 100),
+    taskSellPowerPct: numberField(item.taskSellPowerPct, 50, 0, 100),
+    taskSellMinPct: numberField(item.taskSellMinPct, 5, 0, 100),
+    taskSellMaxPct: numberField(item.taskSellMaxPct, 35, 0, 100),
+    taskBuyMinSol: numberField(item.taskBuyMinSol, 0, 0, 1000),
+    taskBuyMaxSol: numberField(item.taskBuyMaxSol, item.taskAmountSol ?? 0, 0, 1000),
+    taskDelayMinMs: numberField(item.taskDelayMinMs, 500, 0, 604800000),
+    taskDelayMaxMs: numberField(item.taskDelayMaxMs, 4000, 0, 604800000),
+    taskWalletRotation,
+    taskTradeSizeMode,
+    taskPriorityFeeSol: numberField(item.taskPriorityFeeSol, 0, 0, 10),
+    taskExternalResponse
   };
 }
 

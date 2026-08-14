@@ -7,6 +7,7 @@ const organizationId = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ?? proces
 const authProxyConfigId = process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID ?? process.env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID ?? '';
 const configured = Boolean(organizationId && authProxyConfigId);
 const VERIFIED_AUTH_KEY = 'bondr_verified_auth';
+const VERIFIED_AUTH_SESSION_KEY = 'bondr_verified_auth_session';
 const PENDING_LOGIN_KEY = 'bondr_pending_login';
 const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
 
@@ -128,6 +129,33 @@ function normalizeVerifiedSession(session: TurnkeyAuthSessionLike | undefined): 
   };
 }
 
+function readStoredVerifiedSession(): VerifiedTurnkeySession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(VERIFIED_AUTH_SESSION_KEY) ?? 'null') as TurnkeyAuthSessionLike | null;
+    return normalizeVerifiedSession(parsed ?? undefined);
+  } catch {
+    sessionStorage.removeItem(VERIFIED_AUTH_SESSION_KEY);
+    return null;
+  }
+}
+
+function storeVerifiedSession(session: VerifiedTurnkeySession) {
+  sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
+  sessionStorage.setItem(VERIFIED_AUTH_SESSION_KEY, JSON.stringify({
+    userId: session.userId,
+    organizationId: session.organizationId,
+    expiry: session.expiry,
+    publicKey: session.publicKey
+  }));
+}
+
+function clearStoredVerifiedSession() {
+  sessionStorage.removeItem(VERIFIED_AUTH_KEY);
+  sessionStorage.removeItem(VERIFIED_AUTH_SESSION_KEY);
+  sessionStorage.removeItem(PENDING_LOGIN_KEY);
+}
+
 function sessionExpiryIso(expiry: unknown) {
   if (typeof expiry === 'number' && Number.isFinite(expiry)) return new Date(expiry * 1000).toISOString();
   return maybeString(expiry);
@@ -211,7 +239,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
     setVerifiedSession(verified);
     setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'session observed') }));
-    sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
+    storeVerifiedSession(verified);
     if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
       sessionStorage.removeItem(PENDING_LOGIN_KEY);
       window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
@@ -252,8 +280,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
     logout: async () => {
       clearVerifiedSession();
       setDebug(() => ({ ...defaultDebugState, lastEvent: 'logout' }));
-      sessionStorage.removeItem(VERIFIED_AUTH_KEY);
-      sessionStorage.removeItem(PENDING_LOGIN_KEY);
+      clearStoredVerifiedSession();
       await turnkey.logout();
     },
     refresh: async () => {
@@ -265,7 +292,8 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, c
 }
 
 export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
-  const [verifiedSession, setVerifiedSession] = useState<VerifiedTurnkeySession | null>(null);
+  const turnkeyConfig = useMemo(() => configured ? configuredTurnkeyConfig() : null, []);
+  const [verifiedSession, setVerifiedSession] = useState<VerifiedTurnkeySession | null>(() => readStoredVerifiedSession());
   const [debug, setDebug] = useState<AuthDebugState>(defaultDebugState);
 
   if (!configured) {
@@ -274,7 +302,7 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
 
   return (
     <TurnkeyProvider
-      config={configuredTurnkeyConfig()}
+      config={turnkeyConfig!}
       callbacks={{
         onAuthenticationSuccess: ({ session, method, action }) => {
           const verified = normalizeVerifiedSession(session);
@@ -292,7 +320,7 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
           }));
           if (!verified) return;
           setVerifiedSession(verified);
-          sessionStorage.setItem(VERIFIED_AUTH_KEY, 'true');
+          storeVerifiedSession(verified);
           if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
             sessionStorage.removeItem(PENDING_LOGIN_KEY);
             window.setTimeout(() => {

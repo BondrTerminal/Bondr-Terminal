@@ -18,12 +18,26 @@ export type WalletPlanEntry = {
   perTxSellCapPct: number;
   cooldownSeconds: number;
   taskType?: 'timed-buy' | 'timed-sell' | 'smart-sell' | 'auto-take-profit' | 'stop-loss' | 'trailing-stop';
+  taskName?: string;
+  taskPreset?: 'fast-paced-balance' | 'smooth-flow' | 'custom';
   taskAmountSol?: number;
   taskSellPercent?: number;
   taskMaxTotalSol?: number;
   taskDelaySeconds?: number;
   taskIntervalSeconds?: number;
   taskMaxExecutions?: number;
+  taskBuyPowerPct?: number;
+  taskSellPowerPct?: number;
+  taskSellMinPct?: number;
+  taskSellMaxPct?: number;
+  taskBuyMinSol?: number;
+  taskBuyMaxSol?: number;
+  taskDelayMinMs?: number;
+  taskDelayMaxMs?: number;
+  taskWalletRotation?: 'random' | 'sequential' | 'balanced';
+  taskTradeSizeMode?: 'mixed' | 'fixed' | 'randomized';
+  taskPriorityFeeSol?: number;
+  taskExternalResponse?: 'off' | 'defensive' | 'follow-flow';
 };
 
 export type LaunchConfig = {

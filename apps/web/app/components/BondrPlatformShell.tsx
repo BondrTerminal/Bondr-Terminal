@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 import { BondrLandingPage } from './BondrLandingPage';
@@ -56,17 +57,17 @@ function resolveStoredNextPath() {
 function AppHeader() {
   return (
     <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
-      <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
+      <Link className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
         <span className="bondrLogoText" aria-label="BONDR">
           <span>B</span><span className="bondrScopeO">O</span><span>N</span><span>D</span><span>R</span>
         </span>
-      </a>
+      </Link>
       <nav className="bondrHeaderNav" aria-label="Main navigation">
-        {primaryNavItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+        {primaryNavItems.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
         <details className="bondrToolsMenu">
           <summary>Tools</summary>
           <div className="bondrToolsMenuPanel">
-            {toolItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+            {toolItems.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
           </div>
         </details>
       </nav>
@@ -99,7 +100,6 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
       const next = resolveStoredNextPath();
       redirectedRef.current = true;
       router.replace(next);
-      router.refresh();
       window.setTimeout(() => {
         if (sessionStorage.getItem(VERIFIED_AUTH_KEY) === 'true' && !document.querySelector('.bondrTopHeader')) {
           window.location.href = next;
@@ -129,8 +129,6 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
 
     if (next !== path) {
       router.replace(next);
-    } else {
-      router.refresh();
     }
   }, [account.authHydrating, account.authResolved, account.authenticated, pathname, router]);
 

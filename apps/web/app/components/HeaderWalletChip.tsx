@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type SolanaProvider = {
   publicKey?: { toBase58?(): string; toString(): string };
@@ -76,9 +77,9 @@ export function HeaderWalletChip() {
         ? 'signer mismatch'
         : rail?.balanceStatus ?? (signer ? 'checking' : 'not connected');
 
-  return <a className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/portfolio?view=wallets" title={rail?.warnings?.join(' · ') ?? 'Portfolio wallets'}>
+  return <Link className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/portfolio?view=wallets" title={rail?.warnings?.join(' · ') ?? 'Portfolio wallets'}>
     <span>{short(selected)}</span>
     <strong>{sol(balance)}</strong>
     <em>{status}</em>
-  </a>;
+  </Link>;
 }

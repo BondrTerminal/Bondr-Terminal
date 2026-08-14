@@ -1,6 +1,7 @@
 'use client';
 
 import { VersionedTransaction } from '@solana/web3.js';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { TransactionPreview } from '../../../lib/transaction-preview';
 
@@ -557,7 +558,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
               <span>Execution Steps</span>
               <strong>{signedSwap?.submitted ? 'Sent' : signedSwap?.signedTransaction ? 'Signed locally' : simulationPassed ? 'Ready to sign' : quote?.status === 'ok' ? 'Ready to build' : 'Ready to quote'}</strong>
             </div>
-            {operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}
+            {operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><Link className="button secondary" href="/profile">Open Profile</Link></div>}
             <ol className="freshStepList" aria-label="Trading execution steps">
               <StepRow index={1} label="Wallet connected" status={walletPublicKey ? 'pass' : 'warn'} detail={walletPublicKey ? compact(walletPublicKey) : 'Connect Phantom or Solflare'} />
               <StepRow index={2} label="Signer match" status={selectedExecutionAddress ? signerMismatch ? 'fail' : 'pass' : 'warn'} detail={selectedExecutionAddress ? signerMismatch ? 'Selected wallet differs from signer' : compact(selectedExecutionAddress) : 'Select or use connected wallet'} />

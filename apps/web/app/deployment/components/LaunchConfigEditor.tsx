@@ -10,6 +10,25 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type WalletUse = 'creator' | 'launch-readiness' | 'treasury' | 'observe';
 const DEFAULT_TAKE_PROFIT = [35, 75, 150];
 const TASK_TYPES = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'] as const;
+const TASK_PRESETS = ['fast-paced-balance', 'smooth-flow', 'custom'] as const;
+const TASK_ROTATION_MODES = ['random', 'sequential', 'balanced'] as const;
+const TASK_SIZE_MODES = ['mixed', 'fixed', 'randomized'] as const;
+const TASK_RESPONSE_MODES = ['off', 'defensive', 'follow-flow'] as const;
+
+const taskTypeLabels: Record<(typeof TASK_TYPES)[number], string> = {
+  'timed-buy': 'Timed buy',
+  'timed-sell': 'Timed sell',
+  'smart-sell': 'Smart sell',
+  'auto-take-profit': 'Auto take-profit',
+  'stop-loss': 'Stop-loss',
+  'trailing-stop': 'Trailing stop'
+};
+
+const presetLabels: Record<(typeof TASK_PRESETS)[number], string> = {
+  'fast-paced-balance': 'Fast paced balance',
+  'smooth-flow': 'Smooth flow',
+  custom: 'Custom'
+};
 
 function short(address: string) { return address ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—'; }
 function formatPctList(values: number[]) { return values.length ? values.join(', ') : ''; }
@@ -52,12 +71,26 @@ function defaultPlan(wallets: Wallet[]): WalletPlanEntry[] {
     perTxSellCapPct: 25,
     cooldownSeconds: 60,
     taskType: 'timed-buy',
+    taskName: '',
+    taskPreset: 'fast-paced-balance',
     taskAmountSol: 0,
     taskSellPercent: 0,
     taskMaxTotalSol: 0,
     taskDelaySeconds: 0,
     taskIntervalSeconds: 0,
-    taskMaxExecutions: 1
+    taskMaxExecutions: 1,
+    taskBuyPowerPct: 50,
+    taskSellPowerPct: 50,
+    taskSellMinPct: 5,
+    taskSellMaxPct: 35,
+    taskBuyMinSol: 0,
+    taskBuyMaxSol: 0,
+    taskDelayMinMs: 500,
+    taskDelayMaxMs: 4000,
+    taskWalletRotation: 'random',
+    taskTradeSizeMode: 'mixed',
+    taskPriorityFeeSol: 0,
+    taskExternalResponse: 'off'
   }));
 }
 
@@ -142,8 +175,13 @@ function roleLabelForPhase(phase: NonNullable<WalletPlanEntry['executionPhase']>
 }
 
 function taskTypeFrom(form: FormData, walletId: string, fallback: WalletPlanEntry['taskType']) {
-  const value = String(form.get(`task.${walletId}.type`) ?? fallback ?? 'timed-buy');
+  const value = String(form.get(`task.${walletId}.type`) ?? form.get('taskCommand.type') ?? fallback ?? 'timed-buy');
   return TASK_TYPES.includes(value as (typeof TASK_TYPES)[number]) ? value as WalletPlanEntry['taskType'] : 'timed-buy';
+}
+
+function optionFrom<const T extends readonly string[]>(form: FormData, name: string, options: T, fallback: T[number]) {
+  const value = String(form.get(name) ?? fallback);
+  return options.includes(value) ? value as T[number] : fallback;
 }
 
 export function LaunchConfigEditor({ project, wallets }: Props) {
@@ -152,6 +190,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
+  const taskPlans = initial.walletPlan.filter((entry) => entry.executionPhase === 'task' || entry.role.toLowerCase().includes('task'));
+  const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
+  const selectedTaskCount = taskPlans.length;
+  const selectedTaskSol = taskPlans.reduce((sum, entry) => sum + (entry.taskMaxTotalSol ?? entry.maxBuySol ?? 0), 0);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -188,12 +230,26 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         perTxSellCapPct: numberFrom(form, `${prefix}.perTxSellCapPct`, existing.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct),
         cooldownSeconds: numberFrom(form, `${prefix}.cooldownSeconds`, existing.cooldownSeconds || initial.devWalletRules.cooldownSeconds),
         taskType: taskTypeFrom(form, wallet.id, existing.taskType),
+        taskName: stringFrom(form, `task.${wallet.id}.name`, stringFrom(form, 'taskCommand.name', existing.taskName ?? '')),
+        taskPreset: optionFrom(form, `task.${wallet.id}.preset`, TASK_PRESETS, optionFrom(form, 'taskCommand.preset', TASK_PRESETS, existing.taskPreset ?? 'fast-paced-balance')),
         taskAmountSol,
         taskSellPercent,
         taskMaxTotalSol,
         taskDelaySeconds: numberFrom(form, `task.${wallet.id}.delaySeconds`, existing.taskDelaySeconds ?? 0),
         taskIntervalSeconds: numberFrom(form, `task.${wallet.id}.intervalSeconds`, existing.taskIntervalSeconds ?? 0),
-        taskMaxExecutions: numberFrom(form, `task.${wallet.id}.maxExecutions`, existing.taskMaxExecutions ?? 1)
+        taskMaxExecutions: numberFrom(form, `task.${wallet.id}.maxExecutions`, existing.taskMaxExecutions ?? 1),
+        taskBuyPowerPct: numberFrom(form, `task.${wallet.id}.buyPowerPct`, numberFrom(form, 'taskCommand.buyPowerPct', existing.taskBuyPowerPct ?? 50)),
+        taskSellPowerPct: numberFrom(form, `task.${wallet.id}.sellPowerPct`, numberFrom(form, 'taskCommand.sellPowerPct', existing.taskSellPowerPct ?? 50)),
+        taskSellMinPct: numberFrom(form, `task.${wallet.id}.sellMinPct`, numberFrom(form, 'taskCommand.sellMinPct', existing.taskSellMinPct ?? 5)),
+        taskSellMaxPct: numberFrom(form, `task.${wallet.id}.sellMaxPct`, numberFrom(form, 'taskCommand.sellMaxPct', existing.taskSellMaxPct ?? 35)),
+        taskBuyMinSol: numberFrom(form, `task.${wallet.id}.buyMinSol`, numberFrom(form, 'taskCommand.buyMinSol', existing.taskBuyMinSol ?? 0)),
+        taskBuyMaxSol: numberFrom(form, `task.${wallet.id}.buyMaxSol`, numberFrom(form, 'taskCommand.buyMaxSol', existing.taskBuyMaxSol ?? taskAmountSol)),
+        taskDelayMinMs: numberFrom(form, `task.${wallet.id}.delayMinMs`, numberFrom(form, 'taskCommand.delayMinMs', existing.taskDelayMinMs ?? 500)),
+        taskDelayMaxMs: numberFrom(form, `task.${wallet.id}.delayMaxMs`, numberFrom(form, 'taskCommand.delayMaxMs', existing.taskDelayMaxMs ?? 4000)),
+        taskWalletRotation: optionFrom(form, `task.${wallet.id}.rotation`, TASK_ROTATION_MODES, optionFrom(form, 'taskCommand.rotation', TASK_ROTATION_MODES, existing.taskWalletRotation ?? 'random')),
+        taskTradeSizeMode: optionFrom(form, `task.${wallet.id}.sizeMode`, TASK_SIZE_MODES, optionFrom(form, 'taskCommand.sizeMode', TASK_SIZE_MODES, existing.taskTradeSizeMode ?? 'mixed')),
+        taskPriorityFeeSol: numberFrom(form, `task.${wallet.id}.priorityFeeSol`, numberFrom(form, 'taskCommand.priorityFeeSol', existing.taskPriorityFeeSol ?? 0)),
+        taskExternalResponse: optionFrom(form, `task.${wallet.id}.externalResponse`, TASK_RESPONSE_MODES, optionFrom(form, 'taskCommand.externalResponse', TASK_RESPONSE_MODES, existing.taskExternalResponse ?? 'off'))
       };
     });
     const body = {
@@ -260,7 +316,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   }
 
   return (
-    <form className="launchConfigEditor cleanLaunchConfigEditor" onSubmit={save}>
+    <form id="launch-config-form" className="launchConfigEditor cleanLaunchConfigEditor" onSubmit={save}>
       <section className="documentCard launchConfigPanel">
         <div className="sectionIntro compactIntro">
           <span>Token Info</span>
@@ -385,7 +441,39 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           </section>
 
           <section className="deploymentWalletFlowStep">
-            <div><span>04</span><h3>Task Manager Wallet Select</h3><p>Select wallets for timed buy/sell, smart sell, auto take-profit, and time-variable execution.</p></div>
+            <div><span>04</span><h3>Create Task</h3><p>Configure automated deployer wallet execution: timed buys/sells, smart sell, wallet rotation, take-profit, stop-loss, sell caps, and cooldowns.</p></div>
+            <div className="deploymentTaskCommandPanel">
+              <div className="deploymentTaskCommandHeader">
+                <div>
+                  <span>Task setup</span>
+                  <strong>{selectedTaskCount} wallets selected</strong>
+                  <small>{selectedTaskSol.toFixed(4)} SOL max task allocation</small>
+                </div>
+                <button type="submit">Save Preset</button>
+              </div>
+              <div className="deploymentTaskCommandGrid">
+                <label className="wide"><span>Task name</span><input name="taskCommand.name" defaultValue={taskDefaults?.taskName ?? ''} placeholder="Optional task label" /></label>
+                <label><span>Task type</span><select name="taskCommand.type" defaultValue={taskDefaults?.taskType ?? 'timed-buy'}>{TASK_TYPES.map((type) => <option value={type} key={type}>{taskTypeLabels[type]}</option>)}</select></label>
+                <label><span>Task preset</span><select name="taskCommand.preset" defaultValue={taskDefaults?.taskPreset ?? 'fast-paced-balance'}>{TASK_PRESETS.map((preset) => <option value={preset} key={preset}>{presetLabels[preset]}</option>)}</select></label>
+                <label><span>Wallet rotation</span><select name="taskCommand.rotation" defaultValue={taskDefaults?.taskWalletRotation ?? 'random'}>{TASK_ROTATION_MODES.map((mode) => <option value={mode} key={mode}>{mode}</option>)}</select></label>
+                <label><span>Trade size mode</span><select name="taskCommand.sizeMode" defaultValue={taskDefaults?.taskTradeSizeMode ?? 'mixed'}>{TASK_SIZE_MODES.map((mode) => <option value={mode} key={mode}>{mode}</option>)}</select></label>
+                <label><span>External response</span><select name="taskCommand.externalResponse" defaultValue={taskDefaults?.taskExternalResponse ?? 'off'}>{TASK_RESPONSE_MODES.map((mode) => <option value={mode} key={mode}>{mode}</option>)}</select></label>
+                <label><span>Buy power %</span><input name="taskCommand.buyPowerPct" type="number" min="0" max="100" step="1" defaultValue={taskDefaults?.taskBuyPowerPct ?? 50} /></label>
+                <label><span>Sell power %</span><input name="taskCommand.sellPowerPct" type="number" min="0" max="100" step="1" defaultValue={taskDefaults?.taskSellPowerPct ?? 50} /></label>
+                <label><span>Sell min %</span><input name="taskCommand.sellMinPct" type="number" min="0" max="100" step="0.1" defaultValue={taskDefaults?.taskSellMinPct ?? 5} /></label>
+                <label><span>Sell max %</span><input name="taskCommand.sellMaxPct" type="number" min="0" max="100" step="0.1" defaultValue={taskDefaults?.taskSellMaxPct ?? 35} /></label>
+                <label><span>Buy min SOL</span><input name="taskCommand.buyMinSol" type="number" min="0" step="0.001" defaultValue={taskDefaults?.taskBuyMinSol ?? 0} /></label>
+                <label><span>Buy max SOL</span><input name="taskCommand.buyMaxSol" type="number" min="0" step="0.001" defaultValue={taskDefaults?.taskBuyMaxSol ?? taskDefaults?.taskAmountSol ?? 0} /></label>
+                <label><span>Delay min ms</span><input name="taskCommand.delayMinMs" type="number" min="0" step="50" defaultValue={taskDefaults?.taskDelayMinMs ?? 500} /></label>
+                <label><span>Delay max ms</span><input name="taskCommand.delayMaxMs" type="number" min="0" step="50" defaultValue={taskDefaults?.taskDelayMaxMs ?? 4000} /></label>
+                <label><span>Priority fee SOL</span><input name="taskCommand.priorityFeeSol" type="number" min="0" step="0.0001" defaultValue={taskDefaults?.taskPriorityFeeSol ?? 0} /></label>
+              </div>
+              <div className="deploymentTaskPresetRail">
+                <span>fast paced balance</span>
+                <span>smooth flow</span>
+                <span>custom preset</span>
+              </div>
+            </div>
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
               const enabled = plan?.executionPhase === 'task' || plan?.role.toLowerCase().includes('task');
@@ -394,7 +482,6 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 <strong>{wallet.role}</strong>
                 <code title={wallet.address}>{short(wallet.address)}</code>
                 <span className="launchWalletInputs taskInputs">
-                  <label className="launchWalletMiniField"><span>task</span><select name={`task.${wallet.id}.type`} defaultValue={plan?.taskType ?? 'timed-buy'}>{TASK_TYPES.map((type) => <option value={type} key={type}>{type}</option>)}</select></label>
                   <WalletPlanNumberField label="amount SOL" name={`task.${wallet.id}.taskAmountSol`} min="0" step="0.001" value={plan?.taskAmountSol ?? plan?.plannedBuySol ?? 0} placeholder="0.010" />
                   <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
                   <WalletPlanNumberField label="max total SOL" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? plan?.maxBuySol ?? 0} placeholder="0.050" />
@@ -406,7 +493,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             })}
           </section>
         </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
-        <p className="walletSecurityFootnote">Task rails are wallet execution controls: timed buy/sell, smart sell, auto take-profit, stop-loss, sell caps, and cooldowns. They must not be used for wash trading, fake volume, self-trading, spoofing, or misleading activity.</p>
+        <p className="walletSecurityFootnote">Task rails are automated deployer wallet controls for timed execution, smart sell behavior, auto take-profit, stop-loss, sell caps, cooldowns, and responsive wallet management.</p>
       </section>
 
       <section className="documentCard deploymentDisabledPanel">

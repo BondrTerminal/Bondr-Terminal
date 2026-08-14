@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 
 function shortValue(value: string | null | undefined): string {
@@ -49,7 +50,7 @@ export function AccountNavButton() {
         <p>{account.authenticated ? 'Identity is active. Execution still requires browser-wallet signing, simulation, and policy checks.' : 'BONDR is gated. Log in with Turnkey to unlock the operator terminal.'}</p>
         <div className="accountNavActions">
           <button type="button" onClick={() => void login()} disabled={!account.configured || !account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Logged in' : 'Log in with Turnkey'}</button>
-          <a href="/profile">Profile</a>
+          <Link href="/profile">Profile</Link>
           <button type="button" onClick={() => void logout()} disabled={!account.authenticated || busy}>Log out</button>
         </div>
       </div>
