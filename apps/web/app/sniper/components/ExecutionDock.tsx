@@ -57,6 +57,7 @@ type DockWallet = { id: string; address: string; role: string; balanceSol: numbe
 type WalletTokenBalanceRow = { id?: string | null; wallet?: string | null; address?: string | null; role?: string | null; uiAmount?: number | null; valueUsd?: number | null; status?: string | null; balanceStatus?: string | null; source?: string | string[] | null };
 type WalletTokenBalances = { status?: string; provider?: string | null; confidence?: string | null; note?: string | null; wallets?: WalletTokenBalanceRow[]; totals?: { uiAmount?: number | null } };
 type TruthRail = { rail: string; label?: string; status: string; selected: boolean; summary?: string; nextAction?: string; blockers?: string[] };
+type EngineReadiness = { status?: string; readiness?: { contract?: string; status?: string; blockers?: string[]; selectedSniperWallets?: number; selectedTaskWallets?: number; execution?: string } };
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -122,6 +123,8 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
   const [signedSwap, setSignedSwap] = useState<SignedSwapPayload | null>(null);
   const [signedReview, setSignedReview] = useState<SignedReviewPayload | null>(null);
   const [truthRails, setTruthRails] = useState<TruthRail[]>([]);
+  const [sniperReadiness, setSniperReadiness] = useState<EngineReadiness | null>(null);
+  const [taskReadiness, setTaskReadiness] = useState<EngineReadiness | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
 
@@ -149,6 +152,23 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
         })));
       })
       .catch(() => setTruthRails([]));
+    return () => controller.abort();
+  }, [projectId]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = projectId ? `?project=${encodeURIComponent(projectId)}` : '';
+    void Promise.all([
+      fetch(`/api/sniper/readiness${query}`, { signal: controller.signal, cache: 'no-store' }).then((response) => response.ok ? response.json() : null),
+      fetch(`/api/tasks/readiness${query}`, { signal: controller.signal, cache: 'no-store' }).then((response) => response.ok ? response.json() : null)
+    ])
+      .then(([sniper, task]) => {
+        setSniperReadiness(sniper as EngineReadiness | null);
+        setTaskReadiness(task as EngineReadiness | null);
+      })
+      .catch(() => {
+        setSniperReadiness(null);
+        setTaskReadiness(null);
+      });
     return () => controller.abort();
   }, [projectId]);
   useEffect(() => {
@@ -597,6 +617,18 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
                   <small>{rail.selected ? rail.summary : rail.nextAction}</small>
                 </div>
               ))}
+            </div>
+            <div className="terminalTruthMapStrip" aria-label="Sniper and task engine readiness">
+              <div className={`terminalTruthPill ${(sniperReadiness?.readiness?.status ?? 'blocked').replace(/[^a-z-]/g, '')}`}>
+                <span>Sniper Engine</span>
+                <strong>{sniperReadiness?.readiness?.status ?? 'checking'}</strong>
+                <small>{sniperReadiness?.readiness?.blockers?.slice(0, 2).join(' · ') || sniperReadiness?.readiness?.execution || 'readiness pending'}</small>
+              </div>
+              <div className={`terminalTruthPill ${(taskReadiness?.readiness?.status ?? 'blocked').replace(/[^a-z-]/g, '')}`}>
+                <span>Task Engine</span>
+                <strong>{taskReadiness?.readiness?.status ?? 'checking'}</strong>
+                <small>{taskReadiness?.readiness?.blockers?.slice(0, 2).join(' · ') || taskReadiness?.readiness?.execution || 'readiness pending'}</small>
+              </div>
             </div>
             {operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><Link className="button secondary" href="/profile">Open Profile</Link></div>}
             <ol className="freshStepList" aria-label="Trading execution steps">

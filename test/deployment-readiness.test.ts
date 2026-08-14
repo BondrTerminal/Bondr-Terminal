@@ -3,6 +3,7 @@ import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
+import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
@@ -210,4 +211,25 @@ test('deployment readiness exposes shared wallet signing orchestration contract'
   assert.equal(readiness.signingOrchestration.serverCustody, false);
   assert.equal(readiness.signingOrchestration.summary.participatingWallets, 2);
   assert.equal(readiness.signingOrchestration.bundleSession.missingCount, 1);
+});
+
+test('sniper readiness reports trigger, relay, and recovery blockers without execution', () => {
+  const readiness = buildSniperExecutionReadiness(project, [wallet], activation);
+  assert.equal(readiness.contract, 'bondr-sniper-execution-readiness-v1');
+  assert.equal(readiness.execution, 'readiness-only-no-sniper-submit');
+  assert.ok(readiness.blockers.includes('sniper-trigger-source-missing'));
+  assert.ok(readiness.blockers.includes('broadcast-gate-closed'));
+  assert.ok(readiness.blockers.includes('sniper-recovery-engine-missing'));
+  assert.equal(readiness.safety.noAutonomousTrading, true);
+});
+
+test('task readiness blocks durable worker and fake-volume policy gaps', () => {
+  const readiness = buildTaskExecutionReadiness(project, [wallet], activation);
+  assert.equal(readiness.contract, 'bondr-task-execution-readiness-v1');
+  assert.equal(readiness.execution, 'readiness-only-no-task-execution');
+  assert.ok(readiness.blockers.includes('durable-task-worker-missing'));
+  assert.ok(readiness.blockers.includes('anti-self-trade-policy-required'));
+  assert.ok(readiness.blockers.includes('anti-fake-volume-policy-required'));
+  assert.equal(readiness.safety.noAutonomousTrading, true);
+  assert.equal(readiness.safety.noFakeVolume, true);
 });

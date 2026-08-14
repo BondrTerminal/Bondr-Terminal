@@ -30,6 +30,8 @@ const routeMap = [
   ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
   ['/api/relay/jito/bundle-preview', 'Jito signed-bundle policy preview', 'preview'],
   ['/api/relay/jito/send-bundle', 'Blocked Jito sendBundle stub', 'closed'],
+  ['/api/sniper/readiness', 'Sniper trigger/submit readiness', 'preview'],
+  ['/api/tasks/readiness', 'Task worker/automation readiness', 'preview'],
   ['/portfolio?view=wallets', 'Wallet Center and custody rails', 'real'],
   ['/sniper', 'Terminal quote/build/simulate/sign/broadcast class', 'proven']
 ];
