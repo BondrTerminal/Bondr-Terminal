@@ -99,6 +99,9 @@ export type Project = {
     symbol: string;
     description: string;
     imageUrl: string;
+    imageDataUrl?: string;
+    imageContentType?: string;
+    imageUpdatedAt?: string;
     website: string;
     twitter: string;
     telegram: string;

@@ -207,8 +207,8 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json().catch(() => null) as LaunchConfigPatch | null;
   if (!body) return Response.json({ status: 'error', observedAt, error: 'Invalid JSON body.' }, { status: 400 });
 
-  const isServerlessPreview = Boolean(process.env.VERCEL);
   const mode = walletStoreMode();
+  const isServerlessPreview = Boolean(process.env.VERCEL) && mode !== 'postgres';
   const store = mode === 'postgres' ? await getMeridianWalletStore() : JSON.parse(readFileSync(getMeridianStorePath(), 'utf8')) as MeridianStore;
   const index = store.projects.findIndex((project) => project.id === id);
   if (index < 0) return Response.json({ status: 'error', observedAt, error: 'Project not found.' }, { status: 404 });

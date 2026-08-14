@@ -14305,6 +14305,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #f9ebe0;
   font-size: 1.1rem;
 }
+.tokenImageDropzone img {
+  width: min(180px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  object-fit: cover;
+  border: 1px solid rgba(249, 235, 224, 0.18);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
 .tokenImageDropzone small {
   color: rgba(249, 235, 224, 0.68);
   line-height: 1.35;
@@ -14545,6 +14554,14 @@ body > .createProjectModal .professionalCreateProjectShell {
   border: 1px solid rgba(249, 235, 224, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
+}
+.launchOverviewImage {
+  width: 72px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid rgba(249, 235, 224, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
 }
 .deploymentCockpitMain .cleanLaunchConfigEditor > .documentCard,
 .deploymentCockpitMain .deploymentLaunchBuilderPanel,

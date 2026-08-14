@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
 
@@ -223,6 +223,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [activeTab, setActiveTab] = useState<LaunchTab>('token');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(project.metadata.imageUrl);
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
   const taskPlans = initial.walletPlan.filter((entry) => entry.executionPhase === 'task' || entry.role.toLowerCase().includes('task'));
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
@@ -237,6 +238,18 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const activeTabIndex = LAUNCH_TABS.findIndex((tab) => tab.id === activeTab);
   const previousTab = LAUNCH_TABS[Math.max(0, activeTabIndex - 1)]?.id ?? 'token';
   const nextTab = LAUNCH_TABS[Math.min(LAUNCH_TABS.length - 1, activeTabIndex + 1)]?.id ?? 'review';
+  const tokenImageUrl = imagePreviewUrl || project.metadata.imageUrl;
+
+  function previewImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) {
+      setImagePreviewUrl(project.metadata.imageUrl);
+      return;
+    }
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setSaveState('idle');
+    setMessage('Image staged. Save configuration to upload and attach it.');
+  }
 
   function applySafeRiskDefaults() {
     const form = document.getElementById('launch-config-form');
@@ -259,9 +272,28 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setSaveState('saving');
     setMessage('Saving launch configuration…');
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
+    let imageUrl = stringFrom(form, 'metadata.imageUrl', project.metadata.imageUrl);
+    const imageFile = form.get('metadata.imageFile');
+    if (imageFile instanceof File && imageFile.size > 0) {
+      setMessage('Uploading token image…');
+      const uploadForm = new FormData();
+      uploadForm.set('image', imageFile);
+      const uploadResponse = await fetch(`/api/projects/${project.id}/asset-upload`, { method: 'POST', body: uploadForm });
+      const uploadPayload = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok) {
+        setSaveState('error');
+        setMessage(uploadPayload?.error ?? 'Image upload failed.');
+        return;
+      }
+      imageUrl = String(uploadPayload.imageUrl ?? imageUrl);
+      setFormValue(formElement, 'metadata.imageUrl', imageUrl);
+      setImagePreviewUrl(imageUrl);
+      setMessage('Image uploaded. Saving launch configuration…');
+    }
     const devWalletId = stringFrom(form, 'dev.walletId', wallets[0]?.id ?? '');
     const platform = optionFrom(form, 'route.platform', PLATFORM_VALUES, initial.route.platform ?? 'pump');
     const quoteToken = optionFrom(form, 'route.quoteToken', QUOTE_TOKEN_VALUES, initial.route.quoteToken ?? 'SOL');
@@ -331,7 +363,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         name: stringFrom(form, 'metadata.name', project.metadata.name),
         symbol: stringFrom(form, 'metadata.symbol', project.metadata.symbol),
         description: stringFrom(form, 'metadata.description', project.metadata.description),
-        imageUrl: stringFrom(form, 'metadata.imageUrl', project.metadata.imageUrl),
+        imageUrl,
         website: stringFrom(form, 'metadata.website', project.metadata.website),
         twitter: stringFrom(form, 'metadata.twitter', project.metadata.twitter),
         telegram: stringFrom(form, 'metadata.telegram', project.metadata.telegram)
@@ -429,9 +461,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         <div className="launchTokenPanel">
           <label className="tokenImageDropzone">
             <span>Token Image</span>
-            <strong>{project.metadata.imageUrl ? 'Image attached' : 'Upload or drag & drop'}</strong>
-            <small>PNG, JPG, GIF, or SVG preview. Existing image URL remains editable below.</small>
-            <input name="metadata.imageFile" type="file" accept="image/*" />
+            {tokenImageUrl ? <img src={tokenImageUrl} alt={`${project.metadata.symbol || project.ticker} token preview`} /> : null}
+            <strong>{tokenImageUrl ? 'Image attached' : 'Upload or drag & drop'}</strong>
+            <small>PNG, JPG, WEBP, or GIF preview. Existing image URL remains editable below.</small>
+            <input name="metadata.imageFile" type="file" accept="image/*" onChange={previewImage} />
           </label>
           <div className="launchConfigEditorGrid compact launchTokenFields">
             <label><span>Name</span><input name="metadata.name" defaultValue={project.metadata.name || project.name} placeholder="Token name" /></label>
@@ -440,7 +473,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <label><span>Website optional</span><input name="metadata.website" defaultValue={project.metadata.website} placeholder="https://" /></label>
             <label><span>X URL optional</span><input name="metadata.twitter" defaultValue={project.metadata.twitter} placeholder="@handle or URL" /></label>
             <label><span>Telegram optional</span><input name="metadata.telegram" defaultValue={project.metadata.telegram} placeholder="t.me/..." /></label>
-            <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} placeholder="/uploads or https://" /></label>
+            <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} onChange={(event) => setImagePreviewUrl(event.currentTarget.value)} placeholder="/api/projects/.../asset-image or https://" /></label>
             <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" /></label>
             <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
           </div>
@@ -703,8 +736,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           </div>
           <div>
             <span>Image</span>
-            <strong>{project.metadata.imageUrl ? 'Attached' : 'Pending'}</strong>
-            <small>{project.metadata.imageUrl || 'Upload or paste an image URL in Token Info'}</small>
+            {tokenImageUrl ? <img className="launchOverviewImage" src={tokenImageUrl} alt={`${project.metadata.symbol || project.ticker} token preview`} /> : null}
+            <strong>{tokenImageUrl ? 'Attached' : 'Pending'}</strong>
+            <small>{tokenImageUrl || 'Upload or paste an image URL in Token Info'}</small>
           </div>
           <div>
             <span>Platform / mode</span>
