@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useMemo, useState, type CSSProperties, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
 
@@ -240,6 +240,26 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const previousTab = LAUNCH_TABS[Math.max(0, activeTabIndex - 1)]?.id ?? 'token';
   const nextTab = LAUNCH_TABS[Math.min(LAUNCH_TABS.length - 1, activeTabIndex + 1)]?.id ?? 'review';
   const tokenImageUrl = imagePreviewUrl || project.metadata.imageUrl;
+  const selectedDevWallet = wallets.find((wallet) => wallet.id === defaultDevWalletId) ?? wallets[0] ?? null;
+  const selectedBuyMode = BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe')) ?? BUY_MODES[0];
+  const selectedPlatform = LAUNCH_PLATFORMS.find((platform) => platform.value === (initial.route.platform ?? 'pump')) ?? LAUNCH_PLATFORMS[0];
+  const tokenReady = Boolean((project.metadata.name || project.name) && (project.metadata.symbol || project.ticker) && project.metadata.description && tokenImageUrl);
+  const routeReady = Boolean(initial.route.platform && initial.route.quoteToken && initial.route.buyMode);
+  const walletReady = Boolean(selectedDevWallet && participatingPlans.length > 0);
+  const riskReady = Boolean(initial.devWalletRules.stopLossPct < 0 && initial.devWalletRules.takeProfitPercents.length && initial.devWalletRules.perTxSellCapPct > 0);
+  const dryRunReady = project.preLiveDryRun?.status === 'pass';
+  const launchReviewItems = [
+    { label: 'Token package', status: tokenReady ? 'pass' : 'review', detail: tokenReady ? `${project.metadata.symbol || project.ticker} metadata and image ready` : 'Name, symbol, description, and token image need review' },
+    { label: 'Route adapter', status: routeReady ? 'pass' : 'review', detail: `${selectedPlatform.label} · ${selectedBuyMode.label} · ${initial.route.quoteToken ?? 'SOL'}` },
+    { label: 'Dev wallet', status: selectedDevWallet ? 'pass' : 'blocked', detail: selectedDevWallet ? `${selectedDevWallet.role} · ${short(selectedDevWallet.address)}` : 'No deployer wallet selected' },
+    { label: 'Execution wallets', status: walletReady ? 'pass' : 'review', detail: `${participatingPlans.length} active · ${bundleCount} bundle · ${sniperCount} sniper · ${selectedTaskCount} task` },
+    { label: 'Risk rails', status: riskReady ? 'pass' : 'blocked', detail: `SL ${initial.devWalletRules.stopLossPct}% · TP ${formatPctList(initial.devWalletRules.takeProfitPercents)} · cap ${initial.devWalletRules.perTxSellCapPct}%` },
+    { label: 'Dry-run', status: dryRunReady ? 'pass' : 'review', detail: project.preLiveDryRun?.status ? `${project.preLiveDryRun.status} · ${(project.preLiveDryRun.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'Run pre-live dry-run after saving' },
+    { label: 'Deploy gate', status: 'blocked', detail: 'Closed until explicit deployment approval' }
+  ];
+  const passCount = launchReviewItems.filter((item) => item.status === 'pass').length;
+  const blockedCount = launchReviewItems.filter((item) => item.status === 'blocked').length;
+  const reviewScore = Math.round((passCount / launchReviewItems.length) * 100);
 
   function previewImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -430,7 +450,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <div className="launchWizardTitle">
             <span>Launch setup</span>
             <strong>{project.name} · {project.ticker}</strong>
-            <small>{participatingPlans.length} active wallets · {plannedSol.toFixed(4)} SOL planned · deploy gate closed</small>
+            <small>{reviewScore}% launch-reviewed · {participatingPlans.length} active wallets · {plannedSol.toFixed(4)} SOL planned · deploy gate closed</small>
           </div>
           <div className="launchWizardTabs" role="tablist" aria-label="Launch setup tabs">
             {LAUNCH_TABS.map((tab, index) => (
@@ -450,6 +470,13 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
               </button>
             ))}
           </div>
+        </div>
+        <div className="launchOperatorSummary" aria-label="Launch operator summary">
+          <div><span>Route</span><strong>{selectedPlatform.label}</strong><small>{selectedBuyMode.label}</small></div>
+          <div><span>Deployer</span><strong>{selectedDevWallet ? short(selectedDevWallet.address) : 'missing'}</strong><small>{selectedDevWallet?.role ?? 'select dev wallet'}</small></div>
+          <div><span>Wallet rails</span><strong>{bundleCount + sniperCount + selectedTaskCount}</strong><small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small></div>
+          <div><span>Max exposure</span><strong>{maxSol.toFixed(4)} SOL</strong><small>{plannedSol.toFixed(4)} planned</small></div>
+          <div><span>Review</span><strong>{blockedCount ? `${blockedCount} blocked` : 'ready to dry-run'}</strong><small>{dryRunReady ? 'dry-run pass' : 'dry-run needed'}</small></div>
         </div>
 
         <div className="launchWizardViewport">
@@ -771,50 +798,47 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       </section>
 
       <section aria-labelledby="launch-tab-button-review" className="deploymentDisabledPanel launchWizardPanel" hidden={activeTab !== 'review'} id="launch-tab-review" role="tabpanel">
-        <div className="sectionIntro compactIntro"><span>Overview & Deploy</span><h2>Review launch plan</h2><p>Confirm metadata, wallet counts, buy route, task plan, and execution gates before any future deployment action.</p></div>
-        <div className="launchOverviewGrid">
-          <div>
-            <span>Token</span>
-            <strong>{project.metadata.name || project.name} / {project.metadata.symbol || project.ticker}</strong>
-            <small>{project.metadata.description || 'Metadata description pending'}</small>
-          </div>
-          <div>
-            <span>Image</span>
-            {tokenImageUrl ? <img className="launchOverviewImage" src={tokenImageUrl} alt={`${project.metadata.symbol || project.ticker} token preview`} /> : null}
-            <strong>{tokenImageUrl ? 'Attached' : 'Pending'}</strong>
-            <small>{tokenImageUrl || 'Upload or paste an image URL in Token Info'}</small>
-          </div>
-          <div>
-            <span>Platform / mode</span>
-            <strong>{initial.route.platform ?? 'pump'} · {initial.route.tokenMode ?? 'classic'}</strong>
-            <small>Quote token: {initial.route.quoteToken ?? 'SOL'}</small>
-          </div>
-          <div>
-            <span>Buy mode</span>
-            <strong>{BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe'))?.label ?? 'Snipe'}</strong>
-            <small>{BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe'))?.bestFor ?? 'Best for speed'}</small>
-          </div>
-          <div>
-            <span>Wallets</span>
-            <strong>{wallets.length} total · {participatingPlans.length} active</strong>
-            <small>Dev wallet: {short(wallets.find((wallet) => wallet.id === defaultDevWalletId)?.address ?? '')}</small>
-          </div>
-          <div>
-            <span>Planned SOL</span>
-            <strong>{plannedSol.toFixed(4)} planned</strong>
-            <small>{maxSol.toFixed(4)} max · {selectedTaskSol.toFixed(4)} task max</small>
-          </div>
-          <div>
-            <span>Execution roles</span>
-            <strong>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</strong>
-            <small>Buy mode controls which selected rails run in future gated execution.</small>
-          </div>
-        </div>
-        <div className="sectionIntro compactIntro launchSubIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>
-        <div className="deploymentAdapterGrid">
-          <div><span>Unsigned deploy builder</span><strong>Disabled</strong><small>adapter not active</small></div>
-          <div><span>Browser-wallet deploy signature</span><strong>Disabled</strong><small>deployment gate off</small></div>
-          <div><span>Broadcast</span><strong>Disabled</strong><small>broadcast gate off</small></div>
+        <div className="sectionIntro compactIntro"><span>Launch review</span><h2>Could this launch right now?</h2><p>{blockedCount ? 'Not yet. The setup is close, but blocked controls must stay closed until the deploy profile is explicitly approved.' : 'Configuration is ready for dry-run review. Deployment still needs the separate launch approval gate.'}</p></div>
+        <div className="launchReviewBoard">
+          <section className="launchGoNoGoPanel">
+            <div className="launchGoNoGoMeter" style={{ '--launch-score': `${reviewScore}%` } as CSSProperties}>
+              <span>{reviewScore}%</span>
+            </div>
+            <div>
+              <span>Operator verdict</span>
+              <strong>{blockedCount ? 'Not launchable yet' : dryRunReady ? 'Ready for gated approval' : 'Ready for dry-run'}</strong>
+              <small>{passCount} checks pass · {blockedCount} blocked · {launchReviewItems.length - passCount - blockedCount} review</small>
+            </div>
+          </section>
+          <section className="launchSequencePanel">
+            <div><span>01</span><strong>Token package</strong><small>{tokenReady ? 'metadata ready' : 'needs final metadata'}</small></div>
+            <div><span>02</span><strong>Route + wallets</strong><small>{selectedPlatform.label} · {selectedDevWallet ? short(selectedDevWallet.address) : 'wallet missing'}</small></div>
+            <div><span>03</span><strong>Risk + dry-run</strong><small>{dryRunReady ? 'dry-run pass' : 'save, then dry-run'}</small></div>
+            <div><span>04</span><strong>Approval gate</strong><small>deploy + broadcast closed</small></div>
+          </section>
+          <section className="launchChecklistMatrix">
+            {launchReviewItems.map((item) => (
+              <div className={`launchChecklistItem ${item.status}`} key={item.label}>
+                <span>{item.status}</span>
+                <strong>{item.label}</strong>
+                <small>{item.detail}</small>
+              </div>
+            ))}
+          </section>
+          <section className="launchFinalReviewGrid">
+            <div className="launchTokenReviewCard">
+              {tokenImageUrl ? <img className="launchOverviewImage" src={tokenImageUrl} alt={`${project.metadata.symbol || project.ticker} token preview`} /> : null}
+              <div><span>Token</span><strong>{project.metadata.name || project.name} / {project.metadata.symbol || project.ticker}</strong><small>{project.metadata.description || 'Metadata description pending'}</small></div>
+            </div>
+            <div><span>Route</span><strong>{selectedPlatform.label} · {selectedBuyMode.label}</strong><small>{initial.route.quoteToken ?? 'SOL'} quote · {initial.route.tokenMode ?? 'classic'} mode</small></div>
+            <div><span>Wallet plan</span><strong>{participatingPlans.length} active / {wallets.length} total</strong><small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small></div>
+            <div><span>Capital cap</span><strong>{maxSol.toFixed(4)} SOL max</strong><small>{plannedSol.toFixed(4)} planned · {selectedTaskSol.toFixed(4)} task max</small></div>
+          </section>
+          <section className="launchFinalActionPanel">
+            <div><span>Execution gate</span><strong>Deploy disabled</strong><small>No token launch, signature request, SOL movement, or broadcast from this screen while gates are closed.</small></div>
+            <button type="submit" disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving...' : 'Save Launch Plan'}</button>
+            <button type="button" onClick={() => setActiveTab('risk')}>Review Risk</button>
+          </section>
         </div>
       </section>
 

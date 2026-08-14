@@ -15392,6 +15392,190 @@ body > .createProjectModal .professionalCreateProjectShell {
 .createProjectWalletBox .walletBoxMetaLayer {
   grid-column: 1;
 }
+/* Deployment launch cockpit polish: make the final review feel like a real launch desk. */
+.launchOperatorSummary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(249, 235, 224, 0.1);
+  background:
+    linear-gradient(90deg, rgba(255, 127, 17, 0.06), transparent 48%),
+    rgba(0, 0, 0, 0.2);
+}
+.launchOperatorSummary > div,
+.launchFinalReviewGrid > div,
+.launchFinalActionPanel > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(249, 235, 224, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.028);
+}
+.launchOperatorSummary span,
+.launchFinalReviewGrid span,
+.launchFinalActionPanel span,
+.launchGoNoGoPanel span,
+.launchSequencePanel span,
+.launchChecklistItem span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.launchOperatorSummary strong,
+.launchFinalReviewGrid strong,
+.launchFinalActionPanel strong,
+.launchGoNoGoPanel strong,
+.launchSequencePanel strong,
+.launchChecklistItem strong {
+  min-width: 0;
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.launchOperatorSummary small,
+.launchFinalReviewGrid small,
+.launchFinalActionPanel small,
+.launchGoNoGoPanel small,
+.launchSequencePanel small,
+.launchChecklistItem small {
+  color: rgba(249, 235, 224, 0.62);
+  line-height: 1.35;
+}
+.launchReviewBoard {
+  display: grid;
+  gap: 14px;
+}
+.launchGoNoGoPanel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid rgba(255, 127, 17, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 127, 17, 0.12), rgba(0, 0, 0, 0.08)),
+    rgba(0, 0, 0, 0.24);
+}
+.launchGoNoGoMeter {
+  --launch-score: 0%;
+  width: 96px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, rgba(14, 11, 9, 0.96) 0 58%, transparent 59%),
+    conic-gradient(#23ce6b var(--launch-score), rgba(249, 235, 224, 0.13) 0);
+  box-shadow: inset 0 0 0 1px rgba(249, 235, 224, 0.12);
+}
+.launchGoNoGoMeter span {
+  color: #f9ebe0;
+  font-size: 1.2rem;
+}
+.launchSequencePanel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.launchSequencePanel > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.launchSequencePanel > div > span {
+  grid-row: span 2;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 127, 17, 0.26);
+  background: rgba(255, 127, 17, 0.08);
+  color: #ffb166;
+}
+.launchChecklistMatrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.launchChecklistItem {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.026);
+}
+.launchChecklistItem.pass {
+  border-color: rgba(35, 206, 107, 0.22);
+  background: rgba(35, 206, 107, 0.055);
+}
+.launchChecklistItem.review {
+  border-color: rgba(255, 177, 102, 0.22);
+  background: rgba(255, 177, 102, 0.055);
+}
+.launchChecklistItem.blocked {
+  border-color: rgba(255, 77, 109, 0.22);
+  background: rgba(255, 77, 109, 0.052);
+}
+.launchChecklistItem.pass span { color: #7ee7a6; }
+.launchChecklistItem.review span { color: #ffb166; }
+.launchChecklistItem.blocked span { color: #ff8ca3; }
+.launchFinalReviewGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.25fr) repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.launchTokenReviewCard {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+.launchTokenReviewCard .launchOverviewImage {
+  width: 88px;
+}
+.launchFinalActionPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: stretch;
+}
+.launchFinalActionPanel button {
+  min-width: 150px;
+  border: 1px solid rgba(255, 127, 17, 0.3);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: rgba(255, 127, 17, 0.12);
+  color: #f9ebe0;
+  font-weight: 950;
+  cursor: pointer;
+}
+.launchFinalActionPanel button[type="button"] {
+  border-color: rgba(249, 235, 224, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+@media (max-width: 1120px) {
+  .launchOperatorSummary,
+  .launchSequencePanel,
+  .launchFinalReviewGrid,
+  .launchFinalActionPanel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .launchFinalActionPanel > div {
+    grid-column: 1 / -1;
+  }
+}
 @media (max-width: 980px) {
   .walletBoxLayout,
   .deploymentWalletFlowRow.walletBoxLayout,
@@ -15406,6 +15590,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   .walletBoxMetaLayer,
   .walletCenterBoxRow .walletBoxIdentityLayer,
   .walletCenterBoxRow .walletBoxMetaLayer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .launchOperatorSummary,
+  .launchSequencePanel,
+  .launchFinalReviewGrid,
+  .launchFinalActionPanel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .launchGoNoGoPanel {
     grid-template-columns: minmax(0, 1fr);
   }
 }
