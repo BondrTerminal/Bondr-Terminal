@@ -70,10 +70,13 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
   const item = value as Partial<WalletPlanEntry>;
   const walletId = stringField(item.walletId, '', 100);
   if (!walletId) return null;
+  const executionPhase = ['dev', 'bundle', 'sniper', 'task', 'observe'].includes(String(item.executionPhase)) ? item.executionPhase : undefined;
+  const taskType = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'].includes(String(item.taskType)) ? item.taskType : undefined;
   return {
     walletId,
     role: stringField(item.role, fallbackRole, 80),
     participate: typeof item.participate === 'boolean' ? item.participate : true,
+    executionPhase,
     plannedBuySol: numberField(item.plannedBuySol, 0, 0, 1000),
     maxBuySol: numberField(item.maxBuySol, item.plannedBuySol ?? 0, 0, 1000),
     maxSlippageBps: numberField(item.maxSlippageBps, 500, 1, 2000),
@@ -81,7 +84,14 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
     stopLossPct: numberField(item.stopLossPct, -18, -99, 0),
     trailingStopPct: numberField(item.trailingStopPct, 22, 0, 100),
     perTxSellCapPct: numberField(item.perTxSellCapPct, 25, 0, 100),
-    cooldownSeconds: numberField(item.cooldownSeconds, 60, 0, 86400)
+    cooldownSeconds: numberField(item.cooldownSeconds, 60, 0, 86400),
+    taskType,
+    taskAmountSol: numberField(item.taskAmountSol, 0, 0, 1000),
+    taskSellPercent: numberField(item.taskSellPercent, 0, 0, 100),
+    taskMaxTotalSol: numberField(item.taskMaxTotalSol, 0, 0, 1000),
+    taskDelaySeconds: numberField(item.taskDelaySeconds, 0, 0, 604800),
+    taskIntervalSeconds: numberField(item.taskIntervalSeconds, 0, 0, 604800),
+    taskMaxExecutions: numberField(item.taskMaxExecutions, 1, 1, 1000)
   };
 }
 

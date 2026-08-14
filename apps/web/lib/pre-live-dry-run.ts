@@ -83,7 +83,9 @@ export function buildPreLiveDryRun(project: Project, store: MeridianStore): PreL
     blockers.push('launch-path-invalid');
   }
 
-  if (process.env.LIVE_TRADING_ENABLED === 'true') blockers.push('live-trading-enabled');
+  if (process.env.LIVE_DEPLOYMENT_ENABLED === 'true') warnings.push('deployment-gate-enabled-review-before-dry-run');
+  if (process.env.LIVE_BETA_BROADCAST_ENABLED === 'true') warnings.push('swap-broadcast-gate-enabled-close-before-deployment-review');
+  if (process.env.LIVE_BETA_FUNDING_BROADCAST_ENABLED === 'true') warnings.push('funding-broadcast-gate-enabled-close-before-deployment-review');
   if (totalPlannedBuySol <= 0) warnings.push('total-planned-buy-zero');
 
   const status: PreLiveDryRunResult['status'] = blockers.length ? 'fail' : warnings.length ? 'warn' : 'pass';

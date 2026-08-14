@@ -13380,6 +13380,445 @@ body > .createProjectModal .professionalCreateProjectShell {
   }
 }
 
+/* Deployment Center operational rails */
+.deploymentCommandSurface {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.5fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+.deploymentCommandPrimary,
+.deploymentGateStack,
+.deploymentSectionCard,
+.deploymentDryRunPanel,
+.deploymentRailsPanel {
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.deploymentCommandPrimary {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.deploymentStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+.deploymentStatusGrid > div,
+.deploymentGateStack > div,
+.deploymentSectionCard {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentStatusGrid span,
+.deploymentGateStack span,
+.deploymentSectionCard span {
+  color: rgba(249, 235, 224, 0.65);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.deploymentStatusGrid strong,
+.deploymentGateStack strong,
+.deploymentSectionCard strong {
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.deploymentStatusGrid small,
+.deploymentSectionCard p {
+  color: rgba(249, 235, 224, 0.68);
+  line-height: 1.35;
+}
+.deploymentGateStack {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.deploymentSectionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.deploymentMapGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.deploymentMapPanel {
+  min-width: 0;
+}
+.deploymentCapabilityList,
+.deploymentRouteList {
+  display: grid;
+  gap: 8px;
+}
+.deploymentCapabilityRow,
+.deploymentRouteRow {
+  display: grid;
+  min-width: 0;
+  gap: 6px 10px;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentCapabilityRow {
+  grid-template-columns: minmax(130px, 0.8fr) 92px minmax(0, 1.4fr);
+  align-items: start;
+}
+.deploymentCapabilityRow strong,
+.deploymentRouteRow strong,
+.deploymentRouteRow code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.deploymentCapabilityRow span,
+.deploymentRouteRow span {
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentCapabilityRow p {
+  margin: 0;
+  color: rgba(249, 235, 224, 0.68);
+  font-size: 13px;
+  line-height: 1.38;
+}
+.deploymentRouteRow {
+  grid-template-columns: minmax(150px, 0.85fr) minmax(0, 1.25fr) 98px;
+  align-items: center;
+}
+.deploymentRouteRow code {
+  color: #ffb166;
+  font-size: 12px;
+}
+.deploymentReadinessLadder {
+  margin-top: 16px;
+}
+.deploymentLadderList {
+  display: grid;
+  gap: 8px;
+}
+.deploymentLadderRow {
+  display: grid;
+  grid-template-columns: 44px minmax(150px, 0.9fr) 90px minmax(0, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-decoration: none;
+}
+.deploymentLadderRow:hover {
+  border-color: rgba(255, 127, 17, 0.4);
+}
+.deploymentLadderRow span {
+  color: rgba(249, 235, 224, 0.52);
+  font-size: 11px;
+  font-weight: 950;
+}
+.deploymentLadderRow strong,
+.deploymentLadderRow p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.deploymentLadderRow em {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentLadderRow p {
+  margin: 0;
+  color: rgba(249, 235, 224, 0.68);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.taskQueueItem {
+  grid-template-columns: minmax(0, 1fr) 86px 86px;
+}
+.taskQueueItem small {
+  grid-column: 1 / -1;
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.35;
+}
+.launchWalletMatrix {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.launchWalletMatrix .walletRouteRow {
+  grid-template-columns: 46px minmax(130px, 0.75fr) minmax(110px, 0.55fr) minmax(124px, 0.7fr) minmax(250px, 1.3fr) minmax(330px, 1.7fr) minmax(118px, 0.6fr);
+  min-width: 1180px;
+  align-items: center;
+}
+.launchWalletInputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.launchWalletInputs.riskInputs {
+  grid-template-columns: 70px minmax(96px, 1fr) 70px 70px;
+}
+.launchWalletMiniField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.launchWalletMiniField span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.launchWalletMiniField input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  padding: 7px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #f9ebe0;
+  font-size: 12px;
+}
+.deploymentWalletRailList {
+  display: grid;
+  gap: 7px;
+}
+.deploymentWalletRailRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.6fr) minmax(110px, 0.7fr) 92px minmax(120px, 0.7fr) 108px 112px;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentWalletRailRow code,
+.deploymentWalletRailRow span,
+.deploymentWalletRailRow a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.deploymentWalletRailRow a {
+  color: #ffb166;
+  font-weight: 900;
+}
+.deploymentDryRunPanel,
+.deploymentRailsPanel,
+.deploymentLaunchBuilderPanel,
+.deploymentTaskAutomationPanel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 16px;
+}
+.deploymentBuilderGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.deploymentBuilderGrid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.deploymentBuilderGrid label.wide {
+  grid-column: span 4;
+}
+.deploymentBuilderGrid span {
+  color: rgba(249, 235, 224, 0.65);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentBuilderGrid input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #f9ebe0;
+}
+.deploymentBuilderActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+}
+.deploymentBuilderActionRow small {
+  min-width: min(320px, 100%);
+  line-height: 1.35;
+}
+.deploymentBuilderResult {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.deploymentBuilderResult > div,
+.deploymentBuilderResult > p {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentBuilderResult span {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(249, 235, 224, 0.62);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentBuilderResult strong,
+.deploymentBuilderResult p {
+  overflow-wrap: anywhere;
+}
+.deploymentBuilderResult p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: rgba(249, 235, 224, 0.7);
+  line-height: 1.4;
+}
+.deploymentTaskAutomationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.deploymentTaskAutomationCard {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentTaskAutomationCard > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.deploymentTaskAutomationCard span,
+.deploymentTaskAutomationCard dt {
+  color: rgba(249, 235, 224, 0.6);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.deploymentTaskAutomationCard strong,
+.deploymentTaskAutomationCard code,
+.deploymentTaskAutomationCard dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.deploymentTaskAutomationCard code {
+  color: #ffb166;
+  font-size: 12px;
+}
+.deploymentTaskAutomationCard dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+.deploymentTaskAutomationCard dl div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.deploymentTaskAutomationCard dd {
+  margin: 4px 0 0;
+  color: #f9ebe0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.deploymentReportAction {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.deploymentReportAction small {
+  min-width: min(260px, 100%);
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.35;
+}
+@media (max-width: 1180px) {
+  .deploymentCommandSurface,
+  .deploymentSectionGrid,
+  .deploymentMapGrid,
+  .deploymentStatusGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deploymentWalletRailRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deploymentLadderRow {
+    grid-template-columns: 44px minmax(0, 1fr) 90px;
+  }
+  .deploymentLadderRow p {
+    grid-column: 2 / -1;
+  }
+  .deploymentBuilderGrid,
+  .deploymentBuilderResult,
+  .deploymentTaskAutomationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deploymentBuilderGrid label.wide {
+    grid-column: span 2;
+  }
+}
+@media (max-width: 720px) {
+  .deploymentCommandSurface,
+  .deploymentSectionGrid,
+  .deploymentMapGrid,
+  .deploymentStatusGrid {
+    grid-template-columns: 1fr;
+  }
+  .deploymentWalletRailRow,
+  .deploymentCapabilityRow,
+  .deploymentRouteRow,
+  .deploymentLadderRow,
+  .deploymentBuilderGrid,
+  .deploymentBuilderResult,
+  .deploymentTaskAutomationGrid,
+  .taskQueueItem {
+    grid-template-columns: 1fr;
+  }
+  .deploymentTaskAutomationCard dl {
+    grid-template-columns: 1fr;
+  }
+  .deploymentLadderRow p {
+    grid-column: auto;
+  }
+  .deploymentBuilderGrid label.wide {
+    grid-column: auto;
+  }
+}
+
 .walletRailStatusCard {
   margin: 18px 0;
   padding: 18px;

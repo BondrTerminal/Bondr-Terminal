@@ -8,6 +8,7 @@ export type WalletPlanEntry = {
   walletId: string;
   role: string;
   participate: boolean;
+  executionPhase?: 'dev' | 'bundle' | 'sniper' | 'task' | 'observe';
   plannedBuySol: number;
   maxBuySol: number;
   maxSlippageBps: number;
@@ -16,6 +17,13 @@ export type WalletPlanEntry = {
   trailingStopPct: number;
   perTxSellCapPct: number;
   cooldownSeconds: number;
+  taskType?: 'timed-buy' | 'timed-sell' | 'smart-sell' | 'auto-take-profit' | 'stop-loss' | 'trailing-stop';
+  taskAmountSol?: number;
+  taskSellPercent?: number;
+  taskMaxTotalSol?: number;
+  taskDelaySeconds?: number;
+  taskIntervalSeconds?: number;
+  taskMaxExecutions?: number;
 };
 
 export type LaunchConfig = {

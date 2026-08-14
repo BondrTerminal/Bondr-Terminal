@@ -8,22 +8,56 @@ type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 type WalletUse = 'creator' | 'launch-readiness' | 'treasury' | 'observe';
+const DEFAULT_TAKE_PROFIT = [35, 75, 150];
+const TASK_TYPES = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'] as const;
 
 function short(address: string) { return address ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—'; }
+function formatPctList(values: number[]) { return values.length ? values.join(', ') : ''; }
+function pctListFrom(form: FormData, name: string, fallback: number[]) {
+  const raw = String(form.get(name) ?? '').trim();
+  if (!raw) return fallback;
+  return raw.split(',').map((item) => Number(item.trim())).filter((value) => Number.isFinite(value));
+}
+
+function WalletPlanNumberField({ label, name, value, placeholder, min, max, step }: { label: string; name: string; value: number; placeholder: string; min?: string; max?: string; step: string }) {
+  return (
+    <label className="launchWalletMiniField">
+      <span>{label}</span>
+      <input name={name} type="number" min={min} max={max} step={step} defaultValue={value} placeholder={placeholder} />
+    </label>
+  );
+}
+
+function WalletPlanTextField({ label, name, value, placeholder }: { label: string; name: string; value: string; placeholder: string }) {
+  return (
+    <label className="launchWalletMiniField">
+      <span>{label}</span>
+      <input name={name} defaultValue={value} placeholder={placeholder} />
+    </label>
+  );
+}
 
 function defaultPlan(wallets: Wallet[]): WalletPlanEntry[] {
   return wallets.map((wallet, index) => ({
     walletId: wallet.id,
     role: wallet.role,
     participate: index === 0,
+    executionPhase: index === 0 ? 'dev' : 'observe',
     plannedBuySol: 0,
     maxBuySol: 0,
     maxSlippageBps: 100,
-    takeProfitPercents: [],
-    stopLossPct: 0,
-    trailingStopPct: 0,
-    perTxSellCapPct: 0,
-    cooldownSeconds: 0
+    takeProfitPercents: DEFAULT_TAKE_PROFIT,
+    stopLossPct: -18,
+    trailingStopPct: 22,
+    perTxSellCapPct: 25,
+    cooldownSeconds: 60,
+    taskType: 'timed-buy',
+    taskAmountSol: 0,
+    taskSellPercent: 0,
+    taskMaxTotalSol: 0,
+    taskDelaySeconds: 0,
+    taskIntervalSeconds: 0,
+    taskMaxExecutions: 1
   }));
 }
 
@@ -45,14 +79,14 @@ function defaultConfig(project: Project, wallets: Wallet[]): LaunchConfig {
       maxInitialBuySol: project.fundingPlan.devBuySol ?? 0,
       maxSlippageBps: 100,
       maxPriorityFeeSol: 0.01,
-      perTxSellCapPct: 0,
-      cooldownSeconds: 0,
-      takeProfitPercents: [],
-      stopLossPct: 0,
-      trailingStopPct: 0,
-      trailingActivationPct: 0,
+      perTxSellCapPct: 25,
+      cooldownSeconds: 60,
+      takeProfitPercents: DEFAULT_TAKE_PROFIT,
+      stopLossPct: -18,
+      trailingStopPct: 22,
+      trailingActivationPct: 60,
       maxDevExposureSol: project.fundingPlan.devBuySol ?? 0,
-      maxDevSupplyPct: 0
+      maxDevSupplyPct: 8
     }
   };
 }
@@ -74,6 +108,10 @@ function numberFrom(form: FormData, name: string, fallback: number) {
   const value = Number(String(form.get(name) ?? '').trim());
   return Number.isFinite(value) ? value : fallback;
 }
+function stringFrom(form: FormData, name: string, fallback: string) {
+  const value = String(form.get(name) ?? '').trim();
+  return value || fallback;
+}
 
 function walletUse(plan: WalletPlanEntry | undefined, index: number): WalletUse {
   const role = String(plan?.role ?? '').toLowerCase();
@@ -83,46 +121,133 @@ function walletUse(plan: WalletPlanEntry | undefined, index: number): WalletUse 
   return 'observe';
 }
 
+function checked(form: FormData, name: string) {
+  return form.get(name) === 'on';
+}
+
+function phaseForWallet(form: FormData, wallet: Wallet, index: number, devWalletId: string): NonNullable<WalletPlanEntry['executionPhase']> {
+  if (wallet.id === devWalletId) return 'dev';
+  if (checked(form, `task.${wallet.id}.enabled`)) return 'task';
+  if (checked(form, `sniper.${wallet.id}.enabled`)) return 'sniper';
+  if (checked(form, `bundle.${wallet.id}.enabled`)) return 'bundle';
+  return index === 0 && !devWalletId ? 'dev' : 'observe';
+}
+
+function roleLabelForPhase(phase: NonNullable<WalletPlanEntry['executionPhase']>) {
+  if (phase === 'dev') return 'dev wallet';
+  if (phase === 'bundle') return 'bundle wallet';
+  if (phase === 'sniper') return 'sniper wallet';
+  if (phase === 'task') return 'task wallet';
+  return 'observe';
+}
+
+function taskTypeFrom(form: FormData, walletId: string, fallback: WalletPlanEntry['taskType']) {
+  const value = String(form.get(`task.${walletId}.type`) ?? fallback ?? 'timed-buy');
+  return TASK_TYPES.includes(value as (typeof TASK_TYPES)[number]) ? value as WalletPlanEntry['taskType'] : 'timed-buy';
+}
+
 export function LaunchConfigEditor({ project, wallets }: Props) {
   const router = useRouter();
   const initial = useMemo(() => mergedConfig(project, wallets), [project, wallets]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
+  const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaveState('saving');
     setMessage('Saving launch configuration…');
     const form = new FormData(event.currentTarget);
-    const walletPlan = wallets.map((wallet, index) => ({
-      ...(initial.walletPlan.find((entry) => entry.walletId === wallet.id) ?? defaultPlan([wallet])[0]),
-      walletId: wallet.id,
-      role: String(form.get(`wallet.${wallet.id}.role`) ?? wallet.role),
-      participate: form.get(`wallet.${wallet.id}.enabled`) === 'on',
-      plannedBuySol: 0,
-      maxBuySol: 0,
-      maxSlippageBps: numberFrom(form, 'route.slippageBps', initial.route.slippageBps)
-    }));
-    const body: LaunchConfig = {
-      ...initial,
-      route: {
-        ...initial.route,
-        initialBuySol: numberFrom(form, 'route.initialBuySol', initial.route.initialBuySol),
-        slippageBps: numberFrom(form, 'route.slippageBps', initial.route.slippageBps),
-        priorityFeeMode: String(form.get('route.priorityFeeMode') ?? initial.route.priorityFeeMode),
-        graduationMonitor: String(form.get('route.graduationMonitor') ?? 'disabled'),
-        raydiumLiquiditySol: numberFrom(form, 'route.raydiumLiquiditySol', initial.route.raydiumLiquiditySol),
-        burnLiquidity: form.get('route.burnLiquidity') === 'on'
+    const devWalletId = stringFrom(form, 'dev.walletId', wallets[0]?.id ?? '');
+    const walletPlan = wallets.map((wallet, index) => {
+      const existing = initial.walletPlan.find((entry) => entry.walletId === wallet.id) ?? defaultPlan([wallet])[0];
+      const phase = phaseForWallet(form, wallet, index, devWalletId);
+      const prefix = phase === 'dev' ? `devPlan.${wallet.id}` : phase === 'bundle' ? `bundle.${wallet.id}` : phase === 'sniper' ? `sniper.${wallet.id}` : phase === 'task' ? `task.${wallet.id}` : `observe.${wallet.id}`;
+      const fallbackTakeProfit = existing.takeProfitPercents?.length ? existing.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
+      const taskAmountSol = numberFrom(form, `task.${wallet.id}.taskAmountSol`, existing.taskAmountSol ?? existing.plannedBuySol ?? 0);
+      const taskSellPercent = numberFrom(form, `task.${wallet.id}.taskSellPercent`, existing.taskSellPercent ?? 0);
+      const taskMaxTotalSol = numberFrom(form, `task.${wallet.id}.taskMaxTotalSol`, existing.taskMaxTotalSol ?? existing.maxBuySol ?? 0);
+      const plannedBuySol = phase === 'task' ? taskAmountSol : numberFrom(form, `${prefix}.plannedBuySol`, existing.plannedBuySol ?? 0);
+      const maxBuySol = phase === 'task'
+        ? taskMaxTotalSol
+        : phase === 'sniper'
+          ? numberFrom(form, `${prefix}.plannedBuySol`, existing.maxBuySol || existing.plannedBuySol || 0)
+          : numberFrom(form, `${prefix}.maxBuySol`, existing.maxBuySol ?? 0);
+      return {
+        ...existing,
+        walletId: wallet.id,
+        role: roleLabelForPhase(phase),
+        participate: phase !== 'observe',
+        executionPhase: phase,
+        plannedBuySol,
+        maxBuySol,
+        maxSlippageBps: numberFrom(form, `${prefix}.maxSlippageBps`, existing.maxSlippageBps ?? initial.route.slippageBps),
+        stopLossPct: numberFrom(form, `${prefix}.stopLossPct`, existing.stopLossPct || initial.devWalletRules.stopLossPct),
+        trailingStopPct: numberFrom(form, `${prefix}.trailingStopPct`, existing.trailingStopPct || initial.devWalletRules.trailingStopPct),
+        takeProfitPercents: pctListFrom(form, `${prefix}.takeProfitPercents`, fallbackTakeProfit),
+        perTxSellCapPct: numberFrom(form, `${prefix}.perTxSellCapPct`, existing.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct),
+        cooldownSeconds: numberFrom(form, `${prefix}.cooldownSeconds`, existing.cooldownSeconds || initial.devWalletRules.cooldownSeconds),
+        taskType: taskTypeFrom(form, wallet.id, existing.taskType),
+        taskAmountSol,
+        taskSellPercent,
+        taskMaxTotalSol,
+        taskDelaySeconds: numberFrom(form, `task.${wallet.id}.delaySeconds`, existing.taskDelaySeconds ?? 0),
+        taskIntervalSeconds: numberFrom(form, `task.${wallet.id}.intervalSeconds`, existing.taskIntervalSeconds ?? 0),
+        taskMaxExecutions: numberFrom(form, `task.${wallet.id}.maxExecutions`, existing.taskMaxExecutions ?? 1)
+      };
+    });
+    const body = {
+      launchPath: stringFrom(form, 'launchPath', project.launchPath),
+      tokenMint: stringFrom(form, 'tokenMint', project.tokenMint ?? ''),
+      pool: stringFrom(form, 'pool', project.pool ?? ''),
+      metadata: {
+        name: stringFrom(form, 'metadata.name', project.metadata.name),
+        symbol: stringFrom(form, 'metadata.symbol', project.metadata.symbol),
+        description: stringFrom(form, 'metadata.description', project.metadata.description),
+        imageUrl: stringFrom(form, 'metadata.imageUrl', project.metadata.imageUrl),
+        website: stringFrom(form, 'metadata.website', project.metadata.website),
+        twitter: stringFrom(form, 'metadata.twitter', project.metadata.twitter),
+        telegram: stringFrom(form, 'metadata.telegram', project.metadata.telegram)
       },
-      walletPlan,
-      devWalletRules: {
-        ...initial.devWalletRules,
-        maxInitialBuySol: numberFrom(form, 'route.initialBuySol', initial.devWalletRules.maxInitialBuySol),
-        maxSlippageBps: numberFrom(form, 'route.slippageBps', initial.devWalletRules.maxSlippageBps)
+      fundingPlan: {
+        budgetSol: numberFrom(form, 'funding.budgetSol', project.fundingPlan.budgetSol),
+        devBuySol: numberFrom(form, 'funding.devBuySol', project.fundingPlan.devBuySol),
+        liquiditySol: numberFrom(form, 'funding.liquiditySol', project.fundingPlan.liquiditySol),
+        feeReserveSol: numberFrom(form, 'funding.feeReserveSol', project.fundingPlan.feeReserveSol),
+        collectionWalletId: stringFrom(form, 'funding.collectionWalletId', project.fundingPlan.collectionWalletId)
+      },
+      launchConfig: {
+        ...initial,
+        route: {
+          ...initial.route,
+          initialBuySol: numberFrom(form, 'route.initialBuySol', initial.route.initialBuySol),
+          slippageBps: numberFrom(form, 'route.slippageBps', initial.route.slippageBps),
+          priorityFeeMode: stringFrom(form, 'route.priorityFeeMode', initial.route.priorityFeeMode),
+          graduationMonitor: stringFrom(form, 'route.graduationMonitor', initial.route.graduationMonitor),
+          raydiumLiquiditySol: numberFrom(form, 'route.raydiumLiquiditySol', initial.route.raydiumLiquiditySol),
+          raydiumWithheldTokenPct: numberFrom(form, 'route.raydiumWithheldTokenPct', initial.route.raydiumWithheldTokenPct),
+          raydiumWithheldTokenAmount: numberFrom(form, 'route.raydiumWithheldTokenAmount', initial.route.raydiumWithheldTokenAmount),
+          burnLiquidity: form.get('route.burnLiquidity') === 'on'
+        },
+        walletPlan,
+        devWalletRules: {
+          ...initial.devWalletRules,
+          maxInitialBuySol: numberFrom(form, 'dev.maxInitialBuySol', initial.devWalletRules.maxInitialBuySol),
+          maxSlippageBps: numberFrom(form, 'dev.maxSlippageBps', initial.devWalletRules.maxSlippageBps),
+          maxPriorityFeeSol: numberFrom(form, 'dev.maxPriorityFeeSol', initial.devWalletRules.maxPriorityFeeSol),
+          maxDevExposureSol: numberFrom(form, 'dev.maxDevExposureSol', initial.devWalletRules.maxDevExposureSol),
+          maxDevSupplyPct: numberFrom(form, 'dev.maxDevSupplyPct', initial.devWalletRules.maxDevSupplyPct),
+          stopLossPct: numberFrom(form, 'dev.stopLossPct', initial.devWalletRules.stopLossPct),
+          trailingStopPct: numberFrom(form, 'dev.trailingStopPct', initial.devWalletRules.trailingStopPct),
+          trailingActivationPct: numberFrom(form, 'dev.trailingActivationPct', initial.devWalletRules.trailingActivationPct),
+          takeProfitPercents: pctListFrom(form, 'dev.takeProfitPercents', initial.devWalletRules.takeProfitPercents),
+          perTxSellCapPct: numberFrom(form, 'dev.perTxSellCapPct', initial.devWalletRules.perTxSellCapPct),
+          cooldownSeconds: numberFrom(form, 'dev.cooldownSeconds', initial.devWalletRules.cooldownSeconds)
+        }
       }
     };
 
-    const response = await fetch(`/api/projects/${project.id}/launch-config`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ launchConfig: body }) });
+    const response = await fetch(`/api/projects/${project.id}/launch-config`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       setSaveState('error');
@@ -138,50 +263,150 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     <form className="launchConfigEditor cleanLaunchConfigEditor" onSubmit={save}>
       <section className="documentCard launchConfigPanel">
         <div className="sectionIntro compactIntro">
-          <span>Project config</span>
+          <span>Token Info</span>
           <h2>{project.name}</h2>
-          <p>Configure metadata, route preferences, and launch-wallet roles. This screen does not deploy tokens, fund wallets, sign, or broadcast.</p>
+          <p>Configure metadata, launch path, funding assumptions, route preferences, and launch-wallet roles. This screen does not deploy tokens, fund wallets, sign, or broadcast.</p>
         </div>
         <div className="launchConfigEditorGrid compact">
-          <label><span>Token name</span><input name="metadata.name" defaultValue={project.name} readOnly /></label>
-          <label><span>Ticker</span><input name="metadata.ticker" defaultValue={project.ticker} readOnly /></label>
-          <label><span>Launch path</span><input name="launchPath" defaultValue={project.launchPath} readOnly /></label>
-          <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" readOnly /></label>
-          <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" readOnly /></label>
+          <label><span>Token name</span><input name="metadata.name" defaultValue={project.metadata.name || project.name} /></label>
+          <label><span>Ticker</span><input name="metadata.symbol" defaultValue={project.metadata.symbol || project.ticker} /></label>
+          <label><span>Launch path</span><select name="launchPath" defaultValue={project.launchPath}><option value="pump.fun">pump.fun</option><option value="raydium">raydium</option><option value="meteora">meteora</option><option value="bonk">bonk</option></select></label>
+          <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" /></label>
+          <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
+          <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} placeholder="/uploads or https://" /></label>
+          <label className="wide"><span>Description</span><textarea name="metadata.description" defaultValue={project.metadata.description} placeholder="Two-second token description" rows={4} /></label>
+          <label><span>Website</span><input name="metadata.website" defaultValue={project.metadata.website} placeholder="https://" /></label>
+          <label><span>X / Twitter</span><input name="metadata.twitter" defaultValue={project.metadata.twitter} placeholder="@handle or URL" /></label>
+          <label><span>Telegram</span><input name="metadata.telegram" defaultValue={project.metadata.telegram} placeholder="t.me/..." /></label>
+          <label><span>Total budget SOL</span><input name="funding.budgetSol" type="number" step="0.001" defaultValue={project.fundingPlan.budgetSol} /></label>
+          <label><span>Dev buy SOL</span><input name="funding.devBuySol" type="number" step="0.001" defaultValue={project.fundingPlan.devBuySol} /></label>
+          <label><span>Liquidity SOL</span><input name="funding.liquiditySol" type="number" step="0.001" defaultValue={project.fundingPlan.liquiditySol} /></label>
+          <label><span>Fee reserve SOL</span><input name="funding.feeReserveSol" type="number" step="0.001" defaultValue={project.fundingPlan.feeReserveSol} /></label>
+          <label><span>Collection wallet id</span><input name="funding.collectionWalletId" defaultValue={project.fundingPlan.collectionWalletId} /></label>
           <label><span>Initial buy SOL cap</span><input name="route.initialBuySol" type="number" step="0.001" defaultValue={initial.route.initialBuySol} /></label>
           <label><span>Slippage bps cap</span><input name="route.slippageBps" type="number" step="1" defaultValue={initial.route.slippageBps} /></label>
           <label><span>Priority fee policy</span><input name="route.priorityFeeMode" defaultValue={initial.route.priorityFeeMode} /></label>
           <label><span>Graduation monitor</span><input name="route.graduationMonitor" defaultValue={initial.route.graduationMonitor} /></label>
+          <label><span>Raydium liquidity SOL</span><input name="route.raydiumLiquiditySol" type="number" step="0.001" defaultValue={initial.route.raydiumLiquiditySol} /></label>
+          <label><span>Withheld token %</span><input name="route.raydiumWithheldTokenPct" type="number" step="0.1" defaultValue={initial.route.raydiumWithheldTokenPct} /></label>
+          <label><span>Withheld token amount</span><input name="route.raydiumWithheldTokenAmount" type="number" step="1" defaultValue={initial.route.raydiumWithheldTokenAmount} /></label>
           <label className="launchCheckbox"><span>Burn LP if a future LP adapter is approved</span><input name="route.burnLiquidity" type="checkbox" defaultChecked={initial.route.burnLiquidity} /></label>
         </div>
       </section>
 
-      <section className="documentCard launchWalletPanel">
+      <section className="documentCard launchConfigPanel">
         <div className="sectionIntro compactIntro">
-          <span>Wallet selection</span>
-          <h2>Launch wallet roles</h2>
-          <p>Only saved public wallet records are listed. A wallet becomes signable only when the connected browser wallet matches that address.</p>
+          <span>Risk policy</span>
+          <h2>Deployer and wallet task automation limits</h2>
+          <p>These are policy rails for launch, snipe/protection, timed buys/sells, smart sell, auto take-profit, stop-loss, and cooldown behavior. They are not fake-volume controls.</p>
         </div>
-        <div className="walletRouteTable" role="table" aria-label="Launch wallet roles">
-          <div className="walletRouteRow walletRouteHead" role="row"><span>Use</span><span>Wallet</span><span>Address</span><span>Role</span><span>Custody</span><span>Status</span></div>
-          {wallets.length ? wallets.map((wallet, index) => {
-            const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-            const use = walletUse(plan, index);
-            return <label className="walletRouteRow" role="row" key={wallet.id}>
-              <span><input name={`wallet.${wallet.id}.enabled`} type="checkbox" defaultChecked={use !== 'observe'} /></span>
-              <strong>{wallet.role || `Wallet ${index + 1}`}</strong>
-              <code title={wallet.address}>{short(wallet.address)}</code>
-              <select name={`wallet.${wallet.id}.role`} defaultValue={use}>
-                <option value="creator">creator</option>
-                <option value="launch-readiness">launch-readiness</option>
-                <option value="treasury">treasury</option>
-                <option value="observe">observe</option>
+        <div className="launchConfigEditorGrid compact">
+          <label><span>Max initial buy SOL</span><input name="dev.maxInitialBuySol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxInitialBuySol} /></label>
+          <label><span>Max slippage bps</span><input name="dev.maxSlippageBps" type="number" step="1" defaultValue={initial.devWalletRules.maxSlippageBps} /></label>
+          <label><span>Max priority fee SOL</span><input name="dev.maxPriorityFeeSol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxPriorityFeeSol} /></label>
+          <label><span>Max dev exposure SOL</span><input name="dev.maxDevExposureSol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxDevExposureSol} /></label>
+          <label><span>Max dev supply %</span><input name="dev.maxDevSupplyPct" type="number" step="0.1" defaultValue={initial.devWalletRules.maxDevSupplyPct} /></label>
+          <label><span>Stop loss %</span><input name="dev.stopLossPct" type="number" max="0" step="0.1" defaultValue={initial.devWalletRules.stopLossPct} /></label>
+          <label><span>Trailing stop %</span><input name="dev.trailingStopPct" type="number" min="0" step="0.1" defaultValue={initial.devWalletRules.trailingStopPct} /></label>
+          <label><span>Trailing activation %</span><input name="dev.trailingActivationPct" type="number" min="0" step="0.1" defaultValue={initial.devWalletRules.trailingActivationPct} /></label>
+          <label><span>Take-profit levels %</span><input name="dev.takeProfitPercents" defaultValue={formatPctList(initial.devWalletRules.takeProfitPercents)} placeholder="35, 75, 150" /></label>
+          <label><span>Per-tx sell cap %</span><input name="dev.perTxSellCapPct" type="number" min="0" max="100" step="0.1" defaultValue={initial.devWalletRules.perTxSellCapPct} /></label>
+          <label><span>Cooldown seconds</span><input name="dev.cooldownSeconds" type="number" min="0" step="1" defaultValue={initial.devWalletRules.cooldownSeconds} /></label>
+        </div>
+      </section>
+
+      <section className="documentCard launchWalletPanel deploymentWalletFlowPanel">
+        <div className="sectionIntro compactIntro">
+          <span>Wallet rails</span>
+          <h2>Dev wallet → bundle → sniper → task wallets</h2>
+          <p>Wallet deployment follows the exact launch order: dev wallet, bundle wallets, sniper wallets, then Task Manager wallets. Signing still requires browser-wallet match and live execution stays gated.</p>
+        </div>
+        {wallets.length ? <div className="deploymentWalletFlow">
+          <section className="deploymentWalletFlowStep">
+            <div><span>01</span><h3>Dev Wallet / Buy Amount</h3><p>Select the deployer wallet and define initial buy limits.</p></div>
+            <label className="deploymentDevWalletSelect">
+              <span>Dev wallet</span>
+              <select name="dev.walletId" defaultValue={defaultDevWalletId}>
+                {wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.role || wallet.id} · {short(wallet.address)}</option>)}
               </select>
-              <span>{wallet.custodyMode === 'watch-only' ? 'watch-only' : 'browser match required'}</span>
-              <em>{wallet.status}</em>
-            </label>;
-          }) : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Ops.</div>}
-        </div>
+            </label>
+            {wallets.map((wallet, index) => {
+              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+              return <div className="deploymentWalletFlowRow" key={`dev-${wallet.id}`}>
+                <strong>{wallet.role || `Wallet ${index + 1}`}</strong>
+                <code title={wallet.address}>{short(wallet.address)}</code>
+                <span>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</span>
+                <span className="launchWalletInputs">
+                  <WalletPlanNumberField label="planned buy" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
+                  <WalletPlanNumberField label="max buy" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
+                  <WalletPlanNumberField label="slip bps" name={`devPlan.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                </span>
+              </div>;
+            })}
+          </section>
+
+          <section className="deploymentWalletFlowStep">
+            <div><span>02</span><h3>Bundle Wallet Select</h3><p>Select wallets for launch bundle participation and cap spend per wallet.</p></div>
+            {wallets.map((wallet) => {
+              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+              const enabled = plan?.executionPhase === 'bundle' || plan?.role.toLowerCase().includes('bundle') || walletUse(plan, 1) === 'launch-readiness';
+              return <label className="deploymentWalletFlowRow selectable" key={`bundle-${wallet.id}`}>
+                <input name={`bundle.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
+                <strong>{wallet.role}</strong>
+                <code title={wallet.address}>{short(wallet.address)}</code>
+                <span className="launchWalletInputs">
+                  <WalletPlanNumberField label="planned SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
+                  <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
+                  <WalletPlanNumberField label="slip bps" name={`bundle.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                </span>
+              </label>;
+            })}
+          </section>
+
+          <section className="deploymentWalletFlowStep">
+            <div><span>03</span><h3>Sniper Wallet Select</h3><p>Select wallets for snipe/protection rules after launch.</p></div>
+            {wallets.map((wallet) => {
+              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+              const enabled = plan?.executionPhase === 'sniper' || plan?.role.toLowerCase().includes('sniper');
+              return <label className="deploymentWalletFlowRow selectable" key={`sniper-${wallet.id}`}>
+                <input name={`sniper.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
+                <strong>{wallet.role}</strong>
+                <code title={wallet.address}>{short(wallet.address)}</code>
+                <span className="launchWalletInputs riskInputs">
+                  <WalletPlanNumberField label="buy cap SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
+                  <WalletPlanNumberField label="slip bps" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                  <WalletPlanNumberField label="stop %" name={`sniper.${wallet.id}.stopLossPct`} max="0" step="0.1" value={plan?.stopLossPct || initial.devWalletRules.stopLossPct} placeholder="-18" />
+                  <WalletPlanTextField label="take profit %" name={`sniper.${wallet.id}.takeProfitPercents`} value={formatPctList(plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents)} placeholder="35, 75, 150" />
+                  <WalletPlanNumberField label="sell cap %" name={`sniper.${wallet.id}.perTxSellCapPct`} min="0" max="100" step="0.1" value={plan?.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct} placeholder="25" />
+                  <WalletPlanNumberField label="cooldown" name={`sniper.${wallet.id}.cooldownSeconds`} min="0" step="1" value={plan?.cooldownSeconds || initial.devWalletRules.cooldownSeconds} placeholder="60" />
+                </span>
+              </label>;
+            })}
+          </section>
+
+          <section className="deploymentWalletFlowStep">
+            <div><span>04</span><h3>Task Manager Wallet Select</h3><p>Select wallets for timed buy/sell, smart sell, auto take-profit, and time-variable execution.</p></div>
+            {wallets.map((wallet) => {
+              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+              const enabled = plan?.executionPhase === 'task' || plan?.role.toLowerCase().includes('task');
+              return <label className="deploymentWalletFlowRow selectable taskRow" key={`task-${wallet.id}`}>
+                <input name={`task.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
+                <strong>{wallet.role}</strong>
+                <code title={wallet.address}>{short(wallet.address)}</code>
+                <span className="launchWalletInputs taskInputs">
+                  <label className="launchWalletMiniField"><span>task</span><select name={`task.${wallet.id}.type`} defaultValue={plan?.taskType ?? 'timed-buy'}>{TASK_TYPES.map((type) => <option value={type} key={type}>{type}</option>)}</select></label>
+                  <WalletPlanNumberField label="amount SOL" name={`task.${wallet.id}.taskAmountSol`} min="0" step="0.001" value={plan?.taskAmountSol ?? plan?.plannedBuySol ?? 0} placeholder="0.010" />
+                  <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
+                  <WalletPlanNumberField label="max total SOL" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? plan?.maxBuySol ?? 0} placeholder="0.050" />
+                  <WalletPlanNumberField label="delay sec" name={`task.${wallet.id}.delaySeconds`} min="0" step="1" value={plan?.taskDelaySeconds ?? 0} placeholder="0" />
+                  <WalletPlanNumberField label="interval sec" name={`task.${wallet.id}.intervalSeconds`} min="0" step="1" value={plan?.taskIntervalSeconds ?? 0} placeholder="60" />
+                  <WalletPlanNumberField label="max runs" name={`task.${wallet.id}.maxExecutions`} min="1" step="1" value={plan?.taskMaxExecutions ?? 1} placeholder="1" />
+                </span>
+              </label>;
+            })}
+          </section>
+        </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
+        <p className="walletSecurityFootnote">Task rails are wallet execution controls: timed buy/sell, smart sell, auto take-profit, stop-loss, sell caps, and cooldowns. They must not be used for wash trading, fake volume, self-trading, spoofing, or misleading activity.</p>
       </section>
 
       <section className="documentCard deploymentDisabledPanel">
