@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
-import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
+import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
@@ -245,7 +245,64 @@ test('jito send bundle response remains blocked until live implementation exists
   }, activation);
   assert.equal(result.status, 'blocked');
   assert.equal(result.execution, 'blocked-no-jito-relay-submit');
-  assert.ok(result.blockers.includes('live-jito-submit-not-implemented'));
+  assert.ok(result.blockers.includes('jito-relay-disabled'));
+  assert.ok(result.blockers.includes('broadcast-gate-closed'));
+});
+
+test('jito sendBundle remains blocked before relay fetch when gates are closed', async () => {
+  const result = await sendJitoBundle({
+    signedTransactions: ['tx1'],
+    expectedSigners: [wallet.address],
+    expectedMint: 'Mint111111111111111111111111111111111111111',
+    tipLamports: 1000,
+    simulationProof: { ok: true },
+    approvalId: 'approval-test'
+  }, activation);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.execution, 'blocked-no-jito-relay-submit');
+  assert.ok(result.blockers.includes('jito-relay-disabled'));
+  assert.ok(result.blockers.includes('broadcast-gate-closed'));
+});
+
+test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () => {
+  const previousFetch = globalThis.fetch;
+  const requests: Array<{ url: string; body: string }> = [];
+  globalThis.fetch = (async (url, init) => {
+    requests.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(JSON.stringify({ jsonrpc: '2.0', result: 'bundle-test-id' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const result = await sendJitoBundle({
+      signedTransactions: ['tx1'],
+      expectedSigners: [wallet.address],
+      expectedMint: 'Mint111111111111111111111111111111111111111',
+      tipLamports: 1000,
+      simulationProof: { ok: true },
+      approvalId: 'approval-test'
+    }, { ...activation, broadcastEnabled: true }, {
+      contract: 'bondr-jito-relay-readiness-v1',
+      status: 'relay-ready',
+      relayEnabled: true,
+      provider: 'jito-block-engine',
+      blockEngineUrl: 'https://jito.test',
+      blockEngineRegion: 'test',
+      authConfigured: false,
+      tip: { minLamports: 1000, maxLamports: 100000, minSol: 0.000001, maxSol: 0.0001, tipAccountsEndpoint: 'https://jito.test/api/v1/getTipAccounts' },
+      limits: { maxTransactionsPerBundle: 5, maxWalletsPerBundle: 5, maxTotalSol: 0.25 },
+      methods: { sendBundle: 'sendBundle', getBundleStatuses: 'getBundleStatuses', getInflightBundleStatuses: 'getInflightBundleStatuses', getTipAccounts: 'getTipAccounts', sendTransaction: 'sendTransaction' },
+      requiredEnv: [],
+      optionalEnv: [],
+      blockers: [],
+      warnings: [],
+      execution: 'relay-ready-gated-submit'
+    });
+    assert.equal(result.status, 'submitted');
+    assert.equal(result.relayResponse?.bundleId, 'bundle-test-id');
+    assert.equal(requests.length, 1);
+    assert.equal(JSON.parse(requests[0].body).method, 'sendBundle');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test('wallet signing readiness does not treat watch-only bundle wallets as executable', () => {

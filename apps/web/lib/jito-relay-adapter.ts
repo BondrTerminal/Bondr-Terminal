@@ -62,9 +62,27 @@ export type JitoBundlePreview = {
   safety: {
     relayEnabled: boolean;
     broadcastEnabled: boolean;
-    submitImplemented: false;
-    noRelaySubmit: true;
+    submitImplemented: boolean;
+    noRelaySubmit: boolean;
   };
+};
+
+export type JitoSendBundleResult = {
+  status: 'blocked' | 'submitted' | 'relay-error';
+  observedAt: string;
+  preview: JitoBundlePreview;
+  blockers: string[];
+  relayRequest?: {
+    endpoint: string;
+    method: 'sendBundle';
+    transactionCount: number;
+  };
+  relayResponse?: {
+    bundleId: string | null;
+    raw: unknown;
+  };
+  normalizedError?: NormalizedJitoRelayError;
+  execution: 'blocked-no-jito-relay-submit' | 'jito-send-bundle-submitted';
 };
 
 function asStringArray(value: unknown): string[] {
@@ -78,6 +96,10 @@ function asString(value: unknown): string | null {
 function asNumber(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function signedTransactionsFrom(payload: JitoBundlePayload) {
+  return asStringArray(payload.signedTransactions);
 }
 
 export function normalizeJitoRelayError(error: unknown): NormalizedJitoRelayError {
@@ -159,22 +181,85 @@ export function buildJitoBundlePreview(payload: JitoBundlePayload = {}, activati
     safety: {
       relayEnabled: relay.relayEnabled,
       broadcastEnabled: activation.broadcastEnabled,
-      submitImplemented: false,
+      submitImplemented: true,
       noRelaySubmit: true
     }
   };
 }
 
+export async function sendJitoBundle(payload: JitoBundlePayload, activation: LiveActivationStatus, relay = getJitoRelayReadiness()): Promise<JitoSendBundleResult> {
+  const preview = buildJitoBundlePreview(payload, activation, relay);
+  const blockers = Array.from(new Set(preview.blockers));
+  if (blockers.length) {
+    return {
+      status: 'blocked',
+      observedAt: new Date().toISOString(),
+      preview,
+      blockers,
+      normalizedError: normalizeJitoRelayError(blockers.join(', ')),
+      execution: 'blocked-no-jito-relay-submit'
+    };
+  }
+
+  const signedTransactions = signedTransactionsFrom(payload);
+  const endpoint = `${relay.blockEngineUrl.replace(/\/$/, '')}/api/v1/bundles`;
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: `bondr-${Date.now()}`,
+        method: 'sendBundle',
+        params: [signedTransactions]
+      }),
+      cache: 'no-store'
+    });
+    const raw = await response.json().catch(() => null) as null | { result?: string; error?: unknown };
+    if (!response.ok || raw?.error) {
+      return {
+        status: 'relay-error',
+        observedAt: new Date().toISOString(),
+        preview,
+        blockers: ['jito-relay-error'],
+        relayRequest: { endpoint, method: 'sendBundle', transactionCount: signedTransactions.length },
+        relayResponse: { bundleId: null, raw },
+        normalizedError: normalizeJitoRelayError(typeof raw?.error === 'string' ? raw.error : JSON.stringify(raw?.error ?? { status: response.status })),
+        execution: 'blocked-no-jito-relay-submit'
+      };
+    }
+    return {
+      status: 'submitted',
+      observedAt: new Date().toISOString(),
+      preview,
+      blockers: [],
+      relayRequest: { endpoint, method: 'sendBundle', transactionCount: signedTransactions.length },
+      relayResponse: { bundleId: raw?.result ?? null, raw },
+      execution: 'jito-send-bundle-submitted'
+    };
+  } catch (error) {
+    return {
+      status: 'relay-error',
+      observedAt: new Date().toISOString(),
+      preview,
+      blockers: ['jito-relay-request-failed'],
+      relayRequest: { endpoint, method: 'sendBundle', transactionCount: signedTransactions.length },
+      normalizedError: normalizeJitoRelayError(error),
+      execution: 'blocked-no-jito-relay-submit'
+    };
+  }
+}
+
 export function buildJitoSendBundleBlockedResponse(payload: JitoBundlePayload, activation: LiveActivationStatus, relay = getJitoRelayReadiness()) {
   const preview = buildJitoBundlePreview(payload, activation, relay);
-  const blockers = [...preview.blockers, 'live-jito-submit-not-implemented'];
+  const blockers = Array.from(new Set(preview.blockers));
   return {
     status: 'blocked',
     observedAt: new Date().toISOString(),
     preview,
-    blockers: Array.from(new Set(blockers)),
-    normalizedError: normalizeJitoRelayError('Jito sendBundle live submission is intentionally not implemented in this sprint.'),
+    blockers,
+    normalizedError: normalizeJitoRelayError(blockers.join(', ')),
     execution: 'blocked-no-jito-relay-submit',
-    nextImplementation: ['deserialize and hash signed txs', 'verify signer/mint/tip policy', 'submit sendBundle to Jito JSON-RPC', 'store bundle id', 'poll inflight/final status']
+    nextImplementation: ['provide signed transactions', 'verify simulation proof', 'provide explicit approval', 'open Jito relay and broadcast gates', 'submit sendBundle to Jito JSON-RPC', 'store bundle id', 'poll inflight/final status']
   };
 }
