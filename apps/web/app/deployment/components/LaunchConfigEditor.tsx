@@ -264,7 +264,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const routeReady = Boolean(initial.route.platform && initial.route.quoteToken && initial.route.buyMode);
   const walletReady = Boolean(selectedDevWallet && participatingPlans.length > 0);
   const riskReady = Boolean(initial.devWalletRules.stopLossPct < 0 && initial.devWalletRules.takeProfitPercents.length && initial.devWalletRules.perTxSellCapPct > 0);
-  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
+  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.metadataUri ?? '') || /\/ipfs\//i.test(project.metadata.metadataUri ?? '') || /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
   const nonDevParticipating = participatingPlans.filter((entry) => entry.walletId !== defaultDevWalletId);
   const multiWalletSigningReady = false;
   const signingBlockedCount = nonDevParticipating.length + (selectedDevWallet ? 1 : 0);
@@ -447,11 +447,12 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       launchPath: platform === 'bonk' ? 'bonk' : platform === 'pump' ? 'pump.fun' : project.launchPath,
       tokenMint: stringFrom(form, 'tokenMint', project.tokenMint ?? ''),
       pool: stringFrom(form, 'pool', project.pool ?? ''),
-      metadata: {
+        metadata: {
         name: stringFrom(form, 'metadata.name', project.metadata.name),
         symbol: stringFrom(form, 'metadata.symbol', project.metadata.symbol),
         description: stringFrom(form, 'metadata.description', project.metadata.description),
         imageUrl,
+        metadataUri: stringFrom(form, 'metadata.metadataUri', project.metadata.metadataUri ?? ''),
         website: stringFrom(form, 'metadata.website', project.metadata.website),
         twitter: stringFrom(form, 'metadata.twitter', project.metadata.twitter),
         telegram: stringFrom(form, 'metadata.telegram', project.metadata.telegram)
@@ -569,6 +570,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <label><span>X URL optional</span><input name="metadata.twitter" defaultValue={project.metadata.twitter} placeholder="@handle or URL" /></label>
             <label><span>Telegram optional</span><input name="metadata.telegram" defaultValue={project.metadata.telegram} placeholder="t.me/..." /></label>
             <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} onChange={(event) => setImagePreviewUrl(event.currentTarget.value)} placeholder="/api/projects/.../asset-image or https://" /></label>
+            <label><span>Metadata URI</span><input name="metadata.metadataUri" defaultValue={project.metadata.metadataUri ?? ''} placeholder="ipfs://.../metadata.json" /></label>
             <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" /></label>
             <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
           </div>

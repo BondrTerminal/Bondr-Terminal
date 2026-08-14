@@ -174,6 +174,7 @@ function applyPatch(project: Project, body: LaunchConfigPatch): Project {
     symbol: stringField(body.metadata.symbol, next.metadata.symbol, 16).toUpperCase(),
     description: stringField(body.metadata.description, next.metadata.description, 1000),
     imageUrl: stringField(body.metadata.imageUrl, next.metadata.imageUrl, 500),
+    metadataUri: stringField(body.metadata.metadataUri, next.metadata.metadataUri ?? '', 500),
     website: stringField(body.metadata.website, next.metadata.website, 500),
     twitter: stringField(body.metadata.twitter, next.metadata.twitter, 500),
     telegram: stringField(body.metadata.telegram, next.metadata.telegram, 500)

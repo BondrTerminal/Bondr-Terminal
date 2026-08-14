@@ -99,6 +99,7 @@ export type Project = {
     symbol: string;
     description: string;
     imageUrl: string;
+    metadataUri?: string;
     imageDataUrl?: string;
     imageContentType?: string;
     imageUpdatedAt?: string;

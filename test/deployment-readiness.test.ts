@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
+import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
@@ -142,7 +143,8 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
     ...project,
     metadata: {
       ...project.metadata,
-      imageUrl: 'ipfs://bafybeigdyrztkexample/metadata.json'
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
     }
   };
   const preview = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
@@ -152,6 +154,23 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('ipfs metadata readiness validates token metadata without pinning', () => {
+  const readiness = buildIpfsMetadataReadiness(project);
+  assert.equal(readiness.contract, 'bondr-ipfs-metadata-readiness-v1');
+  assert.equal(readiness.execution, 'readiness-only-no-ipfs-write');
+  assert.equal(readiness.provider, 'pinata');
+  assert.ok(readiness.blockers.includes('pinata-jwt-missing'));
+  assert.equal(readiness.metadataJson.symbol, 'ASD');
+});
+
+test('token metadata json includes image and optional social extensions', () => {
+  const metadata = buildTokenMetadataJson(project, 'ipfs://bafyimage');
+  assert.equal(metadata.name, 'sda');
+  assert.equal(metadata.symbol, 'ASD');
+  assert.equal(metadata.image, 'ipfs://bafyimage');
+  assert.equal(metadata.description, 'test launch');
 });
 
 test('jito bundle preview exposes signed payload policy blockers without submitting', () => {

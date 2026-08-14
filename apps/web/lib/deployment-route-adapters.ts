@@ -109,7 +109,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const maxDevBuySol = devPlan?.maxBuySol || devPlan?.plannedBuySol || project.fundingPlan.devBuySol || 0;
   const route = project.launchConfig?.route;
   const metadataFieldsReady = Boolean(project.metadata.name && project.metadata.symbol && project.metadata.description && project.metadata.imageUrl);
-  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
+  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.metadataUri ?? '') || /\/ipfs\//i.test(project.metadata.metadataUri ?? '') || /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
   const pumpPortalCreatePreview = buildPumpPortalCreatePreview(project, wallets, activation);
   const jitoTipCapSol = relay.tip.maxSol;
   const maxPriorityFeeSol = project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0;
@@ -162,6 +162,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     ipfsMetadataReadiness: {
       status: ipfsReady ? 'ready' : process.env.PINATA_JWT ? 'pinning-provider-configured-upload-needed' : 'provider-required',
       imageUrl: project.metadata.imageUrl || null,
+      metadataUri: project.metadata.metadataUri ?? null,
       requiredEnv: ['PINATA_JWT'],
       optionalEnv: ['IPFS_GATEWAY_URL'],
       blockers: [

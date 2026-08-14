@@ -45,6 +45,22 @@ type PumpPortalPreviewState = {
   error?: string;
 };
 
+type IpfsMetadataState = {
+  status?: string;
+  metadataUri?: string;
+  imageUri?: string;
+  execution?: string;
+  readiness?: {
+    status: string;
+    providerConfigured: boolean;
+    blockers: string[];
+    metadataUri: string | null;
+    image: { source: string; url: string | null };
+    metadataJson: { name: string; symbol: string; image: string };
+  };
+  error?: string;
+};
+
 function short(value?: string | null) {
   return value ? `${value.slice(0, 6)}...${value.slice(-5)}` : 'not set';
 }
@@ -59,6 +75,8 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [result, setResult] = useState<BuildState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pumpPortalPreview, setPumpPortalPreview] = useState<PumpPortalPreviewState | null>(null);
+  const [ipfsLoading, setIpfsLoading] = useState(false);
+  const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
 
   async function buildUnsigned() {
     setLoading(true);
@@ -104,6 +122,24 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     }
   }
 
+  async function requestIpfsMetadata(confirmPin: boolean) {
+    setIpfsLoading(true);
+    setIpfsResult(null);
+    try {
+      const response = await fetch('/api/deployment/ipfs/metadata', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId, confirmPin })
+      });
+      const payload = await response.json().catch(() => ({})) as IpfsMetadataState;
+      setIpfsResult(payload);
+    } catch (error) {
+      setIpfsResult({ status: 'error', error: error instanceof Error ? error.message : 'IPFS metadata request failed.' });
+    } finally {
+      setIpfsLoading(false);
+    }
+  }
+
   const disabledReason = !deploymentEnabled
     ? 'Deployment gate closed. Builder is visible for planning only.'
     : !payer || !mint
@@ -138,6 +174,30 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Owner ATA</span><strong>{short(result.ownerAta)}</strong></div>
           {(result.error || result.reason) && <p>{result.error ?? result.reason}</p>}
           {result.transactionBase64 && <p>Unsigned payload built. Transaction bytes intentionally hidden from the normal UI.</p>}
+        </div>
+      )}
+      <div className="pumpPortalPreviewPanel">
+        <div>
+          <span>IPFS metadata</span>
+          <strong>Pinata image + metadata JSON</strong>
+          <small>Preview is read-only. Pinning requires `PINATA_JWT` and the explicit pin action.</small>
+        </div>
+        <span className="deploymentBuilderActionRow">
+          <button className="button secondary" type="button" onClick={() => void requestIpfsMetadata(false)} disabled={ipfsLoading}>
+            {ipfsLoading ? 'Checking...' : 'Preview IPFS'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => void requestIpfsMetadata(true)} disabled={ipfsLoading}>
+            Pin Metadata
+          </button>
+        </span>
+      </div>
+      {ipfsResult && (
+        <div className="pumpPortalPreviewResult">
+          <div><span>Status</span><strong>{ipfsResult.status ?? ipfsResult.readiness?.status ?? 'unknown'}</strong></div>
+          <div><span>Provider</span><strong>{ipfsResult.readiness?.providerConfigured ? 'configured' : 'missing'}</strong><small>Pinata JWT</small></div>
+          <div><span>Image</span><strong>{ipfsResult.imageUri ?? ipfsResult.readiness?.image.source ?? 'unknown'}</strong><small>{short(ipfsResult.readiness?.image.url)}</small></div>
+          <div><span>Metadata URI</span><strong>{ipfsResult.metadataUri ?? ipfsResult.readiness?.metadataUri ?? 'not pinned'}</strong></div>
+          <div className="wide"><span>Blockers</span><strong>{ipfsResult.readiness?.blockers.length ? ipfsResult.readiness.blockers.join(', ') : ipfsResult.error ?? ipfsResult.execution ?? 'ready'}</strong></div>
         </div>
       )}
       <div className="pumpPortalPreviewPanel">

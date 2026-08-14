@@ -109,6 +109,7 @@ export async function POST(request: Request) {
   const twitter = clean(metadata.twitter ?? body.twitter, '', 120);
   const telegram = clean(metadata.telegram ?? body.telegram, '', 120);
   const imageUrl = clean(metadata.imageUrl ?? body.imageUrl, '', 260);
+  const metadataUri = clean(metadata.metadataUri, '', 500);
   const launchNotes = clean(body.launchNotes, '', 500);
   const slippageBps = numberField(body.maxSlippageBps, 100, 0, 1000);
   const devBuySol = numberField(funding.devBuySol, 0, 0, 10000);
@@ -169,6 +170,7 @@ export async function POST(request: Request) {
       symbol: ticker,
       description,
       imageUrl,
+      metadataUri,
       website,
       twitter,
       telegram

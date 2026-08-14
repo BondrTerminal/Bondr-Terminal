@@ -24,7 +24,7 @@ export type PumpPortalCreatePreview = {
       note: string;
     };
     metadataUri: string | null;
-    metadataUriSource: 'ipfs-image-placeholder' | 'missing';
+    metadataUriSource: 'stored-project-metadata-uri' | 'ipfs-image-placeholder' | 'missing';
   };
   requiredInputs: string[];
   presentInputs: Record<string, boolean>;
@@ -102,9 +102,10 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
   const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
   const devWallet = wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
   const imageUrl = project.metadata.imageUrl?.trim() || null;
+  const storedMetadataUri = project.metadata.metadataUri?.trim() || null;
   const image = imageSource(imageUrl);
   const imageAlreadyIpfs = isIpfsUri(imageUrl);
-  const metadataUri = imageAlreadyIpfs ? imageUrl : null;
+  const metadataUri = isIpfsUri(storedMetadataUri) ? storedMetadataUri : imageAlreadyIpfs ? imageUrl : null;
   const providerConfigured = Boolean(process.env.PINATA_JWT);
   const tokenName = project.metadata.name || project.name;
   const tokenSymbol = project.metadata.symbol || project.ticker;
@@ -171,7 +172,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
         note: imageAlreadyIpfs ? 'Image/metadata field is IPFS-shaped.' : 'Preview only; final create requires image plus metadata JSON pinned to IPFS.'
       },
       metadataUri,
-      metadataUriSource: metadataUri ? 'ipfs-image-placeholder' : 'missing'
+      metadataUriSource: storedMetadataUri ? 'stored-project-metadata-uri' : metadataUri ? 'ipfs-image-placeholder' : 'missing'
     },
     requiredInputs: [
       'token name',
