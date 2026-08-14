@@ -23,6 +23,11 @@ export async function GET() {
       'https://github.com/jito-labs/jito-ts',
       'https://github.com/jito-labs/jito-js-rpc'
     ],
+    endpoints: {
+      status: '/api/relay/jito/status',
+      bundlePreview: '/api/relay/jito/bundle-preview',
+      sendBundle: '/api/relay/jito/send-bundle'
+    },
     execution: 'jito-relay-status-only-no-submit'
   }, { headers: { 'cache-control': 'no-store' } });
 }

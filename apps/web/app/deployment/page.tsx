@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 const capabilityMap = [
   ['launch builder', 'real-gated', 'SPL unsigned mint builder exists; deployment gate is closed.'],
-  ['bundle sequencer', 'preview', 'Capped multi-wallet validation exists; relay/Jito submission is not implemented.'],
+  ['bundle sequencer', 'preview', 'Capped multi-wallet validation exists; Jito policy preview exists and live relay submit remains blocked.'],
   ['snipe / protection', 'partial', 'Terminal execution class is proven; deployment-specific rules remain gated.'],
   ['task automation', 'config-only', 'Timed buys/sells, smart sell, TP/SL, caps, and cooldowns are planning rails.'],
   ['liquidity setup', 'partial', 'Liquidity Engine can inspect pools; LP creation builders need adapter work.'],
@@ -27,7 +27,9 @@ const routeMap = [
   ['/api/pre-live-dry-run', 'Read-only launch dry-run', 'real'],
   ['/api/deployment-readiness', 'Dev-wallet launch readiness + rail checks', 'real'],
   ['/api/deployment-engine', 'Launch snapshot + gated SPL builder', 'real-gated'],
-  ['/api/bundle-sequencer', 'Bundle validation/build coordination', 'preview'],
+  ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
+  ['/api/relay/jito/bundle-preview', 'Jito signed-bundle policy preview', 'preview'],
+  ['/api/relay/jito/send-bundle', 'Blocked Jito sendBundle stub', 'closed'],
   ['/portfolio?view=wallets', 'Wallet Center and custody rails', 'real'],
   ['/sniper', 'Terminal quote/build/simulate/sign/broadcast class', 'proven']
 ];

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
+import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
@@ -149,4 +150,44 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('jito bundle preview exposes signed payload policy blockers without submitting', () => {
+  const preview = buildJitoBundlePreview({}, activation);
+  assert.equal(preview.contract, 'bondr-jito-bundle-preview-v1');
+  assert.equal(preview.execution, 'policy-preview-only-no-relay-submit');
+  assert.ok(preview.blockers.includes('signed-transactions-missing'));
+  assert.ok(preview.blockers.includes('expected-signers-missing'));
+  assert.ok(preview.blockers.includes('expected-mint-missing'));
+  assert.ok(preview.blockers.includes('simulation-proof-missing'));
+  assert.ok(preview.blockers.includes('explicit-approval-missing'));
+  assert.equal(preview.safety.noRelaySubmit, true);
+});
+
+test('jito bundle preview enforces tip cap and transaction count', () => {
+  const preview = buildJitoBundlePreview({
+    signedTransactions: ['tx1', 'tx2', 'tx3', 'tx4', 'tx5', 'tx6'],
+    expectedSigners: [wallet.address],
+    expectedMint: 'Mint111111111111111111111111111111111111111',
+    tipLamports: 1_000_000_000,
+    simulationProof: { ok: true },
+    approvalId: 'approval-test'
+  }, activation);
+  assert.ok(preview.blockers.some((blocker) => blocker.includes('transaction-limit')));
+  assert.ok(preview.blockers.includes('jito-tip-exceeds-cap'));
+  assert.equal(preview.policy.tipLamports, 1_000_000_000);
+});
+
+test('jito send bundle response remains blocked until live implementation exists', () => {
+  const result = buildJitoSendBundleBlockedResponse({
+    signedTransactions: ['tx1'],
+    expectedSigners: [wallet.address],
+    expectedMint: 'Mint111111111111111111111111111111111111111',
+    tipLamports: 1000,
+    simulationProof: { ok: true },
+    approvalId: 'approval-test'
+  }, activation);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.execution, 'blocked-no-jito-relay-submit');
+  assert.ok(result.blockers.includes('live-jito-submit-not-implemented'));
 });

@@ -1,4 +1,5 @@
 import { PublicKey } from '@solana/web3.js';
+import { buildJitoBundlePreview } from '../../../lib/jito-relay-adapter';
 import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 
@@ -50,6 +51,7 @@ function summarize(legs: BundleLeg[]) {
 export async function GET() {
   const relay = getJitoRelayReadiness();
   const activation = getLiveActivationStatus();
+  const bundlePreview = buildJitoBundlePreview({}, activation, relay);
   return Response.json({
     status: 'ok',
     observedAt: new Date().toISOString(),
@@ -72,8 +74,13 @@ export async function GET() {
       expectedMint: 'token mint',
       tipLamports: `1..${relay.tip.maxLamports}`,
       policyRequired: true,
+      previewEndpoint: '/api/relay/jito/bundle-preview',
       submitEndpointFuture: '/api/relay/jito/send-bundle'
     },
+    relayPreviewContract: bundlePreview.contract,
+    relayPreviewEndpoint: '/api/relay/jito/bundle-preview',
+    relaySubmitEndpoint: '/api/relay/jito/send-bundle',
+    relayPolicyBlockers: bundlePreview.blockers,
     signer: 'browser-wallet-per-leg',
     maxWallets: MAX_WALLETS,
     maxTotalSol: MAX_TOTAL_SOL,
@@ -106,6 +113,12 @@ export async function POST(request: Request) {
     if (totals.totalUsdc > MAX_TOTAL_USDC) throw new Error(`Bundle exceeds BUNDLE_MAX_TOTAL_USDC (${MAX_TOTAL_USDC}).`);
 
     if (body?.mode === 'preflight' || !liveTradingEnabled()) {
+      const relay = getJitoRelayReadiness();
+      const relayPreview = buildJitoBundlePreview({
+        expectedMint: mint,
+        expectedSigners: normalized.map((leg) => leg.wallet),
+        tipLamports: relay.tip.minLamports
+      }, getLiveActivationStatus(), relay);
       return Response.json({
         status: liveTradingEnabled() ? 'ok' : 'blocked',
         observedAt: new Date().toISOString(),
@@ -117,14 +130,15 @@ export async function POST(request: Request) {
         buildReadiness: liveTradingEnabled() ? 'ready-to-build-unsigned-transactions' : 'blocked-by-live-gate',
         routeDependency: '/api/bundle-sequencer -> /api/execution-swap -> browser wallet -> /api/send-signed-transaction',
         relaySubmission: false,
-        relayStatus: getJitoRelayReadiness().status,
-            relayProvider: getJitoRelayReadiness().provider,
-            relay: getJitoRelayReadiness(),
-            relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
-            supportedRelays: ['jito-block-engine-json-rpc'],
-            requiredEnv: getJitoRelayReadiness().requiredEnv,
-            simulationRequired: true,
-            bundleId: null,
+        relayStatus: relay.status,
+        relayProvider: relay.provider,
+        relay,
+        relayPreview,
+        relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
+        supportedRelays: ['jito-block-engine-json-rpc'],
+        requiredEnv: relay.requiredEnv,
+        simulationRequired: true,
+        bundleId: null,
         note: 'Validated multi-wallet intent only; no relay bundle was submitted.',
         execution: liveTradingEnabled() ? 'bundle-preflight-ok' : 'live-disabled-preflight-only'
       }, { status: liveTradingEnabled() ? 200 : 403 });
@@ -157,6 +171,13 @@ export async function POST(request: Request) {
       built.push({ index: leg.index, wallet: leg.wallet, side: leg.side, amount: leg.amount, spendAsset: leg.spendAsset, swap: payload.swap, quote: payload.quote, request: payload.request });
     }
 
+    const relay = getJitoRelayReadiness();
+    const relayPreview = buildJitoBundlePreview({
+      expectedMint: mint,
+      expectedSigners: normalized.map((leg) => leg.wallet),
+      tipLamports: relay.tip.minLamports
+    }, getLiveActivationStatus(), relay);
+
     return Response.json({
       status: 'ok',
       observedAt: new Date().toISOString(),
@@ -164,19 +185,21 @@ export async function POST(request: Request) {
       flowType: 'multi-wallet-preflight-build',
       stages: { preflight: 'complete', unsignedTransactionBuild: 'complete', browserWalletSigning: 'required-per-leg', signedBundleReview: 'required-before-relay', broadcast: 'explicit-only-via-/api/send-signed-transaction', relaySubmission: 'blocked-by-relay-or-broadcast-gate' },
       relaySubmission: false,
-      relayStatus: getJitoRelayReadiness().status,
-          relayProvider: getJitoRelayReadiness().provider,
-          relay: getJitoRelayReadiness(),
-          relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
-          supportedRelays: ['jito-block-engine-json-rpc'],
-          requiredEnv: getJitoRelayReadiness().requiredEnv,
-          simulationRequired: true,
-          bundleId: null,
+      relayStatus: relay.status,
+      relayProvider: relay.provider,
+      relay,
+      relayPreview,
+      relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
+      supportedRelays: ['jito-block-engine-json-rpc'],
+      requiredEnv: relay.requiredEnv,
+      simulationRequired: true,
+      bundleId: null,
       signedBundlePayloadShape: {
         signedTransactions: 'base64[]',
         expectedSigners: normalized.map((leg) => leg.wallet),
         expectedMint: mint,
-        maxTipLamports: getJitoRelayReadiness().tip.maxLamports,
+        maxTipLamports: relay.tip.maxLamports,
+        previewEndpoint: '/api/relay/jito/bundle-preview',
         submitEndpointFuture: '/api/relay/jito/send-bundle'
       },
       signer: 'browser-wallet-per-leg',
