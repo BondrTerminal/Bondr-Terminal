@@ -2,6 +2,7 @@ import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import { buildPumpPortalCreatePreview } from './pumpportal-deploy-readiness';
+import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 
 export type DeploymentRouteAdapterId =
   | 'pumpportal-create'
@@ -104,19 +105,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const sniperPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'sniper') ?? [];
   const taskPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'task') ?? [];
   const participatingPlans = project.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
-  const signingRows = participatingPlans.map((entry) => {
-    const wallet = wallets.find((item) => item.id === entry.walletId) ?? null;
-    const custodyMode = wallet?.custodyMode ?? 'watch-only';
-    const isDevSigner = devWallet?.id === entry.walletId;
-    return {
-      walletId: entry.walletId,
-      phase: entry.executionPhase ?? 'observe',
-      address: wallet?.address ?? null,
-      custodyMode,
-      canSignNow: custodyMode === 'managed-local' || isDevSigner,
-      blocker: custodyMode === 'managed-local' ? null : isDevSigner ? 'browser signer must be connected and approve' : 'watch-only wallet cannot sign a bundle leg'
-    };
-  });
+  const signingReadiness = buildWalletSigningReadiness(project, wallets);
   const maxDevBuySol = devPlan?.maxBuySol || devPlan?.plannedBuySol || project.fundingPlan.devBuySol || 0;
   const route = project.launchConfig?.route;
   const metadataFieldsReady = Boolean(project.metadata.name && project.metadata.symbol && project.metadata.description && project.metadata.imageUrl);
@@ -134,7 +123,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     !devWallet ? 'dev-wallet-missing' : null,
     maxDevBuySol <= 0 ? 'dev-buy-cap-missing' : null,
     bundlePlans.length && !relay.relayEnabled ? 'jito-relay-disabled-for-bundle' : null,
-    signingRows.some((row) => row.blocker?.includes('watch-only')) ? 'multi-wallet-signing-orchestration-missing' : null,
+    signingReadiness.blockers.some((blocker) => blocker.includes('watch-only')) ? 'multi-wallet-signing-orchestration-missing' : null,
     activation.deploymentEnabled ? null : 'deployment-gate-closed',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
   ].filter((item): item is string => Boolean(item));
@@ -181,12 +170,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       ].filter((item): item is string => Boolean(item)),
       docs: ['https://pumpportal.fun/creation/']
     },
-    signingOrchestration: {
-      status: signingRows.length && signingRows.every((row) => !row.blocker) ? 'executable' : 'blocked',
-      model: 'browser-wallet-per-leg-now-managed-wallet-later',
-      rows: signingRows,
-      blockers: signingRows.map((row) => row.blocker).filter((item): item is string => Boolean(item))
-    },
+    signingOrchestration: signingReadiness,
     relayReadiness: relay,
     fundingAndTipReadiness: {
       status: project.fundingPlan.budgetSol >= modeledRequiredSol ? 'modeled-covered' : 'review',

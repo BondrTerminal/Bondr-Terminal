@@ -226,6 +226,13 @@ function setFormValue(form: HTMLFormElement, name: string, value: string) {
   if (field instanceof HTMLInputElement) field.value = value;
 }
 
+function signingLabel(wallet: Wallet, phase: NonNullable<WalletPlanEntry['executionPhase']> = 'observe') {
+  if (wallet.custodyMode === 'managed-local') return 'managed-local · policy pending';
+  if (phase === 'dev') return 'browser signer required';
+  if (phase === 'observe') return 'watch-only record';
+  return 'watch-only · cannot sign';
+}
+
 export function LaunchConfigEditor({ project, wallets }: Props) {
   const router = useRouter();
   const initial = useMemo(() => mergedConfig(project, wallets), [project, wallets]);
@@ -259,7 +266,8 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const riskReady = Boolean(initial.devWalletRules.stopLossPct < 0 && initial.devWalletRules.takeProfitPercents.length && initial.devWalletRules.perTxSellCapPct > 0);
   const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
   const nonDevParticipating = participatingPlans.filter((entry) => entry.walletId !== defaultDevWalletId);
-  const multiWalletSigningReady = nonDevParticipating.every((entry) => wallets.find((wallet) => wallet.id === entry.walletId)?.custodyMode === 'managed-local');
+  const multiWalletSigningReady = false;
+  const signingBlockedCount = nonDevParticipating.length + (selectedDevWallet ? 1 : 0);
   const dryRunReady = project.preLiveDryRun?.status === 'pass';
   const launchReviewItems = [
     { label: 'Token package', status: tokenReady ? 'pass' : 'review', detail: tokenReady ? `${project.metadata.symbol || project.ticker} metadata and image ready` : 'Name, symbol, description, and token image need review' },
@@ -269,7 +277,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     { label: 'Risk rails', status: riskReady ? 'pass' : 'blocked', detail: `SL ${initial.devWalletRules.stopLossPct}% · TP ${formatPctList(initial.devWalletRules.takeProfitPercents)} · cap ${initial.devWalletRules.perTxSellCapPct}%` },
     { label: 'IPFS metadata', status: ipfsReady ? 'pass' : 'review', detail: ipfsReady ? 'metadata image is IPFS-shaped' : 'PumpPortal create needs IPFS-pinned metadata before live launch' },
     { label: 'Jito relay', status: relayStatus?.relayEnabled ? 'pass' : (bundleCount ? 'blocked' : 'review'), detail: relayStatus ? `${relayStatus.status} · tip cap ${relayStatus.maxTipSol.toFixed(6)} SOL` : 'checking relay status' },
-    { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : 'single dev wallet rehearsal' },
+    { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : 'single dev wallet still needs connected browser signer proof' },
     { label: 'Dry-run', status: dryRunReady ? 'pass' : 'review', detail: project.preLiveDryRun?.status ? `${project.preLiveDryRun.status} · ${(project.preLiveDryRun.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'Run pre-live dry-run after saving' },
     { label: 'Deploy gate', status: 'blocked', detail: 'Closed until explicit deployment approval' }
   ];
@@ -701,7 +709,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                  <small>{signingLabel(wallet, plan?.executionPhase ?? 'observe')}</small>
                 </div>
               </div>;
             })}
@@ -725,7 +733,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                  <small>{signingLabel(wallet, wallet.id === defaultDevWalletId ? 'dev' : 'observe')}</small>
                 </div>
                 <span className="launchWalletInputs">
                   <WalletPlanNumberField label="planned buy" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
@@ -749,7 +757,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                  <small>{signingLabel(wallet, 'bundle')}</small>
                 </div>
                 <span className="launchWalletInputs">
                   <WalletPlanNumberField label="planned SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
@@ -773,7 +781,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                  <small>{signingLabel(wallet, 'sniper')}</small>
                 </div>
                 <span className="launchWalletInputs riskInputs">
                   <WalletPlanNumberField label="buy cap SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
@@ -846,7 +854,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                  <small>{signingLabel(wallet, 'task')}</small>
                 </div>
                 <span className="launchWalletInputs taskInputs">
                   <WalletPlanNumberField label="amount SOL" name={`task.${wallet.id}.taskAmountSol`} min="0" step="0.001" value={plan?.taskAmountSol ?? plan?.plannedBuySol ?? 0} placeholder="0.010" />
@@ -914,8 +922,8 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             </div>
             <div>
               <span>Signing</span>
-              <strong>{multiWalletSigningReady ? 'rail signers aligned' : 'watch-only rail blocked'}</strong>
-              <small>{nonDevParticipating.length ? `${nonDevParticipating.length} non-dev rail wallet(s) require executable signing.` : 'Single-wallet browser signing rehearsal.'}</small>
+              <strong>{multiWalletSigningReady ? 'rail signers aligned' : 'signing proof blocked'}</strong>
+              <small>{nonDevParticipating.length ? `${nonDevParticipating.length} non-dev rail wallet(s) cannot sign from watch-only records.` : `${signingBlockedCount} wallet signer proof required before launch.`}</small>
             </div>
             <div>
               <span>Tasks</span>

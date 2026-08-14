@@ -3,6 +3,7 @@ import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
+import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
 const wallet: Wallet = {
@@ -190,4 +191,23 @@ test('jito send bundle response remains blocked until live implementation exists
   assert.equal(result.status, 'blocked');
   assert.equal(result.execution, 'blocked-no-jito-relay-submit');
   assert.ok(result.blockers.includes('live-jito-submit-not-implemented'));
+});
+
+test('wallet signing readiness does not treat watch-only bundle wallets as executable', () => {
+  const readiness = buildWalletSigningReadiness(project, [wallet]);
+  assert.equal(readiness.contract, 'bondr-wallet-signing-readiness-v1');
+  assert.equal(readiness.status, 'multi-wallet-blocked');
+  assert.equal(readiness.serverCustody, false);
+  assert.ok(readiness.blockers.includes('browser-signer-not-connected-or-not-proven'));
+  assert.ok(readiness.blockers.includes('wallet-record-missing'));
+  assert.equal(readiness.bundleSession.status, 'blocked');
+  assert.deepEqual(readiness.bundleSession.requiredWalletIds, ['bundle-wallet']);
+});
+
+test('deployment readiness exposes shared wallet signing orchestration contract', () => {
+  const readiness = buildDeploymentLaunchReadiness(project, [wallet], activation);
+  assert.equal(readiness.signingOrchestration.contract, 'bondr-wallet-signing-readiness-v1');
+  assert.equal(readiness.signingOrchestration.serverCustody, false);
+  assert.equal(readiness.signingOrchestration.summary.participatingWallets, 2);
+  assert.equal(readiness.signingOrchestration.bundleSession.missingCount, 1);
 });

@@ -11,6 +11,7 @@ type TerminalWallet = {
   balanceSol: number;
   purpose: string;
   balanceStatus?: string;
+  custodyMode?: 'watch-only' | 'managed-local';
 };
 
 type TerminalBackend = {
@@ -23,6 +24,12 @@ function walletSolDisplay(wallet?: TerminalWallet | null) {
   if (!wallet) return '—';
   if (wallet.balanceStatus && wallet.balanceStatus !== 'live') return wallet.balanceStatus === 'unavailable' ? 'provider-limited' : wallet.balanceStatus;
   return `${wallet.balanceSol.toFixed(4)} SOL`;
+}
+
+function walletSignerLabel(wallet?: TerminalWallet | null) {
+  if (!wallet) return 'signer missing';
+  if (wallet.custodyMode === 'managed-local') return 'managed-local · policy pending';
+  return 'watch-only · cannot sign bundle leg';
 }
 
 export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) {
@@ -40,7 +47,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
   }, []);
 
   const renderedWallets = backend?.wallets?.rows?.length
-    ? backend.wallets.rows.map((wallet) => ({ id: wallet.id, address: wallet.address, role: wallet.role, scope: 'global', balanceSol: wallet.solBalance, purpose: wallet.purpose, balanceStatus: wallet.balanceStatus })) as TerminalWallet[]
+    ? backend.wallets.rows.map((wallet) => ({ id: wallet.id, address: wallet.address, role: wallet.role, scope: 'global', balanceSol: wallet.solBalance, purpose: wallet.purpose, balanceStatus: wallet.balanceStatus, custodyMode: 'watch-only' as const })) as TerminalWallet[]
     : wallets;
   const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0];
 
@@ -73,7 +80,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
       <section className="premiumControlStrip walletSelectionStrip interactiveWalletStrip">
         <div><span>Active wallet</span><strong>{selectedWallet ? selectedWallet.role : 'Not selected'}</strong><small>{selectedWallet ? `${selectedWallet.address.slice(0, 8)}…${selectedWallet.address.slice(-6)} · ${walletSolDisplay(selectedWallet)}` : 'Use connected wallet or pick a saved Wallet Ops public record.'}</small></div>
         <div><span>Multi-select bundle</span><strong>{backend?.bundle?.selectedWalletCount ?? bundleWallets.length} wallet{(backend?.bundle?.selectedWalletCount ?? bundleWallets.length) === 1 ? '' : 's'}</strong><small>{bundleSolAvailable.toFixed(4)} SOL available across selected wallets.</small></div>
-        <div><span>Bundle mode</span><strong>{bundleEngineStatus}</strong><small>Multi-wallet readiness.</small></div>
+        <div><span>Bundle mode</span><strong>{bundleEngineStatus}</strong><small>Selection only until each wallet can sign.</small></div>
         <div><span>Execution guard</span><strong>{backend?.execution?.liveTradingEnabled ? 'Live enabled' : 'Live gated'}</strong><small>Route builder + browser-wallet signer required.</small></div>
       </section>
 
@@ -92,7 +99,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
               </div>
               <div className="walletBoxLayer walletBoxMetaLayer">
                 <span>{walletSolDisplay(wallet)}</span>
-                <small>{wallet.scope}</small>
+                <small>{walletSignerLabel(wallet)}</small>
               </div>
             </div>
           ))}
@@ -119,7 +126,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
                 </div>
                 <div className="walletBoxLayer walletBoxMetaLayer">
                   <span>{walletSolDisplay({ ...wallet, balanceStatus: backendRow?.balanceStatus ?? wallet.balanceStatus })}</span>
-                  <small>{(backendRow?.balanceStatus ?? wallet.balanceStatus ?? 'checking').replace('unavailable', 'provider-limited')}</small>
+                  <small>{walletSignerLabel(wallet)}</small>
                 </div>
                 <p className="walletBoxPurpose">{wallet.purpose}</p>
                 <div className="terminalRowActions"><button type="button" onClick={() => { setSelectedWalletId(wallet.id); window.localStorage.setItem('bondr.activeWallet', wallet.address); window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } })); }}>{isSelected ? 'Active' : 'Use active'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><Link href="/portfolio?view=wallets">Wallets</Link><Link href="/sniper">Open Terminal</Link></div>
