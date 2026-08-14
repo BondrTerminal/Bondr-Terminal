@@ -6,8 +6,15 @@ import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../li
 
 type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type LaunchTab = 'token' | 'risk' | 'wallets' | 'review';
 
 type WalletUse = 'creator' | 'launch-readiness' | 'treasury' | 'observe';
+const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
+  { id: 'token', label: 'Token Info', detail: 'Metadata, launch path, funding' },
+  { id: 'risk', label: 'Risk', detail: 'Caps, TP/SL, cooldowns' },
+  { id: 'wallets', label: 'Wallet Setup', detail: 'Dev, bundle, sniper, task' },
+  { id: 'review', label: 'Review', detail: 'Gates and save state' }
+];
 const DEFAULT_TAKE_PROFIT = [35, 75, 150];
 const TASK_TYPES = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'] as const;
 const TASK_PRESETS = ['fast-paced-balance', 'smooth-flow', 'custom'] as const;
@@ -187,6 +194,7 @@ function optionFrom<const T extends readonly string[]>(form: FormData, name: str
 export function LaunchConfigEditor({ project, wallets }: Props) {
   const router = useRouter();
   const initial = useMemo(() => mergedConfig(project, wallets), [project, wallets]);
+  const [activeTab, setActiveTab] = useState<LaunchTab>('token');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
@@ -194,6 +202,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
   const selectedTaskCount = taskPlans.length;
   const selectedTaskSol = taskPlans.reduce((sum, entry) => sum + (entry.taskMaxTotalSol ?? entry.maxBuySol ?? 0), 0);
+  const activeTabIndex = LAUNCH_TABS.findIndex((tab) => tab.id === activeTab);
+  const previousTab = LAUNCH_TABS[Math.max(0, activeTabIndex - 1)]?.id ?? 'token';
+  const nextTab = LAUNCH_TABS[Math.min(LAUNCH_TABS.length - 1, activeTabIndex + 1)]?.id ?? 'review';
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -317,7 +328,34 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
 
   return (
     <form id="launch-config-form" className="launchConfigEditor cleanLaunchConfigEditor" onSubmit={save}>
-      <section className="documentCard launchConfigPanel">
+      <section className="launchWizardWindow" aria-label="Launch setup window">
+        <div className="launchWizardTopbar">
+          <div className="launchWizardTitle">
+            <span>Launch setup</span>
+            <strong>{project.name} · {project.ticker}</strong>
+          </div>
+          <div className="launchWizardTabs" role="tablist" aria-label="Launch setup tabs">
+            {LAUNCH_TABS.map((tab, index) => (
+              <button
+                aria-controls={`launch-tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                className={activeTab === tab.id ? 'active' : ''}
+                id={`launch-tab-button-${tab.id}`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                type="button"
+              >
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <strong>{tab.label}</strong>
+                <small>{tab.detail}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="launchWizardViewport">
+      <section aria-labelledby="launch-tab-button-token" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'token'} id="launch-tab-token" role="tabpanel">
         <div className="sectionIntro compactIntro">
           <span>Token Info</span>
           <h2>{project.name}</h2>
@@ -350,7 +388,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <section className="documentCard launchConfigPanel">
+      <section aria-labelledby="launch-tab-button-risk" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'risk'} id="launch-tab-risk" role="tabpanel">
         <div className="sectionIntro compactIntro">
           <span>Risk policy</span>
           <h2>Deployer and wallet task automation limits</h2>
@@ -371,7 +409,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <section className="documentCard launchWalletPanel deploymentWalletFlowPanel">
+      <section aria-labelledby="launch-tab-button-wallets" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets'} id="launch-tab-wallets" role="tabpanel">
         <div className="sectionIntro compactIntro">
           <span>Wallet rails</span>
           <h2>Dev wallet → bundle → sniper → task wallets</h2>
@@ -496,7 +534,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         <p className="walletSecurityFootnote">Task rails are automated deployer wallet controls for timed execution, smart sell behavior, auto take-profit, stop-loss, sell caps, cooldowns, and responsive wallet management.</p>
       </section>
 
-      <section className="documentCard deploymentDisabledPanel">
+      <section aria-labelledby="launch-tab-button-review" className="deploymentDisabledPanel launchWizardPanel" hidden={activeTab !== 'review'} id="launch-tab-review" role="tabpanel">
         <div className="sectionIntro compactIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>
         <div className="deploymentAdapterGrid">
           <div><span>Unsigned deploy builder</span><strong>Disabled</strong><small>adapter not active</small></div>
@@ -505,7 +543,15 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <div className="launchConfigFooter"><button type="submit" disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving…' : 'Save Configuration'}</button><span>{message}</span></div>
+        </div>
+
+        <div className="launchWizardFooter">
+          <button disabled={activeTabIndex === 0} onClick={() => setActiveTab(previousTab)} type="button">Previous</button>
+          <button disabled={activeTabIndex === LAUNCH_TABS.length - 1} onClick={() => setActiveTab(nextTab)} type="button">Next</button>
+          <button type="submit" disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving…' : 'Save Configuration'}</button>
+          <span>{message}</span>
+        </div>
+      </section>
     </form>
   );
 }

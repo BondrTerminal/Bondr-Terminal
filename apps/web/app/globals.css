@@ -14103,6 +14103,125 @@ body > .createProjectModal .professionalCreateProjectShell {
 .deploymentCockpitMain .cleanLaunchConfigEditor {
   gap: 9px;
 }
+.launchWizardWindow {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(249, 235, 224, 0.13);
+  border-radius: 8px;
+  background: rgba(5, 5, 5, 0.38);
+}
+.launchWizardTopbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  padding: 10px;
+  border-bottom: 1px solid rgba(249, 235, 224, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+}
+.launchWizardTitle {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-width: 0;
+}
+.launchWizardTitle span,
+.launchWizardTabs button span,
+.launchWizardTabs button small {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.launchWizardTitle strong,
+.launchWizardTabs button strong {
+  min-width: 0;
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.launchWizardTabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+.launchWizardTabs button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  text-align: left;
+}
+.launchWizardTabs button span {
+  grid-row: span 2;
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.launchWizardTabs button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.launchWizardTabs button.active {
+  border-color: rgba(255, 127, 17, 0.48);
+  background: rgba(255, 127, 17, 0.12);
+}
+.launchWizardTabs button.active span {
+  border-color: rgba(255, 127, 17, 0.58);
+  color: #ffb166;
+}
+.launchWizardViewport {
+  min-height: clamp(520px, 58vh, 820px);
+  max-height: min(76vh, 860px);
+  overflow: auto;
+  padding: 12px;
+}
+.launchWizardPanel {
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+.launchWizardPanel[hidden] {
+  display: none !important;
+}
+.launchWizardFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-top: 1px solid rgba(249, 235, 224, 0.1);
+  background: rgba(0, 0, 0, 0.24);
+}
+.launchWizardFooter button {
+  min-height: 34px;
+}
+.launchWizardFooter button[type="submit"] {
+  margin-left: auto;
+}
+.launchWizardFooter span {
+  min-width: min(320px, 100%);
+  color: rgba(249, 235, 224, 0.68);
+  line-height: 1.35;
+}
 .deploymentCockpitMain .cleanLaunchConfigEditor > .documentCard,
 .deploymentCockpitMain .deploymentLaunchBuilderPanel,
 .deploymentAdvancedDetails > .deploymentAdvancedGrid > .documentCard {
@@ -14328,6 +14447,13 @@ body > .createProjectModal .professionalCreateProjectShell {
     overflow: visible;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .launchWizardTopbar,
+  .launchWizardTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .launchWizardTitle {
+    grid-column: 1 / -1;
+  }
   .deploymentCockpitMain .launchConfigEditorGrid.compact,
   .deploymentTaskCommandGrid,
   .deploymentAdvancedGrid {
@@ -14343,6 +14469,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   .deploymentCommandStats,
   .deploymentRailStats,
   .deploymentOperatorRail,
+  .launchWizardTopbar,
+  .launchWizardTabs,
   .deploymentCockpitMain .launchConfigEditorGrid.compact,
   .deploymentTaskCommandGrid,
   .deploymentAdvancedGrid,
@@ -14356,6 +14484,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   .deploymentTaskCommandHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .launchWizardViewport {
+    max-height: none;
+    min-height: 0;
+  }
+  .launchWizardFooter button,
+  .launchWizardFooter button[type="submit"] {
+    width: 100%;
+    margin-left: 0;
   }
   .deploymentCockpitNotice {
     display: grid;
