@@ -212,6 +212,11 @@ function optionFrom<const T extends readonly string[]>(form: FormData, name: str
   return options.includes(value) ? value as T[number] : fallback;
 }
 
+function setFormValue(form: HTMLFormElement, name: string, value: string) {
+  const field = form.elements.namedItem(name);
+  if (field instanceof HTMLInputElement) field.value = value;
+}
+
 export function LaunchConfigEditor({ project, wallets }: Props) {
   const router = useRouter();
   const initial = useMemo(() => mergedConfig(project, wallets), [project, wallets]);
@@ -233,6 +238,25 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const previousTab = LAUNCH_TABS[Math.max(0, activeTabIndex - 1)]?.id ?? 'token';
   const nextTab = LAUNCH_TABS[Math.min(LAUNCH_TABS.length - 1, activeTabIndex + 1)]?.id ?? 'review';
 
+  function applySafeRiskDefaults() {
+    const form = document.getElementById('launch-config-form');
+    if (!(form instanceof HTMLFormElement)) return;
+    setFormValue(form, 'dev.stopLossPct', '-18');
+    setFormValue(form, 'dev.trailingStopPct', '22');
+    setFormValue(form, 'dev.trailingActivationPct', '60');
+    setFormValue(form, 'dev.takeProfitPercents', '35, 75, 150');
+    setFormValue(form, 'dev.perTxSellCapPct', '25');
+    setFormValue(form, 'dev.cooldownSeconds', '60');
+    for (const wallet of wallets) {
+      setFormValue(form, `sniper.${wallet.id}.stopLossPct`, '-18');
+      setFormValue(form, `sniper.${wallet.id}.takeProfitPercents`, '35, 75, 150');
+      setFormValue(form, `sniper.${wallet.id}.perTxSellCapPct`, '25');
+      setFormValue(form, `sniper.${wallet.id}.cooldownSeconds`, '60');
+    }
+    setSaveState('idle');
+    setMessage('Safe risk defaults staged. Save configuration to clear risk-rules-missing.');
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaveState('saving');
@@ -243,11 +267,16 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     const quoteToken = optionFrom(form, 'route.quoteToken', QUOTE_TOKEN_VALUES, initial.route.quoteToken ?? 'SOL');
     const tokenMode = optionFrom(form, 'route.tokenMode', TOKEN_MODE_VALUES, initial.route.tokenMode ?? 'classic');
     const buyMode = optionFrom(form, 'route.buyMode', BUY_MODE_VALUES, initial.route.buyMode ?? 'snipe');
+    const devStopLossPct = numberFrom(form, 'dev.stopLossPct', initial.devWalletRules.stopLossPct);
+    const devTrailingStopPct = numberFrom(form, 'dev.trailingStopPct', initial.devWalletRules.trailingStopPct);
+    const devTakeProfitPercents = pctListFrom(form, 'dev.takeProfitPercents', initial.devWalletRules.takeProfitPercents);
+    const devPerTxSellCapPct = numberFrom(form, 'dev.perTxSellCapPct', initial.devWalletRules.perTxSellCapPct);
+    const devCooldownSeconds = numberFrom(form, 'dev.cooldownSeconds', initial.devWalletRules.cooldownSeconds);
     const walletPlan = wallets.map((wallet, index) => {
       const existing = initial.walletPlan.find((entry) => entry.walletId === wallet.id) ?? defaultPlan([wallet])[0];
       const phase = phaseForWallet(form, wallet, index, devWalletId);
       const prefix = phase === 'dev' ? `devPlan.${wallet.id}` : phase === 'bundle' ? `bundle.${wallet.id}` : phase === 'sniper' ? `sniper.${wallet.id}` : phase === 'task' ? `task.${wallet.id}` : `observe.${wallet.id}`;
-      const fallbackTakeProfit = existing.takeProfitPercents?.length ? existing.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
+      const fallbackTakeProfit = existing.takeProfitPercents?.length ? existing.takeProfitPercents : devTakeProfitPercents;
       const taskAmountSol = numberFrom(form, `task.${wallet.id}.taskAmountSol`, existing.taskAmountSol ?? existing.plannedBuySol ?? 0);
       const taskSellPercent = numberFrom(form, `task.${wallet.id}.taskSellPercent`, existing.taskSellPercent ?? 0);
       const taskMaxTotalSol = numberFrom(form, `task.${wallet.id}.taskMaxTotalSol`, existing.taskMaxTotalSol ?? existing.maxBuySol ?? 0);
@@ -266,11 +295,11 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         plannedBuySol,
         maxBuySol,
         maxSlippageBps: numberFrom(form, `${prefix}.maxSlippageBps`, existing.maxSlippageBps ?? initial.route.slippageBps),
-        stopLossPct: numberFrom(form, `${prefix}.stopLossPct`, existing.stopLossPct || initial.devWalletRules.stopLossPct),
-        trailingStopPct: numberFrom(form, `${prefix}.trailingStopPct`, existing.trailingStopPct || initial.devWalletRules.trailingStopPct),
+        stopLossPct: numberFrom(form, `${prefix}.stopLossPct`, devStopLossPct),
+        trailingStopPct: numberFrom(form, `${prefix}.trailingStopPct`, devTrailingStopPct),
         takeProfitPercents: pctListFrom(form, `${prefix}.takeProfitPercents`, fallbackTakeProfit),
-        perTxSellCapPct: numberFrom(form, `${prefix}.perTxSellCapPct`, existing.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct),
-        cooldownSeconds: numberFrom(form, `${prefix}.cooldownSeconds`, existing.cooldownSeconds || initial.devWalletRules.cooldownSeconds),
+        perTxSellCapPct: numberFrom(form, `${prefix}.perTxSellCapPct`, devPerTxSellCapPct),
+        cooldownSeconds: numberFrom(form, `${prefix}.cooldownSeconds`, devCooldownSeconds),
         taskType: taskTypeFrom(form, wallet.id, existing.taskType),
         taskName: stringFrom(form, `task.${wallet.id}.name`, stringFrom(form, 'taskCommand.name', existing.taskName ?? '')),
         taskPreset: optionFrom(form, `task.${wallet.id}.preset`, TASK_PRESETS, optionFrom(form, 'taskCommand.preset', TASK_PRESETS, existing.taskPreset ?? 'fast-paced-balance')),
@@ -339,12 +368,12 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           maxPriorityFeeSol: numberFrom(form, 'dev.maxPriorityFeeSol', initial.devWalletRules.maxPriorityFeeSol),
           maxDevExposureSol: numberFrom(form, 'dev.maxDevExposureSol', initial.devWalletRules.maxDevExposureSol),
           maxDevSupplyPct: numberFrom(form, 'dev.maxDevSupplyPct', initial.devWalletRules.maxDevSupplyPct),
-          stopLossPct: numberFrom(form, 'dev.stopLossPct', initial.devWalletRules.stopLossPct),
-          trailingStopPct: numberFrom(form, 'dev.trailingStopPct', initial.devWalletRules.trailingStopPct),
+          stopLossPct: devStopLossPct,
+          trailingStopPct: devTrailingStopPct,
           trailingActivationPct: numberFrom(form, 'dev.trailingActivationPct', initial.devWalletRules.trailingActivationPct),
-          takeProfitPercents: pctListFrom(form, 'dev.takeProfitPercents', initial.devWalletRules.takeProfitPercents),
-          perTxSellCapPct: numberFrom(form, 'dev.perTxSellCapPct', initial.devWalletRules.perTxSellCapPct),
-          cooldownSeconds: numberFrom(form, 'dev.cooldownSeconds', initial.devWalletRules.cooldownSeconds)
+          takeProfitPercents: devTakeProfitPercents,
+          perTxSellCapPct: devPerTxSellCapPct,
+          cooldownSeconds: devCooldownSeconds
         }
       }
     };
@@ -469,6 +498,14 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <span>Execution limits</span>
           <h2>Caps, take-profit, stop-loss, and cooldowns</h2>
           <p>These route limits apply to launch, bundle, snipe/protection, and automated deployer wallet task behavior.</p>
+        </div>
+        <div className="safeRiskDefaultsPanel">
+          <div>
+            <span>Risk preset</span>
+            <strong>Safe launch defaults</strong>
+            <small>Sets stop-loss -18%, take-profit 35/75/150%, trailing stop 22%, sell cap 25%, cooldown 60s. Configuration only.</small>
+          </div>
+          <button type="button" onClick={applySafeRiskDefaults}>Apply Safe Defaults</button>
         </div>
         <div className="launchConfigEditorGrid compact">
           <label><span>Max initial buy SOL</span><input name="dev.maxInitialBuySol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxInitialBuySol} /></label>

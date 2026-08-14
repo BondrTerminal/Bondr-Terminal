@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { getMeridianStore, getMeridianStorePath, type LaunchConfig, type MeridianStore, type WalletPlanEntry, type Project } from '../../../../../lib/meridian-store';
-import { getMeridianWalletStore } from '../../../../../lib/durable-wallet-store';
+import { getMeridianWalletStore, updateDurableProject, walletStoreMode } from '../../../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../../../lib/mutation-safety';
 
 export const dynamic = 'force-dynamic';
@@ -208,8 +208,8 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!body) return Response.json({ status: 'error', observedAt, error: 'Invalid JSON body.' }, { status: 400 });
 
   const isServerlessPreview = Boolean(process.env.VERCEL);
-  const dataPath = getMeridianStorePath();
-  const store = JSON.parse(readFileSync(dataPath, 'utf8')) as MeridianStore;
+  const mode = walletStoreMode();
+  const store = mode === 'postgres' ? await getMeridianWalletStore() : JSON.parse(readFileSync(getMeridianStorePath(), 'utf8')) as MeridianStore;
   const index = store.projects.findIndex((project) => project.id === id);
   if (index < 0) return Response.json({ status: 'error', observedAt, error: 'Project not found.' }, { status: 404 });
   const next = applyPatch(store.projects[index], body);
@@ -217,6 +217,13 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (isServerlessPreview) return Response.json({ status: 'ok', project: next, launchConfig: next.launchConfig, event, ...mutationMeta('Stateless deployment accepted launch config update without durable persistence.'), persisted: false, mode: 'stateless-accepted' }, { status: 202 });
 
+  if (mode === 'postgres') {
+    const persisted = await updateDurableProject(next, event);
+    if (!persisted) return Response.json({ status: 'error', error: 'Durable project store is unavailable; launch config was not saved.', ...mutationMeta('Launch config update blocked because durable persistence failed.'), mutationMode: mode, persisted: false }, { status: 503 });
+    return Response.json({ status: 'ok', project: next, launchConfig: next.launchConfig, event, ...mutationMeta('Launch config persisted to durable Postgres store.'), mutationMode: mode, persisted: true, mode, execution: 'config-only-no-signing-no-fund-movement' });
+  }
+
+  const dataPath = getMeridianStorePath();
   store.projects[index] = next;
   store.eventLog.unshift(event);
   atomicJsonWrite(dataPath, store);

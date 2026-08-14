@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { buildPreLiveDryRun } from '../../../lib/pre-live-dry-run';
 import { getMeridianStorePath, type MeridianStore, type PreLiveDryRun } from '../../../lib/meridian-store';
-import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
+import { getMeridianWalletStore, updateDurableProject, walletStoreMode } from '../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../lib/mutation-safety';
 import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 
@@ -42,12 +42,19 @@ export async function POST(request: Request) {
   if (mutationMode() === 'disabled') return mutationBlockedResponse('Mutations are disabled by MUTATIONS_DISABLED=true.');
   const body = await request.json().catch(() => null) as Body | null;
   const projectId = projectIdFrom(request, body);
-  const store = JSON.parse(readFileSync(getMeridianStorePath(), 'utf8')) as MeridianStore;
+  const mode = walletStoreMode();
+  const store = mode === 'postgres' ? await getMeridianWalletStore() : JSON.parse(readFileSync(getMeridianStorePath(), 'utf8')) as MeridianStore;
   const index = store.projects.findIndex((project) => project.id === projectId);
   if (index < 0) return Response.json({ status: 'error', error: 'Project not found.', execution: 'dry-run-only-no-signing-no-broadcast' }, { status: 404, headers: { 'cache-control': 'no-store' } });
   const result = buildPreLiveDryRun(store.projects[index], store);
   store.projects[index].preLiveDryRun = safePersistedDryRun(result);
-  store.eventLog.unshift({ id: `evt-${Date.now()}`, projectId: store.projects[index].id, timestamp: result.observedAt, level: result.status === 'fail' ? 'error' : result.status === 'warn' ? 'warn' : 'info', module: 'terminal', message: `Pre-live dry-run ${result.status}; no signing, swaps, funding, broadcasts, or launches.` });
-  if (mutationMode() === 'local-json') atomicJsonWrite(getMeridianStorePath(), store);
+  const event = { id: `evt-${Date.now()}`, projectId: store.projects[index].id, timestamp: result.observedAt, level: result.status === 'fail' ? 'error' as const : result.status === 'warn' ? 'warn' as const : 'info' as const, module: 'terminal', message: `Pre-live dry-run ${result.status}; no signing, swaps, funding, broadcasts, or launches.` };
+  store.eventLog.unshift(event);
+  if (mode === 'postgres') {
+    const persisted = await updateDurableProject(store.projects[index], event);
+    if (!persisted) return Response.json({ status: 'error', error: 'Durable project store is unavailable; dry-run status was not saved.', ...mutationMeta('Pre-live dry-run persistence failed.'), mutationMode: mode, persisted: false, execution: 'dry-run-only-no-signing-no-broadcast' }, { status: 503, headers: { 'cache-control': 'no-store' } });
+  } else if (mutationMode() === 'local-json') {
+    atomicJsonWrite(getMeridianStorePath(), store);
+  }
   return Response.json({ status: 'ok', dryRun: result, persistedDryRun: store.projects[index].preLiveDryRun, ...mutationMeta('Pre-live dry-run status persisted only; no transaction or secret material stored.'), execution: 'dry-run-only-no-signing-no-broadcast' }, { headers: { 'cache-control': 'no-store' } });
 }
