@@ -385,7 +385,7 @@ export function AProfileManualQaPanel() {
     setLoading('simulation'); setMessage('Simulating unsigned transaction.');
     logEvent('simulation requested', 'info', 'Simulating unsigned transaction via signer dry-run route.');
     try {
-      const response = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: 'swap', mint, wallet: connectedWallet }) });
+      const response = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: fundingBuildReady ? 'funding' : 'swap', mint, wallet: connectedWallet }) });
       const payload = await response.json() as SimulationPayload;
       setSimulation(payload);
       const failureText = payload.simulation?.failureSummary ?? payload.error ?? (payload.simulation?.err ? `Simulation failed: ${JSON.stringify(payload.simulation.err)}` : 'Simulation failed. Signing blocked.');
@@ -458,7 +458,9 @@ export function AProfileManualQaPanel() {
       const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ operation: 'funding', signedTransaction: signer.signedTransaction, expectedSigner: FUNDING_TEST_SOURCE, simulationStatus: 'ok' }) });
       const payload = await response.json();
       setFundingResult(payload);
-      const text = response.ok ? `Funding broadcast sent: ${payload.signature ?? 'signature pending'}` : payload.error ?? 'Funding broadcast failed.';
+      const blockers = Array.isArray(payload.blockers) ? payload.blockers.join(' | ') : '';
+      const decoded = payload.decoded?.systemTransfers ? ` decoded transfers=${JSON.stringify(payload.decoded.systemTransfers)}` : '';
+      const text = response.ok ? `Funding broadcast sent: ${payload.signature ?? 'signature pending'}` : `${payload.error ?? 'Funding broadcast failed.'}${blockers ? ` Blockers: ${blockers}` : ''}${decoded}`;
       setMessage(text);
       logEvent('funding broadcast result', response.ok ? 'pass' : 'fail', text);
     } catch (error) {
@@ -509,6 +511,7 @@ export function AProfileManualQaPanel() {
       `signerStatus: ${signer.status} — ${signer.message}`,
       'broadcastDisabled: true — Broadcast disabled in A-profile.',
       providerLimited ? 'providerWarning: Provider-limited: simulation may fail until RPC plan is upgraded/reset.' : 'providerWarning: none observed in this session.',
+      `fundingResult: ${fundingResult ? jsonText(fundingResult) : 'not-run'}`,
       '',
       '## Wallet rail',
       `railConnectedSigner: ${short(railSnapshot?.connectedSigner ?? connectedWallet)}`,
