@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     liveTradingEnabled: liveActivation.liveTradingEnabled,
     signingEnabled: liveActivation.signingEnabled,
     broadcastEnabled: liveActivation.broadcastEnabled,
+    fundingBroadcastEnabled: liveActivation.fundingBroadcastEnabled,
     deploymentEnabled: liveActivation.deploymentEnabled,
     requireSimulation: liveActivation.requireSimulation,
     allowedCluster: liveActivation.allowedCluster,

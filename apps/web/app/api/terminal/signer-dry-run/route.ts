@@ -1,7 +1,8 @@
-import { Connection, VersionedTransaction } from '@solana/web3.js';
+import { Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../../lib/solana-rpc';
 import { getSolanaRpcHealth } from '../../../../lib/rpc-health';
 import { buildTransactionPreview } from '../../../../lib/transaction-preview';
+import type { TransactionPreviewAction } from '../../../../lib/transaction-preview';
 import { getLiveActivationStatus } from '../../../../lib/live-activation';
 import { isProviderLimitedError, providerLimitedNote } from '../../../../lib/provider-truth';
 
@@ -12,7 +13,28 @@ function base64ToBytes(value: string) {
 }
 
 function decodeTransaction(raw: string) {
-  return VersionedTransaction.deserialize(base64ToBytes(raw));
+  const bytes = base64ToBytes(raw);
+  try {
+    return VersionedTransaction.deserialize(bytes);
+  } catch {
+    return Transaction.from(Buffer.from(bytes));
+  }
+}
+
+function previewAction(action: unknown): TransactionPreviewAction {
+  return action === 'fund' || action === 'funding' ? 'funding' : 'swap';
+}
+
+function previewBlockers(action: TransactionPreviewAction, failed: boolean, failureSummary: string | null, liveActivation: ReturnType<typeof getLiveActivationStatus>) {
+  if (failed) return [failureSummary ?? 'Simulation failed; signing/broadcast blocked while LIVE_REQUIRE_SIMULATION is active.'];
+  const blockers = liveActivation.blockers.filter((item) => item !== 'LIVE_BETA_SIGNING_ENABLED is false.');
+  if (action === 'funding') {
+    return [
+      ...blockers.filter((item) => item !== 'LIVE_BETA_BROADCAST_ENABLED is false.'),
+      ...(liveActivation.fundingBroadcastEnabled ? [] : ['LIVE_BETA_FUNDING_BROADCAST_ENABLED is false.'])
+    ];
+  }
+  return blockers;
 }
 
 function summarizeSimulationFailure(err: unknown, logs: string[] | null | undefined) {
@@ -49,6 +71,7 @@ export async function POST(request: Request) {
   }
 
   const raw = body.unsignedTransaction ?? body.signedTransaction;
+  const action = previewAction(body.action);
   if (!raw) {
     return Response.json({
       status: 'blocked',
@@ -57,7 +80,7 @@ export async function POST(request: Request) {
       transactionPreview: buildTransactionPreview({
         status: 'blocked',
         mode: 'preview-only',
-        action: 'swap',
+        action,
         route: '/api/terminal/signer-dry-run',
         blockers: ['Simulation pending — no unsigned transaction built yet.'],
         warnings: ['Dry-run only. Signing and broadcast disabled.']
@@ -65,7 +88,7 @@ export async function POST(request: Request) {
     }, { status: 400 });
   }
 
-  let transaction: VersionedTransaction;
+  let transaction: Transaction | VersionedTransaction;
   try {
     transaction = decodeTransaction(raw);
   } catch (error) {
@@ -76,7 +99,7 @@ export async function POST(request: Request) {
       transactionPreview: buildTransactionPreview({
         status: 'error',
         mode: 'simulation-ready',
-        action: 'swap',
+        action,
         tokenMint: body.mint,
         wallet: body.wallet,
         route: '/api/terminal/signer-dry-run',
@@ -106,7 +129,7 @@ export async function POST(request: Request) {
       transactionPreview: buildTransactionPreview({
         status: 'blocked',
         mode: 'simulation-ready',
-        action: 'swap',
+        action,
         tokenMint: body.mint,
         wallet: body.wallet,
         provider: rpc.provider,
@@ -120,7 +143,9 @@ export async function POST(request: Request) {
 
   try {
     const connection = new Connection(rpc.url, 'confirmed');
-    const simulation = await connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: true });
+    const simulation = transaction instanceof VersionedTransaction
+      ? await connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: true })
+      : await connection.simulateTransaction(transaction, undefined, false);
     const failed = Boolean(simulation.value.err);
     const failureSummary = failed ? summarizeSimulationFailure(simulation.value.err, simulation.value.logs) : null;
     return Response.json({
@@ -141,13 +166,13 @@ export async function POST(request: Request) {
       transactionPreview: buildTransactionPreview({
         status: failed ? 'blocked' : 'ok',
         mode: 'simulation-ready',
-        action: 'swap',
+        action,
         tokenMint: body.mint,
         wallet: body.wallet,
         provider: rpc.provider,
         route: '/api/terminal/signer-dry-run',
         simulationStatus: failed ? 'failed' : 'passed',
-        blockers: failed ? [failureSummary ?? 'Simulation failed; signing/broadcast blocked while LIVE_REQUIRE_SIMULATION is active.'] : liveActivation.blockers.filter((item) => item !== 'LIVE_BETA_SIGNING_ENABLED is false.'),
+        blockers: previewBlockers(action, failed, failureSummary, liveActivation),
         warnings: ['Simulation only. Server did not sign or broadcast this transaction.', ...liveActivation.warnings]
       })
     }, { status: failed ? 422 : 200 });
@@ -162,7 +187,7 @@ export async function POST(request: Request) {
       transactionPreview: buildTransactionPreview({
         status: 'error',
         mode: 'simulation-ready',
-        action: 'swap',
+        action,
         tokenMint: body.mint,
         wallet: body.wallet,
         provider: rpc.provider,

@@ -11,6 +11,7 @@ export type LiveActivationStatus = {
   liveTradingEnabled: boolean;
   signingEnabled: boolean;
   broadcastEnabled: boolean;
+  fundingBroadcastEnabled: boolean;
   deploymentEnabled: boolean;
   requireSimulation: boolean;
   allowedCluster: 'mainnet-beta' | 'devnet' | 'testnet' | 'localnet';
@@ -49,6 +50,7 @@ export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | 
   const liveTradingEnabled = boolEnv('LIVE_TRADING_ENABLED');
   const signingEnabled = liveTradingEnabled && boolEnv('LIVE_BETA_SIGNING_ENABLED');
   const broadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_BROADCAST_ENABLED');
+  const fundingBroadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_FUNDING_BROADCAST_ENABLED');
   const deploymentEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_DEPLOYMENT_ENABLED');
   const requireSimulation = process.env.LIVE_REQUIRE_SIMULATION !== 'false';
   const allowedCluster = clusterEnv();
@@ -81,6 +83,7 @@ export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | 
     liveTradingEnabled,
     signingEnabled,
     broadcastEnabled,
+    fundingBroadcastEnabled,
     deploymentEnabled,
     requireSimulation,
     allowedCluster,

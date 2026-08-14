@@ -40,11 +40,11 @@ function isFundingRequest(body: SendRequest | null | undefined) {
 function rejectIfLiveDisabled(kind: 'swap' | 'funding' = 'swap') {
   const liveActivation = getLiveActivationStatus();
   if (liveActivation.broadcastEnabled) return null;
-  if (kind === 'funding' && liveActivation.signingEnabled) return null;
+  if (kind === 'funding' && liveActivation.fundingBroadcastEnabled) return null;
   return Response.json({
     status: 'blocked-by-live-gate',
     observedAt: new Date().toISOString(),
-    error: kind === 'funding' ? 'Funding broadcast requires signing-ready live beta plus approved funding policy.' : 'Live transaction broadcast is disabled. Set LIVE_TRADING_ENABLED=true, LIVE_BETA_SIGNING_ENABLED=true, and LIVE_BETA_BROADCAST_ENABLED=true only after explicit approval.',
+    error: kind === 'funding' ? 'Funding broadcast requires LIVE_BETA_FUNDING_BROADCAST_ENABLED=true plus approved funding policy.' : 'Live transaction broadcast is disabled. Set LIVE_TRADING_ENABLED=true, LIVE_BETA_SIGNING_ENABLED=true, and LIVE_BETA_BROADCAST_ENABLED=true only after explicit approval.',
     execution: 'live-disabled',
     liveTradingEnabled: liveActivation.liveTradingEnabled,
     signer: 'browser-wallet-required',
@@ -52,7 +52,7 @@ function rejectIfLiveDisabled(kind: 'swap' | 'funding' = 'swap') {
     signingEnabled: liveActivation.signingEnabled,
     broadcastEnabled: false,
     liveActivation,
-    transactionPreview: liveDisabledPreview(kind === 'funding' ? 'funding' : 'swap', '/api/send-signed-transaction', kind === 'funding' ? ['LIVE_TRADING_ENABLED or LIVE_BETA_SIGNING_ENABLED is false.', 'Funding broadcast requires approved sender, receiver, amount cap, simulation, and browser wallet signature.'] : ['LIVE_TRADING_ENABLED, LIVE_BETA_SIGNING_ENABLED, or LIVE_BETA_BROADCAST_ENABLED is false.', 'Broadcast requires explicit final activation.'])
+    transactionPreview: liveDisabledPreview(kind === 'funding' ? 'funding' : 'swap', '/api/send-signed-transaction', kind === 'funding' ? ['LIVE_BETA_FUNDING_BROADCAST_ENABLED is false.', 'Funding broadcast requires approved sender, receiver, amount cap, simulation, browser wallet signature, and explicit funding broadcast approval.'] : ['LIVE_TRADING_ENABLED, LIVE_BETA_SIGNING_ENABLED, or LIVE_BETA_BROADCAST_ENABLED is false.', 'Broadcast requires explicit final activation.'])
   }, { status: 403 });
 }
 

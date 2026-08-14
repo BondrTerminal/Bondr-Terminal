@@ -1,6 +1,6 @@
 'use client';
 
-import { VersionedTransaction } from '@solana/web3.js';
+import { Transaction, VersionedTransaction } from '@solana/web3.js';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { TransactionPreview } from '../../../lib/transaction-preview';
 
@@ -9,6 +9,7 @@ type Capabilities = {
   liveTradingEnabled?: boolean;
   signingEnabled?: boolean;
   broadcastEnabled?: boolean;
+  fundingBroadcastEnabled?: boolean;
   deploymentEnabled?: boolean;
   requireSimulation?: boolean;
   allowedCluster?: string;
@@ -31,12 +32,15 @@ type QaEvent = { id: string; at: string; type: string; status: 'info' | 'pass' |
 type BrowserSolanaProvider = {
   publicKey?: { toString(): string; toBase58?(): string };
   connect(): Promise<{ publicKey: { toString(): string; toBase58?(): string } }>;
-  signTransaction(transaction: VersionedTransaction): Promise<VersionedTransaction>;
+  signTransaction(transaction: VersionedTransaction | Transaction): Promise<VersionedTransaction | Transaction>;
 };
 type BrowserWindowWithSolana = Window & { solana?: BrowserSolanaProvider };
 
 const USDC_MAINNET_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const WSOL_MAINNET_MINT = 'So11111111111111111111111111111111111111112';
+const FUNDING_TEST_SOURCE = '8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz';
+const FUNDING_TEST_DESTINATION = '6oaGmdSBmMq7qCAc36cjivzgMVrozQq35ukka4EHGBuy';
+const FUNDING_TEST_AMOUNT_SOL = 0.001;
 const SOLANA_PUBLIC_KEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 type QaPreset = 'SOL → USDC micro buy' | 'Token → SOL sell rehearsal' | 'Custom';
 
@@ -93,6 +97,7 @@ export function AProfileManualQaPanel() {
   const [build, setBuild] = useState<BuildPayload | null>(null);
   const [simulation, setSimulation] = useState<SimulationPayload | null>(null);
   const [signer, setSigner] = useState<SignPayload>({ status: 'idle', message: 'No local signature yet.' });
+  const [fundingResult, setFundingResult] = useState<unknown>(null);
   const [events, setEvents] = useState<QaEvent[]>([]);
   const [railSnapshot, setRailSnapshot] = useState<WalletRailSnapshot | null>(null);
   const [reportMessage, setReportMessage] = useState('No report copied yet.');
@@ -152,6 +157,7 @@ export function AProfileManualQaPanel() {
   const selectedWallet = wallets.find((wallet) => wallet.address === selectedWalletAddress) ?? null;
   const connectedInventoryWallet = connectedWallet ? wallets.find((wallet) => wallet.address === connectedWallet) ?? null : null;
   const simulationPassed = simulation?.status === 'ok';
+  const fundingBuildReady = Boolean(build?.swap?.swapTransaction && build.transactionPreview?.action === 'funding');
   const canSign = Boolean(caps?.signingEnabled && build?.swap?.swapTransaction && simulationPassed && connectedWallet && !walletMismatch);
   const authBlocked = Boolean(caps?.auth?.configured && !caps.auth.authenticated);
   const providerLimited = Boolean(caps?.warnings?.some((warning) => /rpc|provider|helius|quota|degraded/i.test(warning)));
@@ -204,6 +210,7 @@ export function AProfileManualQaPanel() {
     ['Signing', caps?.signingEnabled ? 'enabled' : 'disabled'],
     ['Simulation required', caps?.requireSimulation ? 'enabled' : 'disabled'],
     ['Broadcast', caps?.broadcastEnabled ? 'enabled' : 'disabled'],
+    ['Funding broadcast', caps?.fundingBroadcastEnabled ? 'enabled' : 'disabled'],
     ['Deployment', caps?.deploymentEnabled ? 'enabled' : 'disabled'],
     ['Readiness', caps?.readinessLevel ?? 'loading'],
     ['Operator auth', caps?.auth?.configured ? caps.auth.authenticated ? 'authenticated' : 'required' : 'not configured'],
@@ -328,6 +335,7 @@ export function AProfileManualQaPanel() {
     setBuild(null);
     setSimulation(null);
     setSigner({ status: 'idle', message: 'No local signature yet.' });
+    setFundingResult(null);
     setEvents([]);
     setReportMessage('No report copied yet.');
     setMessage('QA session reset. Wallet remains connected in your browser extension if it was already connected.');
@@ -400,16 +408,63 @@ export function AProfileManualQaPanel() {
     if (!provider) { setMessage('Connect a Solana browser wallet.'); logEvent('sign result', 'fail', 'Connect a Solana browser wallet.'); return; }
     setLoading('sign'); setMessage('Opening browser-wallet signing prompt. Broadcast will remain disabled.');
     try {
-      const tx = VersionedTransaction.deserialize(base64ToBytes(build.swap.swapTransaction));
+      let tx: VersionedTransaction | Transaction;
+      try { tx = VersionedTransaction.deserialize(base64ToBytes(build.swap.swapTransaction)); }
+      catch { tx = Transaction.from(base64ToBytes(build.swap.swapTransaction)); }
       const signed = await provider.signTransaction(tx);
       const signedTransaction = bytesToBase64(signed.serialize());
-      setSigner({ status: 'signed', message: 'Signed locally. Broadcast disabled in A-profile.', signedTransaction });
-      setMessage('Signed locally. Broadcast disabled in A-profile.');
+      const signedMessage = fundingBuildReady ? 'Signed locally. Funding broadcast requires the explicit capped funding button.' : 'Signed locally. Broadcast disabled in A-profile.';
+      setSigner({ status: 'signed', message: signedMessage, signedTransaction });
+      setMessage(signedMessage);
       logEvent('sign result', 'pass', 'Signed locally. Transaction bytes omitted from reports.');
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Wallet signing failed or was rejected.';
       setSigner({ status: 'error', message: text });
       logEvent('sign result', 'fail', text);
+    } finally { setLoading(null); }
+  }
+
+
+  async function buildFundingTest() {
+    setFundingResult(null);
+    if (authBlocked) { setMessage('Operator login required before funding test.'); logEvent('funding build requested', 'fail', 'Operator login required.'); return; }
+    if (!connectedWallet) { setMessage('Connect the approved sender wallet first.'); logEvent('funding build requested', 'fail', 'No connected wallet.'); return; }
+    if (connectedWallet !== FUNDING_TEST_SOURCE) { const text = `Funding test requires sender ${short(FUNDING_TEST_SOURCE)}; connected ${short(connectedWallet)}.`; setMessage(text); logEvent('funding build requested', 'fail', text); return; }
+    resetDownstream('build');
+    setLoading('funding-build');
+    setMessage(`Building funding-only unsigned tx: ${FUNDING_TEST_AMOUNT_SOL} SOL to ${short(FUNDING_TEST_DESTINATION)}.`);
+    try {
+      const response = await fetch('/api/wallet-ops-engine', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ operation: 'fund', from: FUNDING_TEST_SOURCE, to: FUNDING_TEST_DESTINATION, amountSol: FUNDING_TEST_AMOUNT_SOL }) });
+      const payload = await response.json() as { status?: string; error?: string; transactionBase64?: string; rpcProvider?: string };
+      setFundingResult(payload);
+      if (!response.ok || !payload.transactionBase64) throw new Error(payload.error ?? 'Funding build failed.');
+      setBuild({ status: 'ok', swap: { swapTransaction: payload.transactionBase64 }, signingEnabled: true, broadcastEnabled: false, deploymentEnabled: false, transactionPreview: { status: 'ok', mode: 'unsigned-build', action: 'funding', route: '/api/wallet-ops-engine', provider: payload.rpcProvider, inputAmount: `${FUNDING_TEST_AMOUNT_SOL} SOL`, wallet: FUNDING_TEST_SOURCE, blockers: [], warnings: ['Funding-only beta: browser-wallet signing required; broadcast is allowed only through the capped funding policy.'], userConfirmationRequired: true, signingEnabled: false, broadcastEnabled: false } });
+      setSelectedWalletAddress(FUNDING_TEST_SOURCE);
+      setMessage('Funding unsigned tx built. Next: simulate, sign, then use the explicit funding broadcast button.');
+      logEvent('funding build result', 'pass', 'Funding unsigned tx built.');
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Funding build failed.';
+      setMessage(text);
+      logEvent('funding build result', 'fail', text);
+    } finally { setLoading(null); }
+  }
+
+  async function broadcastFundingTest() {
+    if (!fundingBuildReady || !signer.signedTransaction || !simulationPassed || connectedWallet !== FUNDING_TEST_SOURCE || !caps?.fundingBroadcastEnabled) { setMessage('Funding broadcast requires the approved funding build, approved signer, passed simulation, signed transaction, and explicit funding broadcast gate.'); return; }
+    setLoading('funding-broadcast');
+    setMessage('Broadcasting capped funding transaction. This can move 0.001 SOL for real.');
+    logEvent('funding broadcast requested', 'warn', 'Submitting signed funding transaction to capped policy route.');
+    try {
+      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ operation: 'funding', signedTransaction: signer.signedTransaction, expectedSigner: FUNDING_TEST_SOURCE, simulationStatus: 'ok' }) });
+      const payload = await response.json();
+      setFundingResult(payload);
+      const text = response.ok ? `Funding broadcast sent: ${payload.signature ?? 'signature pending'}` : payload.error ?? 'Funding broadcast failed.';
+      setMessage(text);
+      logEvent('funding broadcast result', response.ok ? 'pass' : 'fail', text);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Funding broadcast failed.';
+      setMessage(text);
+      logEvent('funding broadcast result', 'fail', text);
     } finally { setLoading(null); }
   }
 
@@ -423,6 +478,7 @@ export function AProfileManualQaPanel() {
       `liveTradingEnabled: ${Boolean(caps?.liveTradingEnabled)}`,
       `signingEnabled: ${Boolean(caps?.signingEnabled)}`,
       `broadcastEnabled: ${Boolean(caps?.broadcastEnabled)}`,
+      `fundingBroadcastEnabled: ${Boolean(caps?.fundingBroadcastEnabled)}`,
       `deploymentEnabled: ${Boolean(caps?.deploymentEnabled)}`,
       `readinessLevel: ${caps?.readinessLevel ?? 'unknown'}`,
       `simulationRequired: ${Boolean(caps?.requireSimulation)}`,
@@ -528,18 +584,19 @@ export function AProfileManualQaPanel() {
         <button className="button" type="button" onClick={() => void runBuild()} disabled={loading !== null || buildBlocked}>{loading === 'build' ? 'Building…' : 'Build unsigned tx only'}</button>
         <button className="button" type="button" onClick={() => void runSimulation()} disabled={loading !== null || !build?.swap?.swapTransaction}>{loading === 'simulation' ? 'Simulating…' : 'Simulate unsigned tx only'}</button>
         <button className="button" type="button" onClick={() => void runSign()} disabled={loading !== null || !canSign}>{loading === 'sign' ? 'Signing…' : 'Local sign test'}</button>
-        <button className="button secondary" type="button" disabled onClick={() => setMessage('Broadcast disabled in A-profile.')}>Broadcast disabled in A-profile</button>
+        <button className="button secondary" type="button" onClick={() => void buildFundingTest()} disabled={loading !== null || connectedWallet !== FUNDING_TEST_SOURCE}>{loading === 'funding-build' ? 'Building funding…' : 'Build 0.001 SOL funding tx'}</button>
+        <button className="button danger" type="button" onClick={() => void broadcastFundingTest()} disabled={loading !== null || !fundingBuildReady || !signer.signedTransaction || !simulationPassed || connectedWallet !== FUNDING_TEST_SOURCE || !caps?.fundingBroadcastEnabled}>{loading === 'funding-broadcast' ? 'Broadcasting…' : 'Broadcast 0.001 SOL funding'}</button>
         <button className="button secondary" type="button" onClick={() => void copyQaReport()}>Copy QA Report</button>
         <button className="button secondary" type="button" onClick={resetQaSession}>Reset QA Session</button>
       </div>
       <p className="qaMuted">{reportMessage}</p>
       <div className="qaResultGrid">
-        <ResultCard title="Capabilities / auth" status={caps?.readinessLevel}><pre>{jsonText({ liveTradingEnabled: caps?.liveTradingEnabled, signingEnabled: caps?.signingEnabled, broadcastEnabled: caps?.broadcastEnabled, deploymentEnabled: caps?.deploymentEnabled, readinessLevel: caps?.readinessLevel, auth: caps?.auth, limits: caps?.limits })}</pre></ResultCard>
+        <ResultCard title="Capabilities / auth" status={caps?.readinessLevel}><pre>{jsonText({ liveTradingEnabled: caps?.liveTradingEnabled, signingEnabled: caps?.signingEnabled, broadcastEnabled: caps?.broadcastEnabled, fundingBroadcastEnabled: caps?.fundingBroadcastEnabled, deploymentEnabled: caps?.deploymentEnabled, readinessLevel: caps?.readinessLevel, auth: caps?.auth, limits: caps?.limits })}</pre></ResultCard>
         <ResultCard title="Quote result" status={quote?.status}><PreviewCard preview={quote?.transactionPreview} /><pre>{jsonText(quote?.quote ?? quote?.error ?? 'No quote yet.')}</pre></ResultCard>
         <ResultCard title="Unsigned transaction result" status={build?.status}><PreviewCard preview={build?.transactionPreview} /><pre>{jsonText(build?.swap ? { hasSwapTransaction: Boolean(build.swap.swapTransaction), lastValidBlockHeight: build.swap.lastValidBlockHeight, computeUnitLimit: build.swap.computeUnitLimit, prioritizationFeeLamports: build.swap.prioritizationFeeLamports } : build?.error ?? 'No build yet.')}</pre></ResultCard>
         <ResultCard title="Simulation logs/result" status={simulation?.status}><PreviewCard preview={simulation?.transactionPreview} /><pre>{jsonText(simulation?.simulation ?? simulation?.error ?? 'No simulation yet.')}</pre></ResultCard>
         <ResultCard title="Signer result" status={signer.status}><p>{signer.message}</p><small>{signer.signedTransaction ? `${signer.signedTransaction.length} base64 chars held client-side only; omitted from QA reports` : 'No signed transaction stored.'}</small></ResultCard>
-        <ResultCard title="Broadcast gate result" status="disabled"><p>Broadcast disabled in A-profile.</p><small>Submit/Broadcast remains a separate future gate and is not called by this harness.</small></ResultCard>
+        <ResultCard title="Funding broadcast result" status={fundingResult ? 'ready' : 'not-run'}><p>Funding-only beta allows exactly 0.001 SOL from {short(FUNDING_TEST_SOURCE)} to {short(FUNDING_TEST_DESTINATION)} after simulation and browser-wallet signing.</p><pre>{jsonText(fundingResult ?? 'No funding test yet.')}</pre></ResultCard>
         <ResultCard title="Wallet rail result" status={railSnapshot?.balanceStatus ?? 'not-loaded'}><pre>{jsonText({ connectedSigner: railSnapshot?.connectedSigner, selectedWallet: railSnapshot?.selectedWallet, inventoryMatch: railSnapshot?.inventoryMatch, selectedInventoryMatch: railSnapshot?.selectedInventoryMatch, solBalance: railSnapshot?.solBalance, selectedSolBalance: railSnapshot?.selectedSolBalance, tokenBalances: railSnapshot?.tokenBalances, selectedTokenBalances: railSnapshot?.selectedTokenBalances, warnings: railSnapshot?.warnings, blockers: railSnapshot?.blockers })}</pre></ResultCard>
         <ResultCard title="QA event log" status={`${events.length} events`}><div className="qaEventLog">{events.length ? events.map((event) => <div className={`qaEventRow ${event.status}`} key={event.id}><span>{event.at}</span><strong>{event.type}</strong><p>{event.message}</p></div>) : <p className="qaMuted">No QA events yet.</p>}</div></ResultCard>
       </div>
