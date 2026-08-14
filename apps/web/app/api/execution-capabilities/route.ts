@@ -5,6 +5,7 @@ import { walletLiveReadiness } from '../../../lib/meridian-live-readiness';
 import { getSolanaRpcHealth } from '../../../lib/rpc-health';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
+import { buildExecutionTruthMap } from '../../../lib/execution-truth-map';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
     authenticated: session.authenticated,
     authReason: session.authenticated ? null : session.reason
   });
+  const truthMap = buildExecutionTruthMap({ store, activation: liveActivation });
 
   return Response.json({
     status: 'ok',
@@ -41,6 +43,14 @@ export async function GET(request: Request) {
     relayStatus: relay.status,
     relayProvider: relay.provider,
     relaySubmitEnabled: relay.relayEnabled && liveActivation.broadcastEnabled,
+    executionTruthMap: {
+      contract: truthMap.contract,
+      status: truthMap.status,
+      projectId: truthMap.projectId,
+      rails: truthMap.rails.map((rail) => ({ rail: rail.rail, status: rail.status, selected: rail.selected, nextAction: rail.nextAction })),
+      blockers: truthMap.blockers.slice(0, 12),
+      warnings: truthMap.warnings
+    },
     quotePreview: '/api/execution-quote',
     simulation: '/api/terminal/signer-dry-run',
     rpcProvider: rpc.provider,
@@ -62,6 +72,7 @@ export async function GET(request: Request) {
       swapBuilder: '/api/execution-swap',
       broadcaster: '/api/send-signed-transaction',
       jitoRelayStatus: '/api/relay/jito/status',
+      executionTruthMap: '/api/execution-truth-map',
       simulation: '/api/terminal/signer-dry-run',
       walletOpsEngine: '/api/wallet-ops-engine',
       deploymentEngine: '/api/deployment-engine',

@@ -8,6 +8,7 @@ import { PreLiveDryRunAction } from '../../sniper/components/PreLiveDryRunAction
 type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type LaunchTab = 'token' | 'route' | 'wallets' | 'task' | 'risk' | 'review';
+type TruthRail = { rail: string; label?: string; status: string; selected: boolean; summary?: string; nextAction?: string; blockers?: string[] };
 
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
@@ -233,6 +234,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
   const [imagePreviewUrl, setImagePreviewUrl] = useState(project.metadata.imageUrl);
   const [relayStatus, setRelayStatus] = useState<{ status: string; relayEnabled: boolean; maxTipSol: number; blockers: string[] } | null>(null);
+  const [truthRails, setTruthRails] = useState<TruthRail[]>([]);
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
   const taskPlans = initial.walletPlan.filter((entry) => entry.executionPhase === 'task' || entry.role.toLowerCase().includes('task'));
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
@@ -304,6 +306,29 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/execution-truth-map?project=${encodeURIComponent(project.id)}`, { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!active) return;
+        const rails = Array.isArray(payload?.truthMap?.rails) ? payload.truthMap.rails : [];
+        setTruthRails(rails.map((rail: TruthRail) => ({
+          rail: String(rail.rail),
+          label: String(rail.label ?? rail.rail),
+          status: String(rail.status),
+          selected: Boolean(rail.selected),
+          summary: rail.summary ? String(rail.summary) : '',
+          nextAction: rail.nextAction ? String(rail.nextAction) : '',
+          blockers: Array.isArray(rail.blockers) ? rail.blockers.map(String) : []
+        })));
+      })
+      .catch(() => {
+        if (active) setTruthRails([]);
+      });
+    return () => { active = false; };
+  }, [project.id]);
 
   function applyRiskPreset(presetId: keyof typeof RISK_PRESETS) {
     const preset = RISK_PRESETS[presetId];
@@ -896,6 +921,23 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
               <span>Tasks</span>
               <strong>worker missing</strong>
               <small>Task config exists; durable scheduler, relay policy, and confirmation loop are still not live engines.</small>
+            </div>
+          </section>
+          <section className="executionTruthMapPanel">
+            <div className="executionTruthMapHeader">
+              <span>Execution Spine</span>
+              <strong>builder → signer → simulation → relay → receipt → monitor → recovery</strong>
+              <small>Every rail must clear this chain before a real launch profile opens.</small>
+            </div>
+            <div className="executionTruthRailGrid">
+              {truthRails.length ? truthRails.map((rail) => (
+                <div className={`executionTruthRail ${rail.status.replace(/[^a-z-]/g, '')}`} key={rail.rail}>
+                  <span>{rail.selected ? 'selected' : 'not selected'}</span>
+                  <strong>{rail.label ?? rail.rail}</strong>
+                  <em>{rail.status}</em>
+                  <small>{rail.nextAction || rail.summary || 'Readiness pending.'}</small>
+                </div>
+              )) : <div className="executionTruthRail blocked"><span>checking</span><strong>Truth map</strong><em>loading</em><small>Loading execution truth map.</small></div>}
             </div>
           </section>
           <section className="launchFinalActionPanel">

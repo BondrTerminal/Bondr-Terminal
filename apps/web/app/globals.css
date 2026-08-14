@@ -15584,6 +15584,90 @@ body > .createProjectModal .professionalCreateProjectShell {
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
+.executionTruthMapPanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 127, 17, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 127, 17, 0.05);
+}
+.executionTruthMapHeader {
+  display: grid;
+  gap: 4px;
+}
+.executionTruthMapHeader span,
+.executionTruthRail span,
+.terminalTruthPill span {
+  color: rgba(249, 235, 224, 0.62);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.executionTruthMapHeader strong,
+.executionTruthRail strong,
+.terminalTruthPill strong {
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.executionTruthMapHeader small,
+.executionTruthRail small,
+.terminalTruthPill small {
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.executionTruthRailGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.executionTruthRail,
+.terminalTruthPill {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.executionTruthRail em {
+  width: max-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(249, 235, 224, 0.08);
+  color: rgba(249, 235, 224, 0.72);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+.executionTruthRail.ready,
+.terminalTruthPill.ready {
+  border-color: rgba(35, 206, 107, 0.26);
+  background: rgba(35, 206, 107, 0.055);
+}
+.executionTruthRail.rehearsal-only,
+.terminalTruthPill.rehearsal-only {
+  border-color: rgba(255, 177, 102, 0.26);
+  background: rgba(255, 177, 102, 0.055);
+}
+.executionTruthRail.blocked,
+.terminalTruthPill.blocked,
+.executionTruthRail.missing-implementation,
+.terminalTruthPill.missing-implementation {
+  border-color: rgba(255, 77, 109, 0.22);
+  background: rgba(255, 77, 109, 0.05);
+}
+.terminalTruthMapStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
 .launchTokenReviewCard {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -15629,6 +15713,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchSequencePanel,
   .launchFinalReviewGrid,
   .executionReadinessGrid,
+  .executionTruthRailGrid,
   .launchFinalActionPanel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15656,6 +15741,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchSequencePanel,
   .launchFinalReviewGrid,
   .executionReadinessGrid,
+  .executionTruthRailGrid,
+  .terminalTruthMapStrip,
   .launchFinalActionPanel {
     grid-template-columns: minmax(0, 1fr);
   }

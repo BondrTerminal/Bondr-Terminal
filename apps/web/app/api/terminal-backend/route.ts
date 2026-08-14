@@ -116,13 +116,14 @@ export async function GET(request: Request) {
     balanceNote: wallet.balanceNote
   }));
 
-  const [providerReadiness, capabilities, walletOps, deployment, terminalOrders, bundleSequencer, pool, lp, bundle, fresh, devSold, tokenBalances] = await Promise.all([
+  const [providerReadiness, capabilities, walletOps, deployment, terminalOrders, bundleSequencer, executionTruthMap, pool, lp, bundle, fresh, devSold, tokenBalances] = await Promise.all([
     fast ? Promise.resolve({ status: 'primary-fast-deferred', source: 'terminal-backend-fast' }) : readJson(origin, '/api/provider-readiness'),
     readJson(origin, '/api/execution-capabilities'),
     fast ? Promise.resolve({ status: 'primary-fast-deferred', source: 'terminal-backend-fast' }) : readJson(origin, '/api/wallet-ops-engine'),
     fast ? Promise.resolve({ status: 'primary-fast-deferred', source: 'terminal-backend-fast' }) : readJson(origin, '/api/deployment-engine'),
     fast ? Promise.resolve({ orders: [], execution: 'primary-fast-deferred' }) : readJson(origin, mint && ADDRESS_RE.test(mint) ? `/api/terminal-order-engine?mint=${encodeURIComponent(mint)}&status=all` : '/api/terminal-order-engine?status=all'),
     fast ? Promise.resolve({ execution: 'primary-fast-deferred' }) : readJson(origin, '/api/bundle-sequencer'),
+    fast ? Promise.resolve({ status: 'primary-fast-deferred', source: 'terminal-backend-fast' }) : readJson(origin, `/api/execution-truth-map${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}`),
     mint && ADDRESS_RE.test(mint) ? readJson(origin, `/api/token-pool-index?mint=${encodeURIComponent(mint)}`) : null,
     fast ? Promise.resolve({ status: 'primary-fast-deferred', source: 'terminal-backend-fast' }) : mint && ADDRESS_RE.test(mint) ? readJson(origin, `/api/lp-lock-burn-scanner?mint=${encodeURIComponent(mint)}`) : null,
     fast ? Promise.resolve({ status: 'primary-fast-deferred', clusters: [] }) : mint && ADDRESS_RE.test(mint) ? readJson(origin, `/api/bundle-clustering-index?mint=${encodeURIComponent(mint)}&limit=100`) : null,
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
     deployment: routeStatus(deployment, 'deployment-engine', !fast),
     terminalOrders: routeStatus(terminalOrders, 'terminal-order-engine', !fast),
     bundleSequencer: routeStatus(bundleSequencer, 'bundle-sequencer', !fast),
+    executionTruthMap: routeStatus(executionTruthMap, 'execution-truth-map', !fast),
     poolIndex: routeStatus(pool, 'token-pool-index', Boolean(mint && ADDRESS_RE.test(mint))),
     lpScanner: routeStatus(lp, 'lp-lock-burn-scanner', Boolean(mint && ADDRESS_RE.test(mint) && !fast)),
     walletTokenBalances: routeStatus(tokenBalances, 'wallet-token-balances', Boolean(mint && ADDRESS_RE.test(mint)))
@@ -170,6 +172,7 @@ export async function GET(request: Request) {
       deployment,
       terminalOrders,
       bundleSequencer,
+      executionTruthMap,
       orderEngine: {
         marketSwap: liveTradingEnabled ? 'unsigned-jupiter-swap-builder-ready' : 'quote-and-order-store-ready-live-disabled',
         limitOrders: '/api/terminal-order-engine create/list/evaluate/cancel/replace',

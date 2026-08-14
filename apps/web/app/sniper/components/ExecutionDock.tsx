@@ -56,6 +56,7 @@ type TicketSide = 'Buy' | 'Sell';
 type DockWallet = { id: string; address: string; role: string; balanceSol: number; purpose?: string; scope?: string };
 type WalletTokenBalanceRow = { id?: string | null; wallet?: string | null; address?: string | null; role?: string | null; uiAmount?: number | null; valueUsd?: number | null; status?: string | null; balanceStatus?: string | null; source?: string | string[] | null };
 type WalletTokenBalances = { status?: string; provider?: string | null; confidence?: string | null; note?: string | null; wallets?: WalletTokenBalanceRow[]; totals?: { uiAmount?: number | null } };
+type TruthRail = { rail: string; label?: string; status: string; selected: boolean; summary?: string; nextAction?: string; blockers?: string[] };
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -101,7 +102,7 @@ function StepRow({ index, label, status, detail }: { index: number; label: strin
   return <li className={`terminalStepRow ${status}`}><span>{index}</span><strong>{label}</strong><small>{detail}</small></li>;
 }
 
-export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { mint?: string; selectedWalletLabel: string; wallets?: DockWallet[] }) {
+export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], projectId }: { mint?: string; selectedWalletLabel: string; wallets?: DockWallet[]; projectId?: string }) {
   const [activeMint, setActiveMint] = useState(mint ?? '');
   const [side, setSide] = useState<TicketSide>('Buy');
   const [amount, setAmount] = useState('0.01');
@@ -120,6 +121,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   const [simulation, setSimulation] = useState<SimulationPayload | null>(null);
   const [signedSwap, setSignedSwap] = useState<SignedSwapPayload | null>(null);
   const [signedReview, setSignedReview] = useState<SignedReviewPayload | null>(null);
+  const [truthRails, setTruthRails] = useState<TruthRail[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
 
@@ -129,6 +131,26 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
     void fetch('/api/execution-capabilities', { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((payload) => setCapabilities(payload as ExecutionCapabilities | null)).catch(() => setCapabilities(null));
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = projectId ? `?project=${encodeURIComponent(projectId)}` : '';
+    void fetch(`/api/execution-truth-map${query}`, { signal: controller.signal, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        const rails = Array.isArray(payload?.truthMap?.rails) ? payload.truthMap.rails : [];
+        setTruthRails(rails.map((rail: TruthRail) => ({
+          rail: String(rail.rail),
+          label: String(rail.label ?? rail.rail),
+          status: String(rail.status),
+          selected: Boolean(rail.selected),
+          summary: rail.summary ? String(rail.summary) : '',
+          nextAction: rail.nextAction ? String(rail.nextAction) : '',
+          blockers: Array.isArray(rail.blockers) ? rail.blockers.map(String) : []
+        })));
+      })
+      .catch(() => setTruthRails([]));
+    return () => controller.abort();
+  }, [projectId]);
   useEffect(() => {
     const provider = (window as BrowserWindowWithSolana).solana;
     const existing = provider?.publicKey?.toBase58?.() ?? provider?.publicKey?.toString?.() ?? null;
@@ -566,6 +588,15 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
             <div className="freshZoneHead">
               <span>Execution Steps</span>
               <strong>{signedSwap?.submitted ? 'Sent' : signedSwap?.signedTransaction ? 'Signed locally' : simulationPassed ? 'Ready to sign' : quote?.status === 'ok' ? 'Ready to build' : 'Ready to quote'}</strong>
+            </div>
+            <div className="terminalTruthMapStrip" aria-label="Execution truth map">
+              {truthRails.filter((rail) => rail.rail === 'sniper' || rail.rail === 'bundle' || rail.rail === 'task').map((rail) => (
+                <div className={`terminalTruthPill ${rail.status.replace(/[^a-z-]/g, '')}`} key={rail.rail}>
+                  <span>{rail.label ?? rail.rail}</span>
+                  <strong>{rail.status}</strong>
+                  <small>{rail.selected ? rail.summary : rail.nextAction}</small>
+                </div>
+              ))}
             </div>
             {operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><Link className="button secondary" href="/profile">Open Profile</Link></div>}
             <ol className="freshStepList" aria-label="Trading execution steps">

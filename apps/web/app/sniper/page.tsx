@@ -58,7 +58,7 @@ export default async function SniperPage({ searchParams }: SniperPageProps) {
           <section className="terminalChartColumn premiumChartColumn">
             <TradingTokenLoader defaultMint={defaultMint} devWallets={tradingWallets.map((wallet) => wallet.address)} />
           </section>
-          <ExecutionDock mint={defaultMint} selectedWalletLabel={selectedWalletLabel} wallets={tradingWallets} />
+          <ExecutionDock mint={defaultMint} selectedWalletLabel={selectedWalletLabel} wallets={tradingWallets} projectId={selectedProject?.id} />
         </section>
 
         <TerminalInfoBooth
