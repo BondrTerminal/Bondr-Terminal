@@ -1,4 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
+import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
+import { getLiveActivationStatus } from '../../../lib/live-activation';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,28 +48,39 @@ function summarize(legs: BundleLeg[]) {
 }
 
 export async function GET() {
+  const relay = getJitoRelayReadiness();
+  const activation = getLiveActivationStatus();
   return Response.json({
     status: 'ok',
     observedAt: new Date().toISOString(),
     liveTradingEnabled: liveTradingEnabled(),
     route: '/api/bundle-sequencer',
     flowType: 'multi-wallet-preflight-build',
-    stages: { preflight: 'available', unsignedTransactionBuild: liveTradingEnabled() ? 'available-after-preflight' : 'blocked-by-live-gate', browserWalletSigning: 'required-per-leg', broadcast: 'explicit-only-via-/api/send-signed-transaction', relaySubmission: 'unavailable-not-implemented' },
+    stages: { preflight: 'available', unsignedTransactionBuild: liveTradingEnabled() ? 'available-after-preflight' : 'blocked-by-live-gate', browserWalletSigning: 'required-per-leg', signedBundleReview: 'required-before-relay', broadcast: 'explicit-only-via-/api/send-signed-transaction', relaySubmission: activation.broadcastEnabled && relay.relayEnabled ? 'gated-ready' : 'blocked-by-relay-or-broadcast-gate' },
     relaySubmission: false,
-    relayStatus: 'unavailable',
-    relayProvider: null,
-    relayRequirements: ['Jito/block-engine or relay provider credentials', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
-    supportedRelays: [],
-    requiredEnv: ['JITO_BLOCK_ENGINE_URL', 'JITO_AUTH_KEYPAIR_OR_TOKEN'],
+    relayStatus: relay.status,
+    relayProvider: relay.provider,
+    relay,
+    relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
+    supportedRelays: ['jito-block-engine-json-rpc'],
+    requiredEnv: relay.requiredEnv,
     simulationRequired: true,
     bundleId: null,
+    signedBundlePayloadShape: {
+      signedTransactions: 'base64[]',
+      expectedSigners: 'wallet public key[]',
+      expectedMint: 'token mint',
+      tipLamports: `1..${relay.tip.maxLamports}`,
+      policyRequired: true,
+      submitEndpointFuture: '/api/relay/jito/send-bundle'
+    },
     signer: 'browser-wallet-per-leg',
     maxWallets: MAX_WALLETS,
     maxTotalSol: MAX_TOTAL_SOL,
     maxTotalUsdc: MAX_TOTAL_USDC,
     buildDependency: '/api/execution-swap',
     broadcastDependency: '/api/send-signed-transaction',
-    note: 'This is multi-wallet validation/unsigned transaction build, not Jito/block-engine relay submission.',
+    note: 'This is multi-wallet validation/unsigned transaction build. Relay readiness is reported, but no Jito/block-engine bundle submission is performed here.',
     execution: liveTradingEnabled() ? 'bundle-builder-ready' : 'live-disabled-preflight-only'
   });
 }
@@ -100,15 +113,16 @@ export async function POST(request: Request) {
         legs: normalized,
         totals,
         reason: liveTradingEnabled() ? null : 'liveTradingEnabled() is false. Bundle was validated but unsigned transactions were not built.',
-        stages: { preflight: 'complete', unsignedTransactionBuild: liveTradingEnabled() ? 'ready' : 'blocked-by-live-gate', browserWalletSigning: 'required-per-leg', broadcast: 'explicit-only', relaySubmission: 'unavailable-not-implemented' },
+        stages: { preflight: 'complete', unsignedTransactionBuild: liveTradingEnabled() ? 'ready' : 'blocked-by-live-gate', browserWalletSigning: 'required-per-leg', signedBundleReview: 'required-before-relay', broadcast: 'explicit-only', relaySubmission: 'blocked-by-relay-or-broadcast-gate' },
         buildReadiness: liveTradingEnabled() ? 'ready-to-build-unsigned-transactions' : 'blocked-by-live-gate',
         routeDependency: '/api/bundle-sequencer -> /api/execution-swap -> browser wallet -> /api/send-signed-transaction',
         relaySubmission: false,
-        relayStatus: 'unavailable',
-            relayProvider: null,
-            relayRequirements: ['Jito/block-engine or relay provider credentials', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
-            supportedRelays: [],
-            requiredEnv: ['JITO_BLOCK_ENGINE_URL', 'JITO_AUTH_KEYPAIR_OR_TOKEN'],
+        relayStatus: getJitoRelayReadiness().status,
+            relayProvider: getJitoRelayReadiness().provider,
+            relay: getJitoRelayReadiness(),
+            relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
+            supportedRelays: ['jito-block-engine-json-rpc'],
+            requiredEnv: getJitoRelayReadiness().requiredEnv,
             simulationRequired: true,
             bundleId: null,
         note: 'Validated multi-wallet intent only; no relay bundle was submitted.',
@@ -148,15 +162,23 @@ export async function POST(request: Request) {
       observedAt: new Date().toISOString(),
       mint,
       flowType: 'multi-wallet-preflight-build',
-      stages: { preflight: 'complete', unsignedTransactionBuild: 'complete', browserWalletSigning: 'required-per-leg', broadcast: 'explicit-only-via-/api/send-signed-transaction', relaySubmission: 'unavailable-not-implemented' },
+      stages: { preflight: 'complete', unsignedTransactionBuild: 'complete', browserWalletSigning: 'required-per-leg', signedBundleReview: 'required-before-relay', broadcast: 'explicit-only-via-/api/send-signed-transaction', relaySubmission: 'blocked-by-relay-or-broadcast-gate' },
       relaySubmission: false,
-      relayStatus: 'unavailable',
-          relayProvider: null,
-          relayRequirements: ['Jito/block-engine or relay provider credentials', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
-          supportedRelays: [],
-          requiredEnv: ['JITO_BLOCK_ENGINE_URL', 'JITO_AUTH_KEYPAIR_OR_TOKEN'],
+      relayStatus: getJitoRelayReadiness().status,
+          relayProvider: getJitoRelayReadiness().provider,
+          relay: getJitoRelayReadiness(),
+          relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
+          supportedRelays: ['jito-block-engine-json-rpc'],
+          requiredEnv: getJitoRelayReadiness().requiredEnv,
           simulationRequired: true,
           bundleId: null,
+      signedBundlePayloadShape: {
+        signedTransactions: 'base64[]',
+        expectedSigners: normalized.map((leg) => leg.wallet),
+        expectedMint: mint,
+        maxTipLamports: getJitoRelayReadiness().tip.maxLamports,
+        submitEndpointFuture: '/api/relay/jito/send-bundle'
+      },
       signer: 'browser-wallet-per-leg',
       legs: built,
       totals,

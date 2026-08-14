@@ -14456,7 +14456,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .safeRiskDefaultsPanel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   margin: 0 0 10px;
@@ -14484,11 +14484,24 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: rgba(249, 235, 224, 0.66);
   line-height: 1.35;
 }
-.safeRiskDefaultsPanel button {
+.riskPresetButtonGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.riskPresetButtonGrid button {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
   min-height: 36px;
   border-color: rgba(35, 206, 107, 0.42);
   color: #caffdf;
-  white-space: nowrap;
+  white-space: normal;
+}
+.riskPresetButtonGrid button small {
+  color: rgba(202, 255, 223, 0.72);
+  font-size: 0.68rem;
 }
 .launchBuyModeGrid {
   display: grid;
@@ -14922,7 +14935,10 @@ body > .createProjectModal .professionalCreateProjectShell {
   .safeRiskDefaultsPanel {
     grid-template-columns: 1fr;
   }
-  .safeRiskDefaultsPanel button {
+  .riskPresetButtonGrid {
+    grid-template-columns: 1fr;
+  }
+  .riskPresetButtonGrid button {
     width: 100%;
   }
   .launchWizardViewport {
@@ -15479,7 +15495,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchSequencePanel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 .launchSequencePanel > div {
@@ -15538,6 +15554,36 @@ body > .createProjectModal .professionalCreateProjectShell {
   grid-template-columns: minmax(260px, 1.25fr) repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+.executionReadinessGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.executionReadinessGrid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.026);
+}
+.executionReadinessGrid span {
+  color: rgba(249, 235, 224, 0.62);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.executionReadinessGrid strong {
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.executionReadinessGrid small {
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .launchTokenReviewCard {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -15582,6 +15628,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchOperatorSummary,
   .launchSequencePanel,
   .launchFinalReviewGrid,
+  .executionReadinessGrid,
   .launchFinalActionPanel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15608,6 +15655,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchOperatorSummary,
   .launchSequencePanel,
   .launchFinalReviewGrid,
+  .executionReadinessGrid,
   .launchFinalActionPanel {
     grid-template-columns: minmax(0, 1fr);
   }

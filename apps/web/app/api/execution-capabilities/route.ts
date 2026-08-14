@@ -4,6 +4,7 @@ import { meridianAuthConfig, meridianRequestAuthenticated } from '../../../lib/m
 import { walletLiveReadiness } from '../../../lib/meridian-live-readiness';
 import { getSolanaRpcHealth } from '../../../lib/rpc-health';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
+import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
   const session = await meridianRequestAuthenticated(request);
   const store = await getMeridianWalletStore();
   const readiness = walletLiveReadiness({ rpc: rpcHealth, wallets: store.wallets });
+  const relay = getJitoRelayReadiness();
   const liveActivation = getLiveActivationStatus({
     rpcHealth,
     auth,
@@ -35,6 +37,10 @@ export async function GET(request: Request) {
     signer: 'browser-wallet',
     swapBuilder: '/api/execution-swap',
     broadcaster: '/api/send-signed-transaction',
+    relay,
+    relayStatus: relay.status,
+    relayProvider: relay.provider,
+    relaySubmitEnabled: relay.relayEnabled && liveActivation.broadcastEnabled,
     quotePreview: '/api/execution-quote',
     simulation: '/api/terminal/signer-dry-run',
     rpcProvider: rpc.provider,
@@ -55,6 +61,7 @@ export async function GET(request: Request) {
       quotePreview: '/api/execution-quote',
       swapBuilder: '/api/execution-swap',
       broadcaster: '/api/send-signed-transaction',
+      jitoRelayStatus: '/api/relay/jito/status',
       simulation: '/api/terminal/signer-dry-run',
       walletOpsEngine: '/api/wallet-ops-engine',
       deploymentEngine: '/api/deployment-engine',

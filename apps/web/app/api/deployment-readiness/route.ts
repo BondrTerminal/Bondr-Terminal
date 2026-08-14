@@ -2,6 +2,7 @@ import { buildMeridianHubContext, resolveMeridianProjectContextId } from '../../
 import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 import { DEPLOYMENT_ROUTE_ADAPTERS, buildDeploymentLaunchReadiness } from '../../../lib/deployment-route-adapters';
+import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   const context = buildMeridianHubContext(projectId, store);
   const active = context.projects[0] ?? null;
   const activation = getLiveActivationStatus();
+  const relay = getJitoRelayReadiness();
   const readiness = active ? buildDeploymentLaunchReadiness(active.project, active.wallets, activation) : null;
 
   return Response.json({
@@ -25,6 +27,7 @@ export async function GET(request: Request) {
     contract: 'bondr-deployment-readiness-v1',
     projectId: active?.project.id ?? null,
     adapters: DEPLOYMENT_ROUTE_ADAPTERS,
+    relay,
     readiness,
     gates: {
       liveTradingEnabled: activation.liveTradingEnabled,

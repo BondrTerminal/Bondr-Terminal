@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
 import { PreLiveDryRunAction } from '../../sniper/components/PreLiveDryRunAction';
@@ -43,6 +43,12 @@ const BUY_MODES = [
 ] as const;
 const BUY_MODE_VALUES = ['snipe', 'bundle', 'launch-bundle-snipe', 'dev-buy-only'] as const;
 const DEFAULT_TAKE_PROFIT = [35, 75, 150];
+const RISK_PRESETS = {
+  conservative: { label: 'Conservative', stopLossPct: -12, trailingStopPct: 15, trailingActivationPct: 45, takeProfitPercents: [25, 50, 100], perTxSellCapPct: 15, cooldownSeconds: 120 },
+  standard: { label: 'Standard launch rehearsal', stopLossPct: -18, trailingStopPct: 22, trailingActivationPct: 60, takeProfitPercents: [35, 75, 150], perTxSellCapPct: 25, cooldownSeconds: 60 },
+  aggressive: { label: 'Aggressive sniper', stopLossPct: -25, trailingStopPct: 30, trailingActivationPct: 85, takeProfitPercents: [50, 100, 200], perTxSellCapPct: 35, cooldownSeconds: 20 },
+  manual: { label: 'Manual/custom', stopLossPct: 0, trailingStopPct: 0, trailingActivationPct: 0, takeProfitPercents: [], perTxSellCapPct: 0, cooldownSeconds: 0 }
+} as const;
 const TASK_TYPES = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'] as const;
 const TASK_PRESETS = ['fast-paced-balance', 'smooth-flow', 'custom'] as const;
 const TASK_ROTATION_MODES = ['random', 'sequential', 'balanced'] as const;
@@ -226,6 +232,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
   const [imagePreviewUrl, setImagePreviewUrl] = useState(project.metadata.imageUrl);
+  const [relayStatus, setRelayStatus] = useState<{ status: string; relayEnabled: boolean; maxTipSol: number; blockers: string[] } | null>(null);
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
   const taskPlans = initial.walletPlan.filter((entry) => entry.executionPhase === 'task' || entry.role.toLowerCase().includes('task'));
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
@@ -248,6 +255,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const routeReady = Boolean(initial.route.platform && initial.route.quoteToken && initial.route.buyMode);
   const walletReady = Boolean(selectedDevWallet && participatingPlans.length > 0);
   const riskReady = Boolean(initial.devWalletRules.stopLossPct < 0 && initial.devWalletRules.takeProfitPercents.length && initial.devWalletRules.perTxSellCapPct > 0);
+  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
+  const nonDevParticipating = participatingPlans.filter((entry) => entry.walletId !== defaultDevWalletId);
+  const multiWalletSigningReady = nonDevParticipating.every((entry) => wallets.find((wallet) => wallet.id === entry.walletId)?.custodyMode === 'managed-local');
   const dryRunReady = project.preLiveDryRun?.status === 'pass';
   const launchReviewItems = [
     { label: 'Token package', status: tokenReady ? 'pass' : 'review', detail: tokenReady ? `${project.metadata.symbol || project.ticker} metadata and image ready` : 'Name, symbol, description, and token image need review' },
@@ -255,6 +265,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     { label: 'Dev wallet', status: selectedDevWallet ? 'pass' : 'blocked', detail: selectedDevWallet ? `${selectedDevWallet.role} · ${short(selectedDevWallet.address)}` : 'No deployer wallet selected' },
     { label: 'Execution wallets', status: walletReady ? 'pass' : 'review', detail: `${participatingPlans.length} active · ${bundleCount} bundle · ${sniperCount} sniper · ${selectedTaskCount} task` },
     { label: 'Risk rails', status: riskReady ? 'pass' : 'blocked', detail: `SL ${initial.devWalletRules.stopLossPct}% · TP ${formatPctList(initial.devWalletRules.takeProfitPercents)} · cap ${initial.devWalletRules.perTxSellCapPct}%` },
+    { label: 'IPFS metadata', status: ipfsReady ? 'pass' : 'review', detail: ipfsReady ? 'metadata image is IPFS-shaped' : 'PumpPortal create needs IPFS-pinned metadata before live launch' },
+    { label: 'Jito relay', status: relayStatus?.relayEnabled ? 'pass' : (bundleCount ? 'blocked' : 'review'), detail: relayStatus ? `${relayStatus.status} · tip cap ${relayStatus.maxTipSol.toFixed(6)} SOL` : 'checking relay status' },
+    { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : 'single dev wallet rehearsal' },
     { label: 'Dry-run', status: dryRunReady ? 'pass' : 'review', detail: project.preLiveDryRun?.status ? `${project.preLiveDryRun.status} · ${(project.preLiveDryRun.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'Run pre-live dry-run after saving' },
     { label: 'Deploy gate', status: 'blocked', detail: 'Closed until explicit deployment approval' }
   ];
@@ -273,23 +286,43 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     setMessage('Image staged. Save configuration to upload and attach it.');
   }
 
-  function applySafeRiskDefaults() {
+  useEffect(() => {
+    let active = true;
+    fetch('/api/relay/jito/status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!active) return;
+        setRelayStatus({
+          status: String(payload?.relay?.status ?? 'unknown'),
+          relayEnabled: Boolean(payload?.relay?.relayEnabled),
+          maxTipSol: Number(payload?.relay?.tip?.maxSol ?? 0),
+          blockers: Array.isArray(payload?.relay?.blockers) ? payload.relay.blockers.map(String) : []
+        });
+      })
+      .catch(() => {
+        if (active) setRelayStatus({ status: 'unavailable', relayEnabled: false, maxTipSol: 0, blockers: ['relay-status-fetch-failed'] });
+      });
+    return () => { active = false; };
+  }, []);
+
+  function applyRiskPreset(presetId: keyof typeof RISK_PRESETS) {
+    const preset = RISK_PRESETS[presetId];
     const form = document.getElementById('launch-config-form');
     if (!(form instanceof HTMLFormElement)) return;
-    setFormValue(form, 'dev.stopLossPct', '-18');
-    setFormValue(form, 'dev.trailingStopPct', '22');
-    setFormValue(form, 'dev.trailingActivationPct', '60');
-    setFormValue(form, 'dev.takeProfitPercents', '35, 75, 150');
-    setFormValue(form, 'dev.perTxSellCapPct', '25');
-    setFormValue(form, 'dev.cooldownSeconds', '60');
+    setFormValue(form, 'dev.stopLossPct', String(preset.stopLossPct));
+    setFormValue(form, 'dev.trailingStopPct', String(preset.trailingStopPct));
+    setFormValue(form, 'dev.trailingActivationPct', String(preset.trailingActivationPct));
+    setFormValue(form, 'dev.takeProfitPercents', formatPctList([...preset.takeProfitPercents]));
+    setFormValue(form, 'dev.perTxSellCapPct', String(preset.perTxSellCapPct));
+    setFormValue(form, 'dev.cooldownSeconds', String(preset.cooldownSeconds));
     for (const wallet of wallets) {
-      setFormValue(form, `sniper.${wallet.id}.stopLossPct`, '-18');
-      setFormValue(form, `sniper.${wallet.id}.takeProfitPercents`, '35, 75, 150');
-      setFormValue(form, `sniper.${wallet.id}.perTxSellCapPct`, '25');
-      setFormValue(form, `sniper.${wallet.id}.cooldownSeconds`, '60');
+      setFormValue(form, `sniper.${wallet.id}.stopLossPct`, String(preset.stopLossPct));
+      setFormValue(form, `sniper.${wallet.id}.takeProfitPercents`, formatPctList([...preset.takeProfitPercents]));
+      setFormValue(form, `sniper.${wallet.id}.perTxSellCapPct`, String(preset.perTxSellCapPct));
+      setFormValue(form, `sniper.${wallet.id}.cooldownSeconds`, String(preset.cooldownSeconds));
     }
     setSaveState('idle');
-    setMessage('Safe risk defaults staged. Save configuration to clear risk-rules-missing.');
+    setMessage(`${preset.label} risk preset staged. Save configuration before dry-run.`);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -577,10 +610,17 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         <div className="safeRiskDefaultsPanel">
           <div>
             <span>Risk preset</span>
-            <strong>Safe launch defaults</strong>
-            <small>Sets stop-loss -18%, take-profit 35/75/150%, trailing stop 22%, sell cap 25%, cooldown 60s. Configuration only.</small>
+            <strong>Choose an explicit risk profile</strong>
+            <small>Dry-run stays blocked until exits, sell caps, and cooldowns are set. Manual/custom is allowed only as an honest blocked rehearsal state.</small>
           </div>
-          <button type="button" onClick={applySafeRiskDefaults}>Apply Safe Defaults</button>
+          <div className="riskPresetButtonGrid">
+            {(Object.keys(RISK_PRESETS) as Array<keyof typeof RISK_PRESETS>).map((presetId) => (
+              <button type="button" key={presetId} onClick={() => applyRiskPreset(presetId)}>
+                <strong>{RISK_PRESETS[presetId].label}</strong>
+                <small>{formatPctList([...RISK_PRESETS[presetId].takeProfitPercents]) || 'no automation'} · SL {RISK_PRESETS[presetId].stopLossPct}%</small>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="launchConfigEditorGrid compact">
           <label><span>Max initial buy SOL</span><input name="dev.maxInitialBuySol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxInitialBuySol} /></label>
@@ -815,7 +855,8 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div><span>01</span><strong>Token package</strong><small>{tokenReady ? 'metadata ready' : 'needs final metadata'}</small></div>
             <div><span>02</span><strong>Route + wallets</strong><small>{selectedPlatform.label} · {selectedDevWallet ? short(selectedDevWallet.address) : 'wallet missing'}</small></div>
             <div><span>03</span><strong>Risk + dry-run</strong><small>{dryRunReady ? 'dry-run pass' : 'save, then dry-run'}</small></div>
-            <div><span>04</span><strong>Approval gate</strong><small>deploy + broadcast closed</small></div>
+            <div><span>04</span><strong>Relay + signing</strong><small>{relayStatus?.relayEnabled ? 'Jito configured' : 'Jito relay blocked'}</small></div>
+            <div><span>05</span><strong>Approval gate</strong><small>deploy + broadcast closed</small></div>
           </section>
           <section className="launchChecklistMatrix">
             {launchReviewItems.map((item) => (
@@ -834,6 +875,28 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div><span>Route</span><strong>{selectedPlatform.label} · {selectedBuyMode.label}</strong><small>{initial.route.quoteToken ?? 'SOL'} quote · {initial.route.tokenMode ?? 'classic'} mode</small></div>
             <div><span>Wallet plan</span><strong>{participatingPlans.length} active / {wallets.length} total</strong><small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small></div>
             <div><span>Capital cap</span><strong>{maxSol.toFixed(4)} SOL max</strong><small>{plannedSol.toFixed(4)} planned · {selectedTaskSol.toFixed(4)} task max</small></div>
+          </section>
+          <section className="executionReadinessGrid">
+            <div>
+              <span>Jito Relay</span>
+              <strong>{relayStatus?.status ?? 'checking'}</strong>
+              <small>{relayStatus?.relayEnabled ? 'relay env enabled, broadcast gate still controls submit' : relayStatus?.blockers.join(' · ') || 'status pending'}</small>
+            </div>
+            <div>
+              <span>PumpPortal Create</span>
+              <strong>{ipfsReady ? 'metadata pinned' : 'IPFS required'}</strong>
+              <small>Token create needs IPFS metadata URI, mint keypair, dev wallet, priority fee, slippage, and simulation.</small>
+            </div>
+            <div>
+              <span>Signing</span>
+              <strong>{multiWalletSigningReady ? 'rail signers aligned' : 'watch-only rail blocked'}</strong>
+              <small>{nonDevParticipating.length ? `${nonDevParticipating.length} non-dev rail wallet(s) require executable signing.` : 'Single-wallet browser signing rehearsal.'}</small>
+            </div>
+            <div>
+              <span>Tasks</span>
+              <strong>worker missing</strong>
+              <small>Task config exists; durable scheduler, relay policy, and confirmation loop are still not live engines.</small>
+            </div>
           </section>
           <section className="launchFinalActionPanel">
             <div><span>Execution gate</span><strong>Deploy disabled</strong><small>No token launch, signature request, SOL movement, or broadcast from this screen while gates are closed.</small></div>

@@ -1,5 +1,6 @@
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
+import { getJitoRelayReadiness } from './jito-relay-readiness';
 
 export type DeploymentRouteAdapterId =
   | 'pumpportal-create'
@@ -95,18 +96,43 @@ function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['execu
 }
 
 export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet[], activation: ReturnType<typeof getLiveActivationStatus>) {
+  const relay = getJitoRelayReadiness();
   const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
   const devWallet = wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
   const bundlePlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'bundle') ?? [];
   const sniperPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'sniper') ?? [];
   const taskPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'task') ?? [];
+  const participatingPlans = project.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
+  const signingRows = participatingPlans.map((entry) => {
+    const wallet = wallets.find((item) => item.id === entry.walletId) ?? null;
+    const custodyMode = wallet?.custodyMode ?? 'watch-only';
+    const isDevSigner = devWallet?.id === entry.walletId;
+    return {
+      walletId: entry.walletId,
+      phase: entry.executionPhase ?? 'observe',
+      address: wallet?.address ?? null,
+      custodyMode,
+      canSignNow: custodyMode === 'managed-local' || isDevSigner,
+      blocker: custodyMode === 'managed-local' ? null : isDevSigner ? 'browser signer must be connected and approve' : 'watch-only wallet cannot sign a bundle leg'
+    };
+  });
   const maxDevBuySol = devPlan?.maxBuySol || devPlan?.plannedBuySol || project.fundingPlan.devBuySol || 0;
   const route = project.launchConfig?.route;
+  const metadataFieldsReady = Boolean(project.metadata.name && project.metadata.symbol && project.metadata.description && project.metadata.imageUrl);
+  const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
+  const jitoTipCapSol = relay.tip.maxSol;
+  const maxPriorityFeeSol = project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0;
+  const estimatedCreateFeeSol = Number(process.env.DEPLOYMENT_ESTIMATED_CREATE_FEE_SOL ?? '0.005');
+  const requiredBufferSol = Number(process.env.DEPLOYMENT_REQUIRED_BUFFER_SOL ?? '0.01');
+  const modeledRequiredSol = Math.max(project.fundingPlan.budgetSol, maxDevBuySol) + maxPriorityFeeSol + jitoTipCapSol + estimatedCreateFeeSol + requiredBufferSol;
   const blockers = [
     !project.metadata.name || !project.metadata.symbol || !project.metadata.description ? 'metadata-incomplete' : null,
     !project.metadata.imageUrl ? 'token-image-missing' : null,
+    ipfsReady ? null : 'ipfs-metadata-uri-missing',
     !devWallet ? 'dev-wallet-missing' : null,
     maxDevBuySol <= 0 ? 'dev-buy-cap-missing' : null,
+    bundlePlans.length && !relay.relayEnabled ? 'jito-relay-disabled-for-bundle' : null,
+    signingRows.some((row) => row.blocker?.includes('watch-only')) ? 'multi-wallet-signing-orchestration-missing' : null,
     activation.deploymentEnabled ? null : 'deployment-gate-closed',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
   ].filter((item): item is string => Boolean(item));
@@ -134,9 +160,65 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       maxTotalSolAtRisk: Math.max(project.fundingPlan.budgetSol, maxDevBuySol),
       slippageCapBps: route?.slippageBps ?? project.launchConfig?.devWalletRules.maxSlippageBps ?? 100,
       priorityFeeCapSol: project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0,
-      jitoTipCapSol: 0,
+      jitoTipCapSol,
+      estimatedCreateFeeSol,
+      requiredBufferSol,
+      modeledRequiredSol,
       rpcBroadcastEndpoint: 'configured Solana RPC / explicit broadcast route after approval',
       publicLaunchConfirmation: 'pending Yakuzamoto approval'
+    },
+    pumpPortalCreateReadiness: {
+      status: metadataFieldsReady && ipfsReady && devWallet && maxDevBuySol > 0 ? 'ready-to-build-preview' : 'blocked',
+      supportLevel: 'mapped-not-live',
+      requiredInputs: ['name', 'symbol', 'description', 'IPFS metadata URI', 'dev wallet public key', 'client mint keypair public key', 'initial buy SOL', 'slippage bps', 'priority fee cap', 'pool'],
+      present: {
+        name: Boolean(project.metadata.name),
+        symbol: Boolean(project.metadata.symbol),
+        description: Boolean(project.metadata.description),
+        image: Boolean(project.metadata.imageUrl),
+        ipfsMetadataUri: ipfsReady,
+        devWallet: Boolean(devWallet),
+        initialBuySol: maxDevBuySol > 0,
+        slippageBps: Boolean(route?.slippageBps)
+      },
+      blockers: [
+        metadataFieldsReady ? null : 'metadata-fields-missing',
+        ipfsReady ? null : 'ipfs-metadata-uri-missing',
+        devWallet ? null : 'dev-wallet-missing',
+        maxDevBuySol > 0 ? null : 'initial-buy-missing',
+        activation.deploymentEnabled ? null : 'deployment-gate-closed'
+      ].filter((item): item is string => Boolean(item)),
+      docs: ['https://pumpportal.fun/creation/']
+    },
+    ipfsMetadataReadiness: {
+      status: ipfsReady ? 'ready' : process.env.PINATA_JWT ? 'pinning-provider-configured-upload-needed' : 'provider-required',
+      imageUrl: project.metadata.imageUrl || null,
+      requiredEnv: ['PINATA_JWT'],
+      optionalEnv: ['IPFS_GATEWAY_URL'],
+      blockers: [
+        project.metadata.imageUrl ? null : 'token-image-missing',
+        ipfsReady ? null : 'metadata-not-pinned-to-ipfs'
+      ].filter((item): item is string => Boolean(item)),
+      docs: ['https://pumpportal.fun/creation/']
+    },
+    signingOrchestration: {
+      status: signingRows.length && signingRows.every((row) => !row.blocker) ? 'executable' : 'blocked',
+      model: 'browser-wallet-per-leg-now-managed-wallet-later',
+      rows: signingRows,
+      blockers: signingRows.map((row) => row.blocker).filter((item): item is string => Boolean(item))
+    },
+    relayReadiness: relay,
+    fundingAndTipReadiness: {
+      status: project.fundingPlan.budgetSol >= modeledRequiredSol ? 'modeled-covered' : 'review',
+      plannedBuySol: participatingPlans.reduce((sum, entry) => sum + entry.plannedBuySol, 0),
+      maxBuySol: participatingPlans.reduce((sum, entry) => sum + entry.maxBuySol, 0),
+      priorityFeeCapSol: maxPriorityFeeSol,
+      jitoTipCapSol,
+      estimatedCreateFeeSol,
+      requiredBufferSol,
+      modeledRequiredSol,
+      modeledBudgetSol: project.fundingPlan.budgetSol,
+      liveBalanceStatus: 'not-hydrated-here'
     },
     cliChecklist: CLI_COMMANDS.map(([label, command]) => ({ label, command: command.replaceAll('<DEV_WALLET>', devWallet?.address ?? '<DEV_WALLET>') })),
     transactionPolicyChecks: [
@@ -152,9 +234,9 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       'expiry may rebuild only under retry cap'
     ],
     postLaunchRailVerification: [
-      { rail: 'bundle', count: bundlePlans.length, broadcastReady: false, requiredProof: ['build preview against real mint', 'wallet allowlist', 'total SOL cap', 'no self-trade loop', 'bundle simulation before Jito'] },
-      { rail: 'sniper', count: sniperPlans.length, broadcastReady: false, requiredProof: ['build preview against real mint', 'signer allowlist', 'slippage cap', 'priority fee cap', 'TP/SL/cooldown rules'] },
-      { rail: 'task', count: taskPlans.length, broadcastReady: false, requiredProof: ['task wallet allowlist', 'amount ranges', 'delay/cooldown bounds', 'sell caps', 'no artificial volume loop'] }
+      { rail: 'bundle', count: bundlePlans.length, broadcastReady: false, requiredProof: ['build preview against real mint', 'wallet allowlist', 'total SOL cap', 'Jito relay readiness', 'tip cap', 'no self-trade loop', 'bundle simulation before Jito'] },
+      { rail: 'sniper', count: sniperPlans.length, broadcastReady: false, requiredProof: ['trigger source', 'build preview against real mint', 'signer allowlist', 'slippage cap', 'priority fee cap', 'TP/SL/cooldown rules', 'relay/RPC submit policy'] },
+      { rail: 'task', count: taskPlans.length, broadcastReady: false, requiredProof: ['durable scheduler/worker', 'task wallet allowlist', 'amount ranges', 'delay/cooldown bounds', 'sell caps', 'no artificial volume loop'] }
     ]
   };
 }
