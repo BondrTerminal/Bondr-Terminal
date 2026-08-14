@@ -299,7 +299,8 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
       if (selectedDockWallet && publicKey !== selectedDockWallet.address) { setLiveMessage(`Connected signer ${compact(publicKey)} does not match selected wallet ${compact(selectedDockWallet.address)}.`); return; }
       const buildResponse = await fetch('/api/execution-swap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mint: activeMint, side, amount, spendAsset, slippageBps: parseSlippage(slippage), userPublicKey: publicKey }) });
       const build = await buildResponse.json() as SwapBuild;
-      setSwapBuild(build); setQuote(build);
+      setSwapBuild(build);
+      if (buildResponse.ok) setQuote(build);
       if (!buildResponse.ok || !build.swap?.swapTransaction) { setLiveMessage(build.error ?? 'Unsigned transaction build failed.'); return; }
       const simulationResponse = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: 'swap', mint: activeMint, wallet: publicKey }) });
       const sim = await simulationResponse.json() as SimulationPayload;
@@ -374,8 +375,11 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
       },
       phaseSummary: {
         quoteStatus: quote?.status ?? 'not-run',
+        quoteError: quote?.error ?? null,
         buildStatus: swapBuild?.swap?.swapTransaction ? 'unsigned-built' : swapBuild?.error ? 'error' : 'not-run',
+        buildError: swapBuild?.error ?? null,
         simulationStatus: simulation?.status ?? 'not-run',
+        simulationError: simulation?.error ?? simulation?.simulation?.failureSummary ?? null,
         signerStatus: signedSwap?.signedTransaction ? 'signed' : canSign ? 'eligible' : 'idle',
         broadcastStatus: signedSwap?.submitted ? 'sent' : capabilities?.broadcastEnabled ? 'enabled-not-sent' : 'disabled',
         signature: signedSwap?.signature ?? null,
@@ -401,6 +405,12 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
         safeToBroadcastIfLiveEnabled: signedReview?.review?.safeToBroadcastIfLiveEnabled ?? null,
         blockers: signedReview?.blockers ?? [],
         warnings: signedReview?.warnings ?? []
+      },
+      diagnostics: {
+        liveMessage,
+        authConfigured: capabilities?.auth?.configured ?? null,
+        authAuthenticated: capabilities?.auth?.authenticated ?? null,
+        authReason: capabilities?.auth?.reason ?? null
       },
       localBlockReasons: blockReasons,
       omittedIntentionally: [
