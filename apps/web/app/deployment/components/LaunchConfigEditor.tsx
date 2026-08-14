@@ -3,6 +3,7 @@
 import { useMemo, useState, type CSSProperties, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
+import { PreLiveDryRunAction } from '../../sniper/components/PreLiveDryRunAction';
 
 type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -837,6 +838,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <section className="launchFinalActionPanel">
             <div><span>Execution gate</span><strong>Deploy disabled</strong><small>No token launch, signature request, SOL movement, or broadcast from this screen while gates are closed.</small></div>
             <button type="submit" disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving...' : 'Save Launch Plan'}</button>
+            <PreLiveDryRunAction projectId={project.id} />
             <button type="button" onClick={() => setActiveTab('risk')}>Review Risk</button>
           </section>
         </div>
