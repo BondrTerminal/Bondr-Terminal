@@ -8,7 +8,6 @@ type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type LaunchTab = 'token' | 'wallets' | 'buy' | 'task' | 'review';
 
-type WalletUse = 'creator' | 'launch-readiness' | 'treasury' | 'observe';
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
   { id: 'wallets', label: 'Wallet Setup', detail: 'Select launch wallets' },
@@ -183,14 +182,6 @@ function stringFrom(form: FormData, name: string, fallback: string) {
   return value || fallback;
 }
 
-function walletUse(plan: WalletPlanEntry | undefined, index: number): WalletUse {
-  const role = String(plan?.role ?? '').toLowerCase();
-  if (role.includes('creator') || role.includes('deploy') || index === 0) return 'creator';
-  if (role.includes('treasury')) return 'treasury';
-  if (plan?.participate) return 'launch-readiness';
-  return 'observe';
-}
-
 function checked(form: FormData, name: string) {
   return form.get(name) === 'on';
 }
@@ -232,6 +223,12 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
   const selectedTaskCount = taskPlans.length;
   const selectedTaskSol = taskPlans.reduce((sum, entry) => sum + (entry.taskMaxTotalSol ?? entry.maxBuySol ?? 0), 0);
+  const participatingPlans = initial.walletPlan.filter((entry) => entry.participate);
+  const bundleCount = initial.walletPlan.filter((entry) => entry.executionPhase === 'bundle' || entry.role.toLowerCase().includes('bundle')).length;
+  const sniperCount = initial.walletPlan.filter((entry) => entry.executionPhase === 'sniper' || entry.role.toLowerCase().includes('sniper')).length;
+  const totalWalletBalance = wallets.reduce((sum, wallet) => sum + wallet.balanceSol, 0);
+  const plannedSol = participatingPlans.reduce((sum, entry) => sum + entry.plannedBuySol, 0);
+  const maxSol = participatingPlans.reduce((sum, entry) => sum + entry.maxBuySol, 0);
   const activeTabIndex = LAUNCH_TABS.findIndex((tab) => tab.id === activeTab);
   const previousTab = LAUNCH_TABS[Math.max(0, activeTabIndex - 1)]?.id ?? 'token';
   const nextTab = LAUNCH_TABS[Math.min(LAUNCH_TABS.length - 1, activeTabIndex + 1)]?.id ?? 'review';
@@ -371,6 +368,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <div className="launchWizardTitle">
             <span>Launch setup</span>
             <strong>{project.name} · {project.ticker}</strong>
+            <small>{participatingPlans.length} active wallets · {plannedSol.toFixed(4)} SOL planned · deploy gate closed</small>
           </div>
           <div className="launchWizardTabs" role="tablist" aria-label="Launch setup tabs">
             {LAUNCH_TABS.map((tab, index) => (
@@ -487,20 +485,23 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <section aria-labelledby={activeTab === 'task' ? 'launch-tab-button-task' : 'launch-tab-button-wallets'} className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets' && activeTab !== 'task'} id={activeTab === 'task' ? 'launch-tab-task' : 'launch-tab-wallets'} role="tabpanel">
+      <section aria-labelledby="launch-tab-button-wallets" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets'} id="launch-tab-wallets" role="tabpanel">
         <div className="sectionIntro compactIntro">
-          <span>{activeTab === 'task' ? 'Task Builder' : 'Wallet rails'}</span>
-          <h2>{activeTab === 'task' ? 'Create deployer wallet task' : 'Select wallets for launch'}</h2>
-          <p>{activeTab === 'task' ? 'Select task wallets and configure automated deployer wallet execution controls.' : 'Choose the dev wallet first, then assign bundle and sniper wallets. Task wallets are configured in the next route step.'}</p>
+          <span>Wallet rails</span>
+          <h2>Select wallets for launch</h2>
+          <p>Choose the dev wallet first, then assign bundle and sniper wallets. Task wallets are configured in the next route step.</p>
         </div>
         <div className="launchWalletSetupHeader">
           <div className="launchWalletRoleStrip">
-            {['Dev', 'Create', 'Import', 'Global', 'Fund', 'Export'].map((role) => <button type="button" key={role}>{role}</button>)}
+            <button className="active" type="button">Dev</button>
+            <button type="button" onClick={() => setActiveTab('task')}>Task</button>
+            <a href={`/portfolio?view=wallets&project=${project.id}`}>Wallet Center</a>
+            <a href="/portfolio?view=wallets">Global Wallets</a>
           </div>
           <div className="launchWalletBalanceBox">
             <span>Total SOL Balance</span>
-            <strong>{wallets.reduce((sum, wallet) => sum + wallet.balanceSol, 0).toFixed(4)} SOL</strong>
-            <button type="button">Use All</button>
+            <strong>{totalWalletBalance.toFixed(4)} SOL</strong>
+            <small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small>
           </div>
         </div>
         <div className="launchWalletListPanel">
@@ -512,13 +513,13 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           {wallets.length ? <div className="launchWalletList">
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              return <label className="launchWalletSelectRow" key={`select-${wallet.id}`}>
-                <input type="checkbox" defaultChecked={Boolean(plan?.participate)} />
+              return <div className="launchWalletSelectRow" key={`select-${wallet.id}`}>
+                <span className={plan?.participate ? 'launchWalletStatus active' : 'launchWalletStatus'}>{plan?.participate ? 'Active' : 'Idle'}</span>
                 <strong>{wallet.role || 'Wallet'}</strong>
                 <code title={wallet.address}>{short(wallet.address)}</code>
                 <span>{wallet.balanceSol.toFixed(4)} SOL</span>
                 <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'} · {plan?.executionPhase ?? 'observe'}</small>
-              </label>;
+              </div>;
             })}
           </div> : <div className="simpleEmptyBundle">No wallets yet. Generate or import wallets to continue.</div>}
         </div>
@@ -550,7 +551,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div><span>02</span><h3>Bundle Wallet Select</h3><p>Select wallets for launch bundle participation and cap spend per wallet.</p></div>
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              const enabled = plan?.executionPhase === 'bundle' || plan?.role.toLowerCase().includes('bundle') || walletUse(plan, 1) === 'launch-readiness';
+              const enabled = plan?.executionPhase === 'bundle' || plan?.role.toLowerCase().includes('bundle');
               return <label className="deploymentWalletFlowRow selectable" key={`bundle-${wallet.id}`}>
                 <input name={`bundle.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
                 <strong>{wallet.role}</strong>
@@ -585,8 +586,19 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             })}
           </section>
 
-          <section className="deploymentWalletFlowStep">
-            <div><span>04</span><h3>Create Task</h3><p>Configure automated deployer wallet execution: timed buys/sells, smart sell, wallet rotation, take-profit, stop-loss, sell caps, and cooldowns.</p></div>
+        </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
+        <p className="walletSecurityFootnote">Wallet roles define intent only. Deployment execution, signing, and broadcast remain gated off until a later explicit approval profile.</p>
+      </section>
+
+      <section aria-labelledby="launch-tab-button-task" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'task'} id="launch-tab-task" role="tabpanel">
+        <div className="sectionIntro compactIntro">
+          <span>Task Builder</span>
+          <h2>Create deployer wallet task</h2>
+          <p>Select task wallets and configure automated deployer wallet execution controls: timed buys/sells, smart sell, take-profit, stop-loss, sell caps, cooldowns, and wallet rotation.</p>
+        </div>
+        {wallets.length ? <div className="deploymentWalletFlow taskBuilderFlow">
+          <section className="deploymentWalletFlowStep taskCommandStep">
+            <div><span>04</span><h3>Create Task</h3><p>Configure the global task command first, then tune per-wallet amounts and timing below.</p></div>
             <div className="deploymentTaskCommandPanel">
               <div className="deploymentTaskCommandHeader">
                 <div>
@@ -594,7 +606,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                   <strong>{selectedTaskCount} wallets selected</strong>
                   <small>{selectedTaskSol.toFixed(4)} SOL max task allocation</small>
                 </div>
-                <button type="submit">Save Preset</button>
+                <button type="submit">Save Task Config</button>
               </div>
               <div className="deploymentTaskCommandGrid">
                 <label className="wide"><span>Task name</span><input name="taskCommand.name" defaultValue={taskDefaults?.taskName ?? ''} placeholder="Optional task label" /></label>
@@ -619,6 +631,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 <span>custom preset</span>
               </div>
             </div>
+          </section>
+          <section className="deploymentWalletFlowStep taskWalletStep">
+            <div><span>05</span><h3>Task Wallet Select</h3><p>Select the wallets this task may use and cap each wallet independently.</p></div>
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
               const enabled = plan?.executionPhase === 'task' || plan?.role.toLowerCase().includes('task');
@@ -638,7 +653,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             })}
           </section>
         </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
-        <p className="walletSecurityFootnote">Task rails are automated deployer wallet controls for timed execution, smart sell behavior, auto take-profit, stop-loss, sell caps, cooldowns, and responsive wallet management.</p>
+        <p className="walletSecurityFootnote">Task rails are automated deployer wallet controls. They are configuration-only here; no signing, broadcast, or artificial volume action is enabled.</p>
       </section>
 
       <section aria-labelledby="launch-tab-button-review" className="deploymentDisabledPanel launchWizardPanel" hidden={activeTab !== 'review'} id="launch-tab-review" role="tabpanel">
@@ -666,13 +681,18 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           </div>
           <div>
             <span>Wallets</span>
-            <strong>{wallets.length} total · {selectedTaskCount} task</strong>
+            <strong>{wallets.length} total · {participatingPlans.length} active</strong>
             <small>Dev wallet: {short(wallets.find((wallet) => wallet.id === defaultDevWalletId)?.address ?? '')}</small>
           </div>
           <div>
             <span>Planned SOL</span>
-            <strong>{initial.walletPlan.reduce((sum, entry) => sum + (entry.participate ? entry.plannedBuySol : 0), 0).toFixed(4)} planned</strong>
-            <small>{initial.walletPlan.reduce((sum, entry) => sum + (entry.participate ? entry.maxBuySol : 0), 0).toFixed(4)} max</small>
+            <strong>{plannedSol.toFixed(4)} planned</strong>
+            <small>{maxSol.toFixed(4)} max · {selectedTaskSol.toFixed(4)} task max</small>
+          </div>
+          <div>
+            <span>Execution roles</span>
+            <strong>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</strong>
+            <small>Buy mode controls which selected rails run in future gated execution.</small>
           </div>
         </div>
         <div className="sectionIntro compactIntro launchSubIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>

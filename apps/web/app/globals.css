@@ -14142,6 +14142,12 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #f9ebe0;
   overflow-wrap: anywhere;
 }
+.launchWizardTitle small {
+  color: rgba(249, 235, 224, 0.64);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .launchWizardTabs {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -14353,6 +14359,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   align-items: center;
 }
 .launchWalletRoleStrip button,
+.launchWalletRoleStrip a,
 .launchWalletBalanceBox button,
 .launchWalletListHeader a {
   min-height: 32px;
@@ -14363,7 +14370,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #f9ebe0;
   font-size: 11px;
   font-weight: 950;
+  text-decoration: none;
   text-transform: uppercase;
+}
+.launchWalletRoleStrip button.active,
+.launchWalletRoleStrip a:hover,
+.launchWalletListHeader a:hover {
+  border-color: rgba(255, 127, 17, 0.42);
+  background: rgba(255, 127, 17, 0.1);
+  color: #ffb166;
 }
 .launchWalletBalanceBox {
   display: grid;
@@ -14372,6 +14387,11 @@ body > .createProjectModal .professionalCreateProjectShell {
   border: 1px solid rgba(249, 235, 224, 0.1);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.2);
+}
+.launchWalletBalanceBox small {
+  color: rgba(249, 235, 224, 0.62);
+  font-size: 11px;
+  line-height: 1.35;
 }
 .launchWalletListPanel {
   display: grid;
@@ -14398,7 +14418,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchWalletSelectRow {
   display: grid;
-  grid-template-columns: 22px minmax(120px, 0.8fr) minmax(120px, 0.75fr) 100px minmax(160px, 1fr);
+  grid-template-columns: 70px minmax(120px, 0.8fr) minmax(120px, 0.75fr) 100px minmax(160px, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -14413,6 +14433,25 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: rgba(249, 235, 224, 0.76);
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+.launchWalletStatus {
+  display: inline-grid;
+  width: fit-content;
+  min-width: 58px;
+  place-items: center;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(249, 235, 224, 0.62) !important;
+  font-size: 10px !important;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.launchWalletStatus.active {
+  border-color: rgba(35, 206, 107, 0.34);
+  background: rgba(35, 206, 107, 0.08);
+  color: #7ee7a6 !important;
 }
 .launchOverviewGrid {
   display: grid;
@@ -14516,6 +14555,13 @@ body > .createProjectModal .professionalCreateProjectShell {
   border: 1px solid rgba(255, 127, 17, 0.2);
   border-radius: 8px;
   background: rgba(255, 127, 17, 0.055);
+}
+.taskBuilderFlow {
+  align-content: start;
+}
+.taskCommandStep,
+.taskWalletStep {
+  border-color: rgba(255, 127, 17, 0.16);
 }
 .deploymentTaskCommandHeader {
   display: flex;
