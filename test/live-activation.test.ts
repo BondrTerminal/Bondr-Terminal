@@ -6,6 +6,8 @@ const LIVE_ENV_KEYS = [
   'LIVE_TRADING_ENABLED',
   'LIVE_BETA_SIGNING_ENABLED',
   'LIVE_BETA_BROADCAST_ENABLED',
+  'LIVE_BETA_FUNDING_BROADCAST_ENABLED',
+  'LIVE_BETA_FUNDING_BROADCAST_ARMED',
   'LIVE_DEPLOYMENT_ENABLED',
   'LIVE_REQUIRE_SIMULATION',
   'LIVE_ALLOWED_CLUSTER'
@@ -61,6 +63,20 @@ test('broadcast cannot become enabled without both live trading and signing gate
     assert.equal(status.signingEnabled, true);
     assert.equal(status.broadcastEnabled, true);
     assert.equal(status.readinessLevel, 'broadcast-ready');
+  });
+});
+
+test('funding broadcast requires explicit armed gate in addition to funding env', () => {
+  withLiveEnv({ LIVE_TRADING_ENABLED: 'true', LIVE_BETA_SIGNING_ENABLED: 'true', LIVE_BETA_FUNDING_BROADCAST_ENABLED: 'true' }, () => {
+    const status = getLiveActivationStatus();
+    assert.equal(status.signingEnabled, true);
+    assert.equal(status.fundingBroadcastEnabled, false);
+    assert.match(status.warnings.join('\n'), /LIVE_BETA_FUNDING_BROADCAST_ARMED is false/);
+  });
+
+  withLiveEnv({ LIVE_TRADING_ENABLED: 'true', LIVE_BETA_SIGNING_ENABLED: 'true', LIVE_BETA_FUNDING_BROADCAST_ENABLED: 'true', LIVE_BETA_FUNDING_BROADCAST_ARMED: 'true' }, () => {
+    const status = getLiveActivationStatus();
+    assert.equal(status.fundingBroadcastEnabled, true);
   });
 });
 
