@@ -14229,3 +14229,366 @@ body > .createProjectModal .professionalCreateProjectShell {
   .bondrFinalShell .controlGroupGrid,
   .bondrFinalShell .bundleGuardGrid { grid-template-columns: 1fr; }
 }
+
+/* Fresh terminal ticket: rebuilt for real-money clarity, not debug density. */
+.freshTradingDock,
+.freshTradingDock * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+.freshTradingDock {
+  width: 100%;
+  max-width: 420px;
+  justify-self: stretch;
+  padding: 0 !important;
+}
+.freshTradingTicket {
+  width: 100%;
+  max-width: 420px;
+  margin: 0;
+  padding: 12px !important;
+  border-radius: 14px !important;
+  background: rgba(10, 11, 14, 0.96) !important;
+  border: 1px solid rgba(249, 235, 224, 0.13) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.freshTicketHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.freshTicketHeader div,
+.freshZoneHead {
+  display: grid;
+  gap: 3px;
+}
+.freshTicketHeader span,
+.freshZoneHead span,
+.freshTradeInputs span,
+.freshSettingBlock > span,
+.freshInlineInput span,
+.freshRouteSummary span,
+.terminalStatusPill span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.freshTicketHeader strong {
+  color: #fff7ed;
+  font-size: 15px;
+  line-height: 1.15;
+}
+.freshTicketHeader small,
+.freshZoneHead small,
+.freshEmptyPanel small,
+.freshSettingBlock small,
+.freshStepRow small,
+.freshBlockReasons p,
+.freshMessageLine {
+  color: rgba(249, 235, 224, 0.68);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.freshTradingStack {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.freshTradeZone {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(249, 235, 224, 0.11);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+.freshZoneHead {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+.freshZoneHead strong {
+  color: #f9ebe0;
+  font-size: 13px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.freshStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.terminalStatusPill {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+}
+.terminalStatusPill strong {
+  color: #f9ebe0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.terminalStatusPill.pass { border-color: rgba(35, 206, 107, 0.34); background: rgba(35, 206, 107, 0.08); }
+.terminalStatusPill.warn { border-color: rgba(255, 209, 102, 0.32); background: rgba(255, 209, 102, 0.07); }
+.terminalStatusPill.fail { border-color: rgba(227, 93, 106, 0.34); background: rgba(227, 93, 106, 0.07); }
+.freshWalletList {
+  display: grid;
+  gap: 7px;
+  max-height: 174px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.freshWalletRow,
+.freshPresetRow button,
+.freshSegmentedControl button,
+.freshModeTabs button {
+  min-height: 40px;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #f9ebe0;
+  cursor: pointer;
+}
+.freshWalletRow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) auto;
+  gap: 4px 8px;
+  padding: 9px;
+  text-align: left;
+}
+.freshWalletRow span {
+  color: rgba(249, 235, 224, 0.86);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.freshWalletRow strong {
+  color: #7dc7ff;
+  font-size: 12px;
+}
+.freshWalletRow small {
+  grid-column: 1 / -1;
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.freshWalletRow.selected,
+.freshPresetRow button.selected,
+.freshSegmentedControl button[aria-selected="true"],
+.freshModeTabs button[aria-selected="true"] {
+  border-color: rgba(35, 206, 107, 0.44);
+  background: rgba(35, 206, 107, 0.1);
+}
+.freshWalletActions,
+.freshPresetRow,
+.freshPrimaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.freshWalletActions button,
+.freshPrimaryActions button,
+.freshPresetRow button {
+  flex: 1 1 0;
+  min-width: 88px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.freshInlineState {
+  margin: 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.freshInlineState.pass { color: #caffdf; background: rgba(35, 206, 107, 0.08); }
+.freshInlineState.warn { color: #ffecb3; background: rgba(255, 209, 102, 0.08); }
+.freshInlineState.fail { color: #ffc4ca; background: rgba(227, 93, 106, 0.08); }
+.freshSegmentedControl,
+.freshModeTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.freshSegmentedControl button,
+.freshModeTabs button,
+.freshPresetRow button {
+  padding: 9px 8px;
+  font-weight: 900;
+}
+.freshModeTabs button:disabled,
+.freshPrimaryActions button:disabled,
+.freshWalletActions button:disabled,
+.freshPresetRow button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+.freshTradeInputs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.freshTradeInputs label,
+.freshInlineInput {
+  display: grid;
+  gap: 5px;
+}
+.freshTradeInputs input,
+.freshTradeInputs select,
+.freshInlineInput input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(249, 235, 224, 0.14);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff7ed;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+.freshRouteSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.freshRouteSummary div {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.freshRouteSummary strong {
+  color: #ffd166;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.freshSettingBlock {
+  display: grid;
+  gap: 7px;
+}
+.freshPresetRow.compact button {
+  min-width: 62px;
+  min-height: 34px;
+  font-size: 12px;
+}
+.freshAdvancedSettings {
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.freshAdvancedSettings summary {
+  color: rgba(249, 235, 224, 0.76);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+.freshAdvancedSettings[open] {
+  display: grid;
+  gap: 10px;
+}
+.freshStepList {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.terminalStepRow {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.terminalStepRow > span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(249, 235, 224, 0.1);
+  color: rgba(249, 235, 224, 0.78);
+  font-size: 11px;
+  font-weight: 900;
+}
+.terminalStepRow strong {
+  color: #fff7ed;
+  font-size: 12px;
+}
+.terminalStepRow.pass > span { background: rgba(35, 206, 107, 0.22); color: #caffdf; }
+.terminalStepRow.warn > span { background: rgba(255, 209, 102, 0.2); color: #ffecb3; }
+.terminalStepRow.fail > span { background: rgba(227, 93, 106, 0.2); color: #ffc4ca; }
+.freshPrimaryActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.freshPrimaryActions button {
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 10px;
+}
+.freshMessageLine {
+  padding: 9px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(249, 235, 224, 0.1);
+}
+.freshEmptyPanel,
+.freshBlockReasons {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+}
+.freshEmptyPanel strong,
+.freshBlockReasons strong {
+  color: #f9ebe0;
+  font-size: 13px;
+}
+@media (max-width: 1180px) {
+  .freshTradingDock,
+  .freshTradingTicket {
+    max-width: none;
+  }
+}
+@media (max-width: 640px) {
+  .freshTicketHeader,
+  .freshZoneHead,
+  .freshStatusGrid,
+  .freshRouteSummary,
+  .terminalStepRow,
+  .freshPrimaryActions {
+    grid-template-columns: 1fr;
+  }
+  .freshZoneHead strong,
+  .freshTicketHeader .terminalStatusPill {
+    text-align: left;
+  }
+  .freshWalletRow {
+    grid-template-columns: 1fr;
+  }
+  .freshWalletActions button,
+  .freshPresetRow button,
+  .freshPrimaryActions button {
+    flex-basis: 100%;
+  }
+}

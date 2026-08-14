@@ -86,6 +86,20 @@ function TransactionPreviewCard({ preview }: { preview?: TransactionPreview | nu
   </div>;
 }
 
+function statusTone(status: boolean | null | undefined) {
+  if (status === true) return 'pass';
+  if (status === false) return 'fail';
+  return 'warn';
+}
+
+function StatusPill({ label, value, tone }: { label: string; value: string; tone?: 'pass' | 'warn' | 'fail' | 'neutral' }) {
+  return <div className={`terminalStatusPill ${tone ?? 'neutral'}`}><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function StepRow({ index, label, status, detail }: { index: number; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }) {
+  return <li className={`terminalStepRow ${status}`}><span>{index}</span><strong>{label}</strong><small>{detail}</small></li>;
+}
+
 export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { mint?: string; selectedWalletLabel: string; wallets?: DockWallet[] }) {
   const [activeMint, setActiveMint] = useState(mint ?? '');
   const [side, setSide] = useState<TicketSide>('Buy');
@@ -332,40 +346,153 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
   }
 
   return (
-    <aside className="executionDock premiumExecutionDock">
-      <section className="dockCard orderTicketCard premiumOrderCard">
-        <div className="dockHeader tradingPanelHeader proPaperHeader"><span>Terminal</span><strong>Quote → build → simulate → sign</strong><small>Broadcast disabled in A-profile</small></div>
-        <div className="axiomOrderTicket terminalTradeOnlyPanel redesignedTradePanel">
-          <div className="tradePanelSection tradeWalletSection"><div className="tradePanelSectionHead"><span>01</span><strong>Active wallet</strong><small>Browser signer must match selected wallet</small></div><div className="terminalWalletRoutingList cleanWalletList" role="radiogroup" aria-label="Select active wallet">{renderedWallets.length ? renderedWallets.map((wallet) => <button type="button" className={`terminalWalletRoutingItem ${selectedWalletId === wallet.id ? 'selectedPrimaryWallet' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}><strong>{wallet.role}</strong><code>{compact(wallet.address)}</code><small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenBalanceByAddress.get(wallet.address.toLowerCase()))} · {tokenBalanceByAddress.get(wallet.address.toLowerCase())?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small></button>) : <div className="ticketWalletEmpty"><strong>No saved wallets</strong><span>{selectedWalletLabel}. Connect a browser wallet or add a watch-only record in Wallet Ops.</span></div>}</div><div className="ticketSignerRow"><span>Connected signer</span><strong>{walletPublicKey ? compact(walletPublicKey ?? '') : 'Not connected'}</strong><button className="button secondary smallButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Reconnect' : 'Connect wallet'}</button><button className="button secondary smallButton" type="button" onClick={() => useConnectedWalletAsActive()} disabled={!walletPublicKey}>Use connected</button><button className="button secondary smallButton" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={!walletPublicKey || liveLoading || !signerMissingFromWalletOps}>{signerMissingFromWalletOps ? 'Add watch-only' : 'Saved in Wallet Ops'}</button></div><div className={`ticketSignerMatchStatus ${selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'}`}><strong>{selectedSignerMatched ? 'Signer matches selected wallet' : signerMismatch ? 'Signer mismatch blocks signing' : 'Signer match pending'}</strong><small>{selectedDockWallet ? `Selected ${compact(selectedDockWallet.address)} · Connected ${walletPublicKey ? compact(walletPublicKey) : '—'}` : 'No Wallet Ops record selected; browser wallet rail still gates signing.'}</small></div></div>
+    <aside className="executionDock premiumExecutionDock freshTradingDock">
+      <section className="dockCard orderTicketCard premiumOrderCard freshTradingTicket">
+        <header className="freshTicketHeader">
+          <div>
+            <span>Trading terminal</span>
+            <strong>Market ticket</strong>
+            <small>Preview, build, simulate, sign. Broadcast stays gated.</small>
+          </div>
+          <StatusPill label="Broadcast" value={capabilities?.broadcastEnabled ? 'Enabled' : 'Disabled'} tone={capabilities?.broadcastEnabled ? 'warn' : 'fail'} />
+        </header>
 
-          <div className="tradePanelSection tradeSideSection">
-            <div className="tradePanelSectionHead"><span>02</span><strong>Route request</strong><small>Quote preview only until build/simulate</small></div>
-            <div className={`tradeActionBar primaryBuySellBar ${side === 'Sell' ? 'sellSelected' : 'buySelected'}`} role="tablist" aria-label="Trade side">
-              <button type="button" role="tab" aria-selected={side === 'Buy'} onClick={() => setSide('Buy')}>Buy</button>
-              <button type="button" role="tab" aria-selected={side === 'Sell'} onClick={() => setSide('Sell')}>Sell</button>
+        <div className="freshTradingStack">
+          <section className="freshTradeZone">
+            <div className="freshZoneHead">
+              <span>Wallet Status</span>
+              <strong>{walletPublicKey ? compact(walletPublicKey) : 'Not connected'}</strong>
             </div>
-            <div className="tradeInputGrid">
+            <div className="freshStatusGrid" aria-label="Wallet and gate status">
+              <StatusPill label="Auth" value={operatorAuthRequired ? 'Login needed' : 'Ready'} tone={operatorAuthRequired ? 'warn' : 'pass'} />
+              <StatusPill label="Signer" value={selectedSignerMatched ? 'Matched' : signerMismatch ? 'Mismatch' : 'Pending'} tone={selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'} />
+              <StatusPill label="Signing" value={capabilities?.signingEnabled ? 'Enabled' : 'Disabled'} tone={statusTone(capabilities?.signingEnabled)} />
+              <StatusPill label="Readiness" value={capabilities?.readinessLevel ?? 'Checking'} tone={capabilities?.readinessLevel === 'signing-ready' ? 'pass' : 'warn'} />
+            </div>
+            <div className="freshWalletList" role="radiogroup" aria-label="Select trading wallet">
+              {renderedWallets.length ? renderedWallets.map((wallet) => {
+                const tokenRow = tokenBalanceByAddress.get(wallet.address.toLowerCase());
+                return (
+                  <button type="button" className={`freshWalletRow ${selectedWalletId === wallet.id ? 'selected' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}>
+                    <span>{wallet.role}</span>
+                    <strong>{compact(wallet.address)}</strong>
+                    <small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenRow)} · {tokenRow?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small>
+                  </button>
+                );
+              }) : <div className="freshEmptyPanel"><strong>No saved wallets</strong><small>{selectedWalletLabel}. Connect a browser wallet or add a watch-only public record.</small></div>}
+            </div>
+            <div className="freshWalletActions">
+              <button className="button secondary smallButton" type="button" onClick={() => void connectBrowserWallet()}>{walletPublicKey ? 'Reconnect' : 'Connect wallet'}</button>
+              <button className="button secondary smallButton" type="button" onClick={() => useConnectedWalletAsActive()} disabled={!walletPublicKey}>Use connected</button>
+              <button className="button secondary smallButton" type="button" onClick={() => void addConnectedSignerAsWatchOnly()} disabled={!walletPublicKey || liveLoading || !signerMissingFromWalletOps}>{signerMissingFromWalletOps ? 'Add watch-only' : 'Saved'}</button>
+            </div>
+            <p className={`freshInlineState ${selectedSignerMatched ? 'pass' : signerMismatch ? 'fail' : 'warn'}`}>
+              {selectedSignerMatched ? 'Selected wallet matches the connected browser signer.' : signerMismatch ? `Selected ${selectedDockWallet ? compact(selectedDockWallet.address) : '—'} does not match signer ${walletPublicKey ? compact(walletPublicKey) : '—'}.` : 'Connect or select the browser signer before signing.'}
+            </p>
+          </section>
+
+          <section className="freshTradeZone">
+            <div className="freshZoneHead">
+              <span>Trade Ticket</span>
+              <strong>{routeLabel}</strong>
+            </div>
+            <div className="freshSegmentedControl" role="tablist" aria-label="Trade side">
+              <button type="button" aria-selected={side === 'Buy'} onClick={() => setSide('Buy')}>Buy</button>
+              <button type="button" aria-selected={side === 'Sell'} onClick={() => setSide('Sell')}>Sell</button>
+            </div>
+            <div className="freshModeTabs" role="tablist" aria-label="Order type">
+              <button type="button" aria-selected="true">Market</button>
+              <button type="button" disabled title="Limit orders are a later policy gate.">Limit locked</button>
+            </div>
+            <div className="freshTradeInputs">
               <label><span>Token mint</span><input value={activeMint} onChange={(event) => setActiveMint(event.target.value.trim())} placeholder="Paste token mint" /></label>
               <label><span>{side === 'Buy' ? `Spend amount (${spendAsset})` : 'Sell token amount'}</span><input value={amount} onChange={(event) => { setAmount(event.target.value); setSellPercentPreset(null); }} placeholder="0.01" /></label>
-              <label><span>Settlement asset</span><select value={spendAsset} onChange={(event) => setSpendAsset(event.target.value as 'SOL' | 'USDC')}><option>SOL</option><option>USDC</option></select></label>
-              <label><span>Slippage bps</span><input value={slippage} onChange={(event) => setSlippage(event.target.value)} placeholder="100" /></label>
+              <label><span>Settle to</span><select value={spendAsset} onChange={(event) => setSpendAsset(event.target.value as 'SOL' | 'USDC')}><option>SOL</option><option>USDC</option></select></label>
             </div>
-            {side === 'Buy' ? <div className="terminalPresetMatrix" aria-label="SOL amount presets">{SOL_AMOUNT_PRESETS.map((preset) => <button type="button" key={preset} className={amount === preset && spendAsset === 'SOL' ? 'selectedPrimaryWallet' : ''} onClick={() => { setSpendAsset('SOL'); setAmount(preset); }}><strong>{preset} SOL</strong><span>micro buy</span></button>)}</div> : <div className="terminalPresetMatrix" aria-label="Percent sell presets">{SELL_PERCENT_PRESETS.map((preset) => <button type="button" key={preset} className={sellPercentPreset === preset ? 'selectedPrimaryWallet' : ''} onClick={() => applySellPercent(preset)}><strong>{preset}%</strong><span>{selectedTokenBalance?.uiAmount ? `${formatTokenAmount((selectedTokenBalance.uiAmount * preset) / 100)} tokens` : 'manual amount'}</span></button>)}</div>}
-            <div className="executionSettingsMatrix" aria-label="Execution settings presets">
-              <div><span>Slippage</span><div className="terminalPresetMatrix compactPresetMatrix">{SLIPPAGE_PRESETS.map((preset) => <button type="button" key={preset} className={parseSlippage(slippage) === preset ? 'selectedPrimaryWallet' : ''} onClick={() => setSlippage(String(preset))}>{formatBps(String(preset))}</button>)}</div></div>
-              <div><span>Priority fee</span><div className="terminalPresetMatrix compactPresetMatrix">{PRIORITY_FEE_PRESETS.map((preset) => <button type="button" key={preset} className={priorityFeePreset === preset ? 'selectedPrimaryWallet' : ''} onClick={() => setPriorityFeePreset(preset)}>{preset}</button>)}</div><small>{priorityFeeCopy}; no new live execution path.</small></div>
+            {side === 'Buy' ? (
+              <div className="freshPresetRow" aria-label="SOL buy presets">
+                {SOL_AMOUNT_PRESETS.map((preset) => <button type="button" key={preset} className={amount === preset && spendAsset === 'SOL' ? 'selected' : ''} onClick={() => { setSpendAsset('SOL'); setAmount(preset); }}>{preset} SOL</button>)}
+              </div>
+            ) : (
+              <div className="freshPresetRow" aria-label="Sell percentage presets">
+                {SELL_PERCENT_PRESETS.map((preset) => <button type="button" key={preset} className={sellPercentPreset === preset ? 'selected' : ''} onClick={() => applySellPercent(preset)}>{preset}%</button>)}
+              </div>
+            )}
+            <div className="freshRouteSummary">
+              <div><span>Estimated receive</span><strong>{estimatedReceive}</strong></div>
+              <div><span>Price impact</span><strong>{priceImpact}</strong></div>
+              <div><span>Route</span><strong>{routePlanLabel}</strong></div>
             </div>
-            <div className="routePreviewBox terminalRoutePreview" aria-label="Route and quote preview">
-              <span>Route / quote preview</span>
-              <strong>{routePlanLabel}</strong>
-              <div className="routePreviewGrid"><small>Estimated receive <b>{estimatedReceive}</b></small><small>Price impact <b>{priceImpact}</b></small><small>Slippage <b>{formatBps(slippage)}</b></small><small>Route legs <b>{quote?.quote?.routePlanLength ?? '—'}</b></small></div>
-              <small>{quote?.status === 'ok' ? `Context slot ${quote.quote?.contextSlot ?? '—'}` : 'Run Preview quote for live Jupiter route details.'}</small>
-            </div>
-          </div>
+          </section>
 
-          <div className="tradePanelSection tradeActionSection"><div className="tradePanelSectionHead"><span>03</span><strong>Execution ladder</strong><small>Simulation required before signing</small></div>{operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}{signerMismatch && <div className="walletMismatchNotice"><strong>Selected wallet and connected signer do not match.</strong><p>Selected: <code>{selectedDockWallet?.address}</code></p><p>Connected: <code>{walletPublicKey}</code></p></div>}<ul className="liveBetaStepLadder" aria-label="A-profile signing steps"><li className={`walletReadinessRow ${walletPublicKey ? 'pass' : 'warn'}`}><strong>1. Wallet connected</strong><span>{walletPublicKey ? compact(walletPublicKey ?? '') : 'Phantom/Solflare required'}</span></li><li className={`walletReadinessRow ${selectedExecutionAddress ? signerMismatch ? 'fail' : 'pass' : 'warn'}`}><strong>2. Active wallet selected</strong><span>{selectedExecutionAddress ? signerMismatch ? `Selected ${compact(selectedExecutionAddress)} ≠ signer ${compact(walletPublicKey ?? '')}` : compact(selectedExecutionAddress) : 'Use connected wallet'}</span></li><li className={`walletReadinessRow ${quote?.status === 'ok' ? 'pass' : 'warn'}`}><strong>3. Quote</strong><span>{quote?.status === 'ok' ? 'Quote ready' : 'Run quote preview'}</span></li><li className={`walletReadinessRow ${swapBuild?.swap?.swapTransaction ? 'pass' : 'warn'}`}><strong>4. Unsigned build</strong><span>{swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : 'Run build + simulate'}</span></li><li className={`walletReadinessRow ${simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'}`}><strong>5. Simulation</strong><span>{simulationPassed ? 'Simulation passed' : simulation?.error ?? 'Required before signing'}</span></li><li className={`walletReadinessRow ${signedSwap?.signedTransaction ? 'pass' : canSign ? 'pass' : 'fail'}`}><strong>6. Browser signing eligible</strong><span>{signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : (blockReasons.find((reason) => reason.startsWith('Signing blocked:')) ?? 'Blocked until simulation passes')}</span></li><li className="walletReadinessRow fail"><strong>7. Broadcast disabled</strong><span>{capabilities?.broadcastEnabled ? 'Separate submit step required' : 'Broadcast OFF: A-profile signs locally only'}</span></li></ul><div className="terminalBlockReasonCard"><strong>Exact block reasons</strong><p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons after simulation/signing gates pass.'}</p><small>Broadcast is intentionally off for this profile. Signing creates a local signed payload only; nothing is submitted on-chain here.</small></div><div className="axiomActionRow"><button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Quoting…' : 'Preview quote'}</button><button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working…' : 'Build + simulate'}</button><button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Local sign test</button><button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Submit disabled' : 'Broadcast OFF — A-profile'}</button></div><div className="axiomTicketFooter"><button type="button" disabled>{capabilities?.readinessLevel ?? 'checking'}</button><span>{liveMessage ?? quote?.error ?? 'Ready for quote preview.'}</span></div></div>
-          <div className={`transactionPreviewCard ${signedReview?.status === 'blocked' ? 'blockedPreview' : signedReview?.status === 'ok' ? 'okPreview' : 'emptyPreview'}`} aria-label="Signed transaction intent review"><div className="transactionPreviewHeader"><div><span>Signed transaction review</span><strong>{signedReview?.status === 'ok' ? 'intent matched' : signedReview?.status === 'blocked' ? 'blocked' : 'awaiting signature'}</strong></div><em>{signedReview?.broadcast ?? 'broadcast-not-performed'}</em></div><div className="transactionPreviewGrid"><div><span>Intent</span><strong>{swapBuild?.intentId ? hashLabel(swapBuild.intentId) : '—'}</strong></div><div><span>Signer</span><strong>{signedReview?.review?.signerMatched ? 'matched' : swapBuild?.expectedSigner ? compact(swapBuild.expectedSigner) : '—'}</strong></div><div><span>Mint</span><strong>{signedReview?.review?.expectedMintReferenced ? 'referenced' : swapBuild?.expectedMint ? compact(swapBuild.expectedMint) : '—'}</strong></div><div><span>Message hash</span><strong>{hashLabel(signedReview?.review?.transactionMessageHash ?? swapBuild?.transactionMessageHash)}</strong></div><div><span>Simulation</span><strong>{simulation?.status ?? 'not-run'}</strong></div><div><span>ALT policy</span><strong>{signedReview?.review?.altPolicy ?? 'pending'}</strong></div></div>{signedReview?.blockers?.length ? <ul className="transactionPreviewList blockers">{signedReview.blockers.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul> : null}<p>Signing only. This review binds the browser-wallet signature to the stored intent; it does not broadcast or enable trading.</p></div>
-          <TransactionPreviewCard preview={simulation?.transactionPreview ?? swapBuild?.transactionPreview ?? quote?.transactionPreview ?? null} />
+          <section className="freshTradeZone freshRiskZone">
+            <div className="freshZoneHead">
+              <span>Risk And Settings</span>
+              <strong>Simulation required</strong>
+            </div>
+            <div className="freshSettingBlock">
+              <span>Slippage</span>
+              <div className="freshPresetRow compact">
+                {SLIPPAGE_PRESETS.map((preset) => <button type="button" key={preset} className={parseSlippage(slippage) === preset ? 'selected' : ''} onClick={() => setSlippage(String(preset))}>{formatBps(String(preset))}</button>)}
+              </div>
+              <label className="freshInlineInput"><span>Custom bps</span><input value={slippage} onChange={(event) => setSlippage(event.target.value)} placeholder="100" /></label>
+            </div>
+            <details className="freshAdvancedSettings">
+              <summary>Advanced settings</summary>
+              <div className="freshSettingBlock">
+                <span>Priority fee intent</span>
+                <div className="freshPresetRow compact">
+                  {PRIORITY_FEE_PRESETS.map((preset) => <button type="button" key={preset} className={priorityFeePreset === preset ? 'selected' : ''} onClick={() => setPriorityFeePreset(preset)}>{preset}</button>)}
+                </div>
+                <small>{priorityFeeCopy}. This does not open a new live execution path.</small>
+              </div>
+              <div className="freshBlockReasons">
+                <strong>Block reasons</strong>
+                <p>{blockReasons.length ? blockReasons.join(' · ') : 'No local block reasons. Broadcast still requires explicit activation.'}</p>
+              </div>
+            </details>
+          </section>
+
+          <section className="freshTradeZone">
+            <div className="freshZoneHead">
+              <span>Execution Steps</span>
+              <strong>{signedSwap?.submitted ? 'Sent' : signedSwap?.signedTransaction ? 'Signed locally' : simulationPassed ? 'Ready to sign' : quote?.status === 'ok' ? 'Ready to build' : 'Ready to quote'}</strong>
+            </div>
+            {operatorAuthRequired && <div className="operatorAuthNotice"><strong>Operator login required.</strong><p>Open Profile before live signing routes.</p><a className="button secondary" href="/profile">Open Profile</a></div>}
+            <ol className="freshStepList" aria-label="Trading execution steps">
+              <StepRow index={1} label="Wallet connected" status={walletPublicKey ? 'pass' : 'warn'} detail={walletPublicKey ? compact(walletPublicKey) : 'Connect Phantom or Solflare'} />
+              <StepRow index={2} label="Signer match" status={selectedExecutionAddress ? signerMismatch ? 'fail' : 'pass' : 'warn'} detail={selectedExecutionAddress ? signerMismatch ? 'Selected wallet differs from signer' : compact(selectedExecutionAddress) : 'Select or use connected wallet'} />
+              <StepRow index={3} label="Quote ready" status={quote?.status === 'ok' ? 'pass' : quote?.status === 'error' ? 'fail' : 'warn'} detail={quote?.status === 'ok' ? 'Jupiter quote loaded' : quote?.error ?? 'Run Preview Quote'} />
+              <StepRow index={4} label="Unsigned build" status={swapBuild?.swap?.swapTransaction ? 'pass' : swapBuild?.error ? 'fail' : 'warn'} detail={swapBuild?.swap?.swapTransaction ? 'Unsigned transaction built' : swapBuild?.error ?? 'Run Build + Simulate'} />
+              <StepRow index={5} label="Simulation" status={simulationPassed ? 'pass' : simulation?.status === 'error' ? 'fail' : 'warn'} detail={simulationPassed ? 'Simulation passed' : simulation?.simulation?.failureSummary ?? simulation?.error ?? 'Required before signing'} />
+              <StepRow index={6} label="Browser signature" status={signedSwap?.signedTransaction ? 'pass' : canSign ? 'warn' : 'fail'} detail={signedSwap?.signedTransaction ? 'Signed locally' : canSign ? 'Ready for wallet prompt' : 'Blocked until wallet, build, and simulation pass'} />
+              <StepRow index={7} label="Broadcast" status={canBroadcast ? 'warn' : 'fail'} detail={capabilities?.broadcastEnabled ? 'Requires separate submit click' : 'Terminal broadcast disabled'} />
+            </ol>
+          </section>
+
+          <section className="freshTradeZone freshActionZone">
+            <div className="freshZoneHead">
+              <span>Action Bar</span>
+              <strong>{liveLoading || quoteLoading ? 'Working' : 'Idle'}</strong>
+            </div>
+            <div className="freshPrimaryActions">
+              <button className="axiomPreviewButton" type="button" onClick={() => void previewQuote()} disabled={!canPreview}>{quoteLoading ? 'Previewing...' : 'Preview Quote'}</button>
+              <button className="axiomPreviewButton" type="button" onClick={() => void buildAndSimulateSwap()} disabled={!canBuild}>{liveLoading ? 'Working...' : 'Build + Simulate'}</button>
+              <button className={`axiomExecuteButton ${canSign ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void signInWallet()} disabled={!canSign}>Sign Locally</button>
+              <button className={`axiomExecuteButton ${canBroadcast ? '' : 'proLiveDisabledButton'}`} type="button" onClick={() => void submitBroadcast()} disabled={!canBroadcast}>{capabilities?.broadcastEnabled ? 'Broadcast' : 'Broadcast Disabled'}</button>
+            </div>
+            <div className="freshMessageLine" role="status">{liveMessage ?? quote?.error ?? 'Ready. Broadcast remains disabled until explicit activation.'}</div>
+            <details className="freshAdvancedSettings">
+              <summary>Signed review and transaction details</summary>
+              <div className={`transactionPreviewCard ${signedReview?.status === 'blocked' ? 'blockedPreview' : signedReview?.status === 'ok' ? 'okPreview' : 'emptyPreview'}`} aria-label="Signed transaction intent review">
+                <div className="transactionPreviewHeader"><div><span>Signed transaction review</span><strong>{signedReview?.status === 'ok' ? 'intent matched' : signedReview?.status === 'blocked' ? 'blocked' : 'awaiting signature'}</strong></div><em>{signedReview?.broadcast ?? 'broadcast-not-performed'}</em></div>
+                <div className="transactionPreviewGrid"><div><span>Intent</span><strong>{swapBuild?.intentId ? hashLabel(swapBuild.intentId) : '—'}</strong></div><div><span>Signer</span><strong>{signedReview?.review?.signerMatched ? 'matched' : swapBuild?.expectedSigner ? compact(swapBuild.expectedSigner) : '—'}</strong></div><div><span>Mint</span><strong>{signedReview?.review?.expectedMintReferenced ? 'referenced' : swapBuild?.expectedMint ? compact(swapBuild.expectedMint) : '—'}</strong></div><div><span>Message hash</span><strong>{hashLabel(signedReview?.review?.transactionMessageHash ?? swapBuild?.transactionMessageHash)}</strong></div><div><span>Simulation</span><strong>{simulation?.status ?? 'not-run'}</strong></div><div><span>ALT policy</span><strong>{signedReview?.review?.altPolicy ?? 'pending'}</strong></div></div>
+                {signedReview?.blockers?.length ? <ul className="transactionPreviewList blockers">{signedReview.blockers.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul> : null}
+                <p>Signing only. This review binds the browser-wallet signature to the stored intent; it does not broadcast or enable trading.</p>
+              </div>
+              <TransactionPreviewCard preview={simulation?.transactionPreview ?? swapBuild?.transactionPreview ?? quote?.transactionPreview ?? null} />
+            </details>
+          </section>
         </div>
       </section>
     </aside>
