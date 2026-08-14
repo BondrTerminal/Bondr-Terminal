@@ -18,9 +18,8 @@ const primaryNavItems = [
   { href: '/', label: 'Hub' },
   { href: '/sniper', label: 'Terminal' },
   { href: '/deployment', label: 'Bond' },
-  { href: '/wallets', label: 'Wallet' },
   { href: '/projects', label: 'Projects' },
-  { href: '/portfolio', label: 'Portfolio' }
+  { href: '/portfolio?view=wallets', label: 'Portfolio' }
 ];
 
 const toolItems = [
@@ -117,8 +116,10 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     const path = currentPath(pathname, window.location.search.replace(/^\?/, ''));
 
     if (!account.authenticated) {
-      sessionStorage.setItem(NEXT_KEY, safeNextPath(path));
-      redirectedRef.current = false;
+      if (account.authResolved && !account.authHydrating) {
+        sessionStorage.setItem(NEXT_KEY, safeNextPath(path));
+        redirectedRef.current = false;
+      }
       return;
     }
 
@@ -131,9 +132,13 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     } else {
       router.refresh();
     }
-  }, [account.authenticated, pathname, router]);
+  }, [account.authHydrating, account.authResolved, account.authenticated, pathname, router]);
 
-  if (!account.authenticated && !PUBLIC_PATHS.has(pathname)) {
+  if (!account.authenticated && !account.authResolved && !PUBLIC_PATHS.has(pathname)) {
+    return <div className="bondrAuthResolving" aria-live="polite">Restoring Bond.Terminal session…</div>;
+  }
+
+  if (!account.authenticated && account.authResolved && !PUBLIC_PATHS.has(pathname)) {
     return (
       <>
         <BondrLandingPage />

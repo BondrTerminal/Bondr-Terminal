@@ -33,6 +33,23 @@ function numberText(value: unknown) {
   return number.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+
+function solscanAddress(address: string) {
+  return `https://solscan.io/account/${address}`;
+}
+
+function custodyLabel(wallet: Json) {
+  const custody = text(wallet.custodyMode, 'watch-only');
+  if (/browser/i.test(custody)) return 'Browser signer';
+  if (/managed|local|generated/i.test(custody)) return 'Generated wallet';
+  return 'Watch-only';
+}
+
+function walletActionHref(wallet: Json, action: string) {
+  const id = encodeURIComponent(text(wallet.id, ''));
+  return `/portfolio?view=wallets&wallet=${id}&action=${action}`;
+}
+
 function walletSolText(wallet: Json) {
   const status = text(wallet.balanceStatus, 'unknown');
   if (status !== 'live') return `${status === 'provider-limited' ? 'provider-limited' : status === 'modeled' ? 'modeled' : 'unavailable'} · SOL not live`;
@@ -132,7 +149,7 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
           <section className="portfolioDegradedBanner">
             <strong>{selectedContext.project.name} · launch accounting context</strong>
             <span>
-              {selectedContext.project.ticker} · {selectedContext.deployment.stage} · saved funding state {selectedContext.fundingPlan.status} · 30d stored net flow {selectedContext.portfolio.flow30d.netSol.toFixed(4)} SOL · balances may be provider-limited until live RPC hydration. <a href={`/deployment?project=${selectedContext.project.id}`}>Deployment</a> · <a href={`/wallets?project=${selectedContext.project.id}`}>Wallets</a> · <a href={scopedMint ? `/sniper?mint=${scopedMint}&project=${selectedContext.project.id}` : selectedContext.terminal.href}>Terminal</a>
+              {selectedContext.project.ticker} · {selectedContext.deployment.stage} · saved funding state {selectedContext.fundingPlan.status} · 30d stored net flow {selectedContext.portfolio.flow30d.netSol.toFixed(4)} SOL · balances may be provider-limited until live RPC hydration. <a href={`/deployment?project=${selectedContext.project.id}`}>Deployment</a> · <a href={`/portfolio?view=wallets&project=${selectedContext.project.id}`}>Wallets</a> · <a href={scopedMint ? `/sniper?mint=${scopedMint}&project=${selectedContext.project.id}` : selectedContext.terminal.href}>Terminal</a>
             </span>
           </section>
         )}
@@ -146,10 +163,19 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
 
         {view === 'wallets' ? (
           <section className="portfolioWalletsView">
-            <div className="portfolioPanelTitle"><div><span>BONDR Portfolio</span><strong>Wallets</strong><small>Saved public wallet records and provider-backed balances when available.</small></div><div className="portfolioActionStack"><a href="/wallets">Manage Wallets</a></div></div>
-            <div className="portfolioTable walletPortfolioTable" role="table" aria-label="Portfolio wallets">
-              <div className="portfolioRow portfolioHead" role="row"><span>Wallet</span><span>Balance</span><span>Holdings</span><span>Actions</span></div>
-              {wallets.map((wallet) => <div className="portfolioRow" role="row" key={String(wallet.id)}><strong>{text(wallet.role, 'Wallet')}</strong><span title={text(wallet.note)}>{walletSolText(wallet)}</span><span>{text(wallet.groupId)} · {money(wallet.solValueUsd, 'price unavailable')}</span><span><a href="/wallets">Wallet Ops</a></span></div>)}
+            <div className="portfolioPanelTitle"><div><span>BONDR Portfolio</span><strong>Wallets</strong><small>Canonical wallet grid for browser signers, watch-only records, balances, and safe record actions.</small></div><div className="portfolioActionStack"><button disabled>Generate wallet — coming next</button><small>No server custody or auto-funding until backup/export UX is safe.</small></div></div>
+            <div className="portfolioWalletGrid" aria-label="Portfolio wallet grid">
+              {wallets.length ? wallets.map((wallet) => {
+                const address = text(wallet.address, '');
+                const selected = selectedContext?.wallets.some((item) => item.address === address);
+                return <article className={`portfolioWalletCard ${selected ? 'selectedWalletCard' : ''}`} key={String(wallet.id)}>
+                  <div className="walletCardTop"><div><span>{custodyLabel(wallet)}</span><strong>{text(wallet.role, 'Wallet')}</strong></div><a href={solscanAddress(address)} target="_blank" rel="noreferrer">Solscan</a></div>
+                  <code>{shortAddress(address)}</code>
+                  <div className="walletCardMetrics"><div><span>SOL balance</span><strong>{walletSolText(wallet)}</strong></div><div><span>Value status</span><strong>{money(wallet.solValueUsd, 'price unavailable')}</strong></div><div><span>Signer state</span><strong>{selected ? 'selected/project wallet' : 'available record'}</strong></div><div><span>Record</span><strong>{wallet.archived ? 'archived' : text(wallet.status, 'active')}</strong></div></div>
+                  <div className="walletCardActions"><a href={`/sniper?wallet=${encodeURIComponent(address)}`}>Open Terminal</a><a href={walletActionHref(wallet, 'export')}>Export record</a><a href={walletActionHref(wallet, wallet.archived ? 'restore' : 'archive')}>{wallet.archived ? 'Restore' : 'Archive'}</a></div>
+                  <p>No private key is shown here. Browser-wallet signing stays in Phantom/Solflare; generated-wallet backup UX remains gated.</p>
+                </article>;
+              }) : <div className="emptyPortfolioState">No wallet records yet. Connect a browser wallet from the live-beta or terminal flow, then add it as watch-only.</div>}
             </div>
 
           </section>

@@ -13646,3 +13646,66 @@ body > .createProjectModal .professionalCreateProjectShell {
     width: auto !important;
   }
 }
+
+/* Portfolio wallet canonical grid */
+.portfolioWalletGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.portfolioWalletCard {
+  border: 1px solid rgba(249, 235, 224, 0.14);
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.22);
+}
+.portfolioWalletCard.selectedWalletCard {
+  border-color: rgba(255, 127, 17, 0.48);
+  box-shadow: 0 18px 58px rgba(255, 127, 17, 0.12);
+}
+.walletCardTop,
+.walletCardActions,
+.walletCardMetrics {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.walletCardTop { justify-content: space-between; }
+.walletCardTop span,
+.walletCardMetrics span {
+  display: block;
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.walletCardTop strong { display: block; margin-top: 3px; }
+.portfolioWalletCard code {
+  display: block;
+  margin: 12px 0;
+  color: #f9ebe0;
+  word-break: break-all;
+}
+.walletCardMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.walletCardMetrics div {
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.walletCardMetrics strong { display: block; margin-top: 4px; font-size: 12px; }
+.walletCardActions { flex-wrap: wrap; margin-top: 14px; }
+.walletCardActions a,
+.walletCardTop a {
+  color: #ff7f11;
+  text-decoration: none;
+  border: 1px solid rgba(255, 127, 17, 0.28);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.portfolioWalletCard p { margin: 12px 0 0; color: rgba(249, 235, 224, 0.62); font-size: 12px; line-height: 1.45; }
