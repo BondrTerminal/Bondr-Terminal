@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Keypair } from '@solana/web3.js';
 
 type BuildState = {
   status?: string;
@@ -93,6 +94,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [pumpPortalBuildLoading, setPumpPortalBuildLoading] = useState(false);
   const [ipfsLoading, setIpfsLoading] = useState(false);
   const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
+  const [clientMintKeypair, setClientMintKeypair] = useState<Keypair | null>(null);
 
   async function buildUnsigned() {
     setLoading(true);
@@ -156,6 +158,15 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     }
   }
 
+  function generateClientMintKeypair() {
+    const keypair = Keypair.generate();
+    setClientMintKeypair(keypair);
+    setMint(keypair.publicKey.toBase58());
+    setResult(null);
+    setPumpPortalPreview(null);
+    setPumpPortalBuild(null);
+  }
+
   async function requestIpfsMetadata(confirmPin: boolean) {
     setIpfsLoading(true);
     setIpfsResult(null);
@@ -193,6 +204,16 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         <label><span>Decimals</span><input type="number" min="0" max="9" step="1" value={decimals} onChange={(event) => setDecimals(event.target.value)} /></label>
         <label><span>Initial supply</span><input type="number" min="0" step="1" value={initialSupply} onChange={(event) => setInitialSupply(event.target.value)} /></label>
         <label className="wide"><span>Freeze authority</span><input value={freezeAuthority} onChange={(event) => setFreezeAuthority(event.target.value)} placeholder="Optional. Leave blank for none." /></label>
+      </div>
+      <div className="pumpPortalPreviewPanel">
+        <div>
+          <span>Mint keypair</span>
+          <strong>{clientMintKeypair ? short(clientMintKeypair.publicKey.toBase58()) : 'Not generated in this browser session'}</strong>
+          <small>The mint keypair is generated client-side and held only in browser memory. BONDR sends/stores the public key only.</small>
+        </div>
+        <button className="button secondary" type="button" onClick={generateClientMintKeypair}>
+          Generate Client Mint
+        </button>
       </div>
       <div className="deploymentBuilderActionRow">
         <button className="button secondary" type="button" onClick={buildUnsigned} disabled={loading || Boolean(disabledReason)}>
