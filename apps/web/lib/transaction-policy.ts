@@ -21,6 +21,13 @@ export const DEFAULT_ALLOWED_SWAP_PROGRAMS = [
   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 ];
 
+export const FUNDING_ALLOWED_AUXILIARY_PROGRAMS = [
+  'ComputeBudget111111111111111111111111111111',
+  // Lighthouse assertion protocol. Some browser wallets add this as a safety assertion
+  // around otherwise plain SystemProgram transfers.
+  'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'
+];
+
 export type DecodedSolTransfer = {
   from: string;
   to: string;
@@ -154,7 +161,7 @@ export function fundingPolicyCheck(params: {
   const blockers: string[] = [];
   if (params.expectedSigner !== params.allowedSource) blockers.push('expectedSigner must equal the approved funding source.');
   if (!params.decoded.signerKeys.includes(params.allowedSource)) blockers.push('Signed transaction does not include approved source as signer.');
-  const allowedPrograms = [SystemProgram.programId.toBase58()];
+  const allowedPrograms = [SystemProgram.programId.toBase58(), ...FUNDING_ALLOWED_AUXILIARY_PROGRAMS];
   for (const program of params.decoded.programs) if (!allowedPrograms.includes(program)) blockers.push(`Program not allowed for funding broadcast: ${program}`);
   if (params.decoded.systemTransfers.length !== 1) blockers.push('Funding broadcast requires exactly one SystemProgram.transfer instruction.');
   const transfer = params.decoded.systemTransfers[0] ?? null;

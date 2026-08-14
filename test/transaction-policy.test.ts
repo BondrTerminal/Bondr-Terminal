@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_ALLOWED_SWAP_PROGRAMS, policyCheck, type DecodedTransactionPolicy } from '../apps/web/lib/transaction-policy.js';
+import { DEFAULT_ALLOWED_SWAP_PROGRAMS, fundingPolicyCheck, policyCheck, type DecodedTransactionPolicy } from '../apps/web/lib/transaction-policy.js';
 
 const SPL_TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const SIGNER = '11111111111111111111111111111112';
@@ -109,6 +109,35 @@ test('funding policy allows only approved capped SOL transfer', async () => {
   assert.equal(result.transfer?.lamports, 1_000_000);
 });
 
+test('funding policy allows wallet-added compute budget and Lighthouse assertions', async () => {
+  const { ComputeBudgetProgram, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction } = await import('@solana/web3.js');
+  const { decodeTransactionPolicy, fundingPolicyCheck } = await import('../apps/web/lib/transaction-policy.js');
+  const source = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const lighthouseProgramId = new PublicKey('L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95');
+  const tx = new Transaction();
+  tx.recentBlockhash = '11111111111111111111111111111111';
+  tx.feePayer = source.publicKey;
+  tx.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 20_000 }),
+    SystemProgram.transfer({ fromPubkey: source.publicKey, toPubkey: destination, lamports: 1_000_000 }),
+    new TransactionInstruction({
+      programId: lighthouseProgramId,
+      keys: [{ pubkey: source.publicKey, isSigner: true, isWritable: true }],
+      data: Buffer.from([0])
+    })
+  );
+  tx.sign(source);
+
+  const decoded = decodeTransactionPolicy(tx.serialize());
+  const result = fundingPolicyCheck({ decoded, expectedSigner: source.publicKey.toBase58(), allowedSource: source.publicKey.toBase58(), allowedDestination: destination.toBase58(), maxLamports: 1_000_000 });
+
+  assert.equal(result.safeToBroadcastFunding, true);
+  assert.deepEqual(decoded.systemTransfers, [{ from: source.publicKey.toBase58(), to: destination.toBase58(), lamports: 1_000_000 }]);
+  assert.ok(result.allowedPrograms.includes('ComputeBudget111111111111111111111111111111'));
+  assert.ok(result.allowedPrograms.includes('L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'));
+});
+
 test('funding policy blocks destination mismatch and over-cap transfer', async () => {
   const { Keypair, SystemProgram, Transaction } = await import('@solana/web3.js');
   const { decodeTransactionPolicy, fundingPolicyCheck } = await import('../apps/web/lib/transaction-policy.js');
@@ -125,4 +154,20 @@ test('funding policy blocks destination mismatch and over-cap transfer', async (
   assert.equal(result.safeToBroadcastFunding, false);
   assert.match(result.blockers.join('\n'), /destination/);
   assert.match(result.blockers.join('\n'), /exceeds cap/);
+});
+
+test('funding policy still blocks unapproved auxiliary programs', () => {
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [SIGNER],
+    accountKeys: [SIGNER, MINT],
+    programs: ['11111111111111111111111111111111', 'HiddenProgram1111111111111111111111111111111'],
+    messageHash: 'message-hash',
+    systemTransfers: [{ from: SIGNER, to: MINT, lamports: 1_000_000 }]
+  };
+
+  const result = fundingPolicyCheck({ decoded, expectedSigner: SIGNER, allowedSource: SIGNER, allowedDestination: MINT, maxLamports: 1_000_000 });
+
+  assert.equal(result.safeToBroadcastFunding, false);
+  assert.match(result.blockers.join('\n'), /HiddenProgram/);
 });
