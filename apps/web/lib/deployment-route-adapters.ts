@@ -1,6 +1,7 @@
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
+import { buildPumpPortalCreatePreview } from './pumpportal-deploy-readiness';
 
 export type DeploymentRouteAdapterId =
   | 'pumpportal-create'
@@ -120,6 +121,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const route = project.launchConfig?.route;
   const metadataFieldsReady = Boolean(project.metadata.name && project.metadata.symbol && project.metadata.description && project.metadata.imageUrl);
   const ipfsReady = /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
+  const pumpPortalCreatePreview = buildPumpPortalCreatePreview(project, wallets, activation);
   const jitoTipCapSol = relay.tip.maxSol;
   const maxPriorityFeeSol = project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0;
   const estimatedCreateFeeSol = Number(process.env.DEPLOYMENT_ESTIMATED_CREATE_FEE_SOL ?? '0.005');
@@ -167,29 +169,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       rpcBroadcastEndpoint: 'configured Solana RPC / explicit broadcast route after approval',
       publicLaunchConfirmation: 'pending Yakuzamoto approval'
     },
-    pumpPortalCreateReadiness: {
-      status: metadataFieldsReady && ipfsReady && devWallet && maxDevBuySol > 0 ? 'ready-to-build-preview' : 'blocked',
-      supportLevel: 'mapped-not-live',
-      requiredInputs: ['name', 'symbol', 'description', 'IPFS metadata URI', 'dev wallet public key', 'client mint keypair public key', 'initial buy SOL', 'slippage bps', 'priority fee cap', 'pool'],
-      present: {
-        name: Boolean(project.metadata.name),
-        symbol: Boolean(project.metadata.symbol),
-        description: Boolean(project.metadata.description),
-        image: Boolean(project.metadata.imageUrl),
-        ipfsMetadataUri: ipfsReady,
-        devWallet: Boolean(devWallet),
-        initialBuySol: maxDevBuySol > 0,
-        slippageBps: Boolean(route?.slippageBps)
-      },
-      blockers: [
-        metadataFieldsReady ? null : 'metadata-fields-missing',
-        ipfsReady ? null : 'ipfs-metadata-uri-missing',
-        devWallet ? null : 'dev-wallet-missing',
-        maxDevBuySol > 0 ? null : 'initial-buy-missing',
-        activation.deploymentEnabled ? null : 'deployment-gate-closed'
-      ].filter((item): item is string => Boolean(item)),
-      docs: ['https://pumpportal.fun/creation/']
-    },
+    pumpPortalCreateReadiness: pumpPortalCreatePreview,
     ipfsMetadataReadiness: {
       status: ipfsReady ? 'ready' : process.env.PINATA_JWT ? 'pinning-provider-configured-upload-needed' : 'provider-required',
       imageUrl: project.metadata.imageUrl || null,

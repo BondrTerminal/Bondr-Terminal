@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
+import { buildPumpPortalCreatePreview } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
 const wallet: Wallet = {
@@ -117,4 +118,35 @@ test('dev-wallet-only readiness blocks broadcast and exposes approval summary', 
   assert.ok(readiness.blockers.includes('deployment-gate-closed'));
   assert.ok(readiness.blockers.includes('broadcast-gate-closed'));
   assert.equal(readiness.postLaunchRailVerification.every((rail) => rail.broadcastReady === false), true);
+});
+
+test('pumpportal create preview names IPFS and mint blockers without calling provider', () => {
+  const preview = buildPumpPortalCreatePreview(project, [wallet], activation);
+  assert.equal(preview.contract, 'bondr-pumpportal-create-preview-v1');
+  assert.equal(preview.execution, 'preview-only-no-provider-call-no-signing-no-broadcast');
+  assert.equal(preview.payloadPreview.action, 'create');
+  assert.equal(preview.payloadPreview.publicKey, wallet.address);
+  assert.equal(preview.payloadPreview.tokenMetadata.symbol, 'ASD');
+  assert.ok(preview.blockers.includes('ipfs-provider-required') || preview.blockers.includes('ipfs-upload-needed'));
+  assert.ok(preview.blockers.includes('client-mint-public-key-required'));
+  assert.ok(preview.blockers.includes('deployment-gate-closed'));
+  assert.equal(preview.safety.noProviderCall, true);
+  assert.equal(preview.signerPreview.serverCustody, false);
+});
+
+test('pumpportal create preview becomes structurally ready when IPFS URI and mint are present', () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const preview = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
+  assert.equal(preview.status, 'ready-to-build-preview');
+  assert.equal(preview.ipfs.status, 'ready');
+  assert.equal(preview.payloadPreview.tokenMetadata.uri, 'ipfs://bafybeigdyrztkexample/metadata.json');
+  assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
+  assert.ok(preview.blockers.includes('deployment-gate-closed'));
+  assert.ok(preview.blockers.includes('broadcast-gate-closed'));
 });
