@@ -437,17 +437,23 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
             <span></span><span>Wallet</span><span>Address</span><span>Balance</span><span>Group</span><span>Activity</span><span>Status</span><span>Actions</span>
           </div>
           {visibleWallets.map((wallet) => (
-            <div className="walletListRow" role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
-              <label className="walletSelectCell"><input type="checkbox" checked={selectedActiveWallet === wallet.address} readOnly title={selectedActiveWallet === wallet.address ? 'Active in this browser' : 'Not active'} /></label>
-              <button type="button" className="walletIdentityCell" onClick={() => setDetailWalletId(wallet.id)}>
-                <strong>{wallet.role}</strong>
-                <em className={`walletRoleBadge ${wallet.roleBadge}`}>{wallet.roleBadge}</em><em className={`walletCustodyBadge ${wallet.custodyMode === 'managed-local' ? 'managed' : ''}`}>{wallet.custodyMode === 'managed-local' ? 'managed local' : 'watch-only'}</em>
-              </button>
-              <div className="walletAddressCell" title={wallet.address}><strong>{wallet.shortAddress}</strong><input readOnly value={wallet.address} aria-label={`Copy address ${wallet.role}`} /></div>
-              <div className="walletBalanceCell"><strong>{walletSolDisplay(wallet)}</strong><small title={wallet.balanceNote}>{wallet.balanceStatus === 'provider-limited' ? 'provider-limited' : wallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : wallet.balanceStatus} · {wallet.balanceSource}</small></div>
-              <div className="walletGroupCell"><strong>{wallet.groupName}</strong><small>{wallet.custodyMode === 'managed-local' ? wallet.keyExportedAt ? `exported ${wallet.keyExportedAt}` : 'backup needed' : 'watch-only no key'}</small></div>
-              <div className="walletActivityCell"><strong>{wallet.lastActivity}</strong><small>{wallet.lastActivityDetail}</small></div>
-              <div><span className={wallet.archived ? 'statusChip warn' : wallet.status === 'active' ? 'statusChip good' : 'statusChip'}>{wallet.archived ? 'archived' : wallet.status}</span></div>
+            <div className="walletListRow walletCenterBoxRow walletBoxLayout" role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
+              <div className="walletBoxLayer walletBoxTopLayer">
+                <label className="walletSelectCell"><input type="checkbox" checked={selectedActiveWallet === wallet.address} readOnly title={selectedActiveWallet === wallet.address ? 'Active in this browser' : 'Not active'} /> {selectedActiveWallet === wallet.address ? 'active' : 'selectable'}</label>
+                <span className={wallet.archived ? 'statusChip warn' : wallet.status === 'active' ? 'statusChip good' : 'statusChip'}>{wallet.archived ? 'archived' : wallet.status}</span>
+              </div>
+              <div className="walletBoxLayer walletBoxIdentityLayer">
+                <button type="button" className="walletIdentityCell" onClick={() => setDetailWalletId(wallet.id)}>
+                  <strong>{wallet.role}</strong>
+                  <em className={`walletRoleBadge ${wallet.roleBadge}`}>{wallet.roleBadge}</em><em className={`walletCustodyBadge ${wallet.custodyMode === 'managed-local' ? 'managed' : ''}`}>{wallet.custodyMode === 'managed-local' ? 'managed local' : 'watch-only'}</em>
+                </button>
+                <div className="walletAddressCell" title={wallet.address}><strong>{wallet.shortAddress}</strong><input readOnly value={wallet.address} aria-label={`Copy address ${wallet.role}`} /></div>
+              </div>
+              <div className="walletBoxLayer walletBoxMetaLayer">
+                <div className="walletBalanceCell"><strong>{walletSolDisplay(wallet)}</strong><small title={wallet.balanceNote}>{wallet.balanceStatus === 'provider-limited' ? 'provider-limited' : wallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : wallet.balanceStatus} · {wallet.balanceSource}</small></div>
+                <div className="walletGroupCell"><strong>{wallet.groupName}</strong><small>{wallet.custodyMode === 'managed-local' ? wallet.keyExportedAt ? `exported ${wallet.keyExportedAt}` : 'backup needed' : 'watch-only no key'}</small></div>
+                <div className="walletActivityCell"><strong>{wallet.lastActivity}</strong><small>{wallet.lastActivityDetail}</small></div>
+              </div>
               <div className="walletRowActions">
                 <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('send'); }}>Send</button>
                 <button type="button" onClick={() => selectWallet(wallet)}>{selectedActiveWallet === wallet.address ? 'Selected' : 'Select'}</button>

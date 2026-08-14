@@ -469,14 +469,23 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [] }: { min
               <StatusPill label="Signing" value={capabilities?.signingEnabled ? 'Enabled' : 'Disabled'} tone={statusTone(capabilities?.signingEnabled)} />
               <StatusPill label="Readiness" value={capabilities?.readinessLevel ?? 'Checking'} tone={capabilities?.readinessLevel === 'signing-ready' ? 'pass' : 'warn'} />
             </div>
-            <div className="freshWalletList" role="radiogroup" aria-label="Select trading wallet">
+            <div className="freshWalletList walletBoxStack" role="radiogroup" aria-label="Select trading wallet">
               {renderedWallets.length ? renderedWallets.map((wallet) => {
                 const tokenRow = tokenBalanceByAddress.get(wallet.address.toLowerCase());
                 return (
-                  <button type="button" className={`freshWalletRow ${selectedWalletId === wallet.id ? 'selected' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}>
-                    <span>{wallet.role}</span>
-                    <strong>{compact(wallet.address)}</strong>
-                    <small>{formatWalletSol(wallet)} · token {formatBalanceRow(tokenRow)} · {tokenRow?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small>
+                  <button type="button" className={`freshWalletRow walletBoxLayout ${selectedWalletId === wallet.id ? 'selected' : ''}`} key={wallet.id} onClick={() => setSelectedWalletId(wallet.id)}>
+                    <span className="walletBoxLayer walletBoxTopLayer">
+                      <span>{selectedWalletId === wallet.id ? 'Active' : 'Select'}</span>
+                      <em>{wallet.scope ?? 'wallet'}</em>
+                    </span>
+                    <span className="walletBoxLayer walletBoxIdentityLayer">
+                      <strong>{wallet.role}</strong>
+                      <code>{compact(wallet.address)}</code>
+                    </span>
+                    <span className="walletBoxLayer walletBoxMetaLayer">
+                      <span>{formatWalletSol(wallet)}</span>
+                      <small>token {formatBalanceRow(tokenRow)} · {tokenRow?.balanceStatus ?? tokenBalances?.status ?? 'provider-limited'}</small>
+                    </span>
                   </button>
                 );
               }) : <div className="freshEmptyPanel"><strong>No saved wallets</strong><small>{selectedWalletLabel}. Connect a browser wallet or add a watch-only public record.</small></div>}

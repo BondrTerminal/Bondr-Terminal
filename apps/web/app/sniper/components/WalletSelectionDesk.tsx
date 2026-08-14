@@ -81,11 +81,19 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
         <div className="tablePanelHeader"><span>Multi-select</span><strong>Selected execution wallets</strong></div>
         <div className="bundlePreviewGrid">
           {bundleWallets.map((wallet, index) => (
-            <div className="bundleWalletCard" key={wallet.id}>
-              <label><input type="checkbox" checked readOnly /> Wallet {index + 1}</label>
-              <strong>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</strong>
-              <span>{wallet.role} · {walletSolDisplay(wallet)}</span>
-              <small>{bundleEngineStatus}</small>
+            <div className="bundleWalletCard walletBoxLayout" key={wallet.id}>
+              <div className="walletBoxLayer walletBoxTopLayer">
+                <label><input type="checkbox" checked readOnly /> Wallet {index + 1}</label>
+                <em>{bundleEngineStatus}</em>
+              </div>
+              <div className="walletBoxLayer walletBoxIdentityLayer">
+                <strong>{wallet.role}</strong>
+                <code>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</code>
+              </div>
+              <div className="walletBoxLayer walletBoxMetaLayer">
+                <span>{walletSolDisplay(wallet)}</span>
+                <small>{wallet.scope}</small>
+              </div>
             </div>
           ))}
           {bundleWallets.length === 0 && <div className="bundleWalletCard emptyBundleCard"><strong>No wallets selected</strong><span>Select wallets below for multi-wallet execution.</span></div>}
@@ -94,20 +102,26 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
 
       <section className="terminalTablePanel walletTerminalPanel premiumWalletPanel">
         <div className="tablePanelHeader"><span>Wallet desk</span><strong>Select wallets / balances / actions</strong></div>
-        <div className="terminalDataTable walletOpsTable selectableWalletTable" role="table" aria-label="Trading wallets">
-          <div className="terminalDataRow terminalDataHead" role="row"><span>Bundle</span><span>Wallet</span><span>Role</span><span>SOL</span><span>Balance source</span><span>Project use</span><span>Actions</span></div>
+        <div className="terminalWalletBoxGrid selectableWalletTable" aria-label="Trading wallets">
           {renderedWallets.map((wallet) => {
             const isSelected = selectedWallet?.id === wallet.id;
             const inBundle = bundleWalletIds.includes(wallet.id);
             const backendRow = backend?.wallets?.rows?.find((row) => row.id === wallet.id);
             return (
-              <div className={`terminalDataRow ${isSelected ? 'selectedWalletRow' : ''}`} role="row" key={wallet.id}>
-                <span><input type="checkbox" checked={inBundle} onChange={() => toggleBundleWallet(wallet.id)} aria-label={`Add ${wallet.role} to bundle`} /></span>
-                <strong>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</strong>
-                <span>{wallet.role}</span>
-                <span>{walletSolDisplay({ ...wallet, balanceStatus: backendRow?.balanceStatus ?? wallet.balanceStatus })}</span>
-                <span>{(backendRow?.balanceStatus ?? wallet.balanceStatus ?? 'checking').replace('unavailable', 'provider-limited')}</span>
-                <span>{wallet.purpose}</span>
+              <div className={`terminalWalletBox walletBoxLayout ${isSelected ? 'selectedWalletRow' : ''}`} key={wallet.id}>
+                <div className="walletBoxLayer walletBoxTopLayer">
+                  <label><input type="checkbox" checked={inBundle} onChange={() => toggleBundleWallet(wallet.id)} aria-label={`Add ${wallet.role} to bundle`} /> Bundle</label>
+                  <em>{isSelected ? 'active' : 'available'}</em>
+                </div>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role}</strong>
+                  <code title={wallet.address}>{wallet.address.slice(0, 7)}…{wallet.address.slice(-6)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{walletSolDisplay({ ...wallet, balanceStatus: backendRow?.balanceStatus ?? wallet.balanceStatus })}</span>
+                  <small>{(backendRow?.balanceStatus ?? wallet.balanceStatus ?? 'checking').replace('unavailable', 'provider-limited')}</small>
+                </div>
+                <p className="walletBoxPurpose">{wallet.purpose}</p>
                 <div className="terminalRowActions"><button type="button" onClick={() => { setSelectedWalletId(wallet.id); window.localStorage.setItem('bondr.activeWallet', wallet.address); window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } })); }}>{isSelected ? 'Active' : 'Use active'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><Link href="/portfolio?view=wallets">Wallets</Link><Link href="/sniper">Open Terminal</Link></div>
               </div>
             );

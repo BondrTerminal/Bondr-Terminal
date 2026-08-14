@@ -597,12 +597,19 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           {wallets.length ? <div className="launchWalletList">
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              return <div className="launchWalletSelectRow" key={`select-${wallet.id}`}>
-                <span className={plan?.participate ? 'launchWalletStatus active' : 'launchWalletStatus'}>{plan?.participate ? 'Active' : 'Idle'}</span>
-                <strong>{wallet.role || 'Wallet'}</strong>
-                <code title={wallet.address}>{short(wallet.address)}</code>
-                <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'} · {plan?.executionPhase ?? 'observe'}</small>
+              return <div className="launchWalletSelectRow walletBoxLayout" key={`select-${wallet.id}`}>
+                <div className="walletBoxLayer walletBoxTopLayer">
+                  <span className={plan?.participate ? 'launchWalletStatus active' : 'launchWalletStatus'}>{plan?.participate ? 'Active' : 'Idle'}</span>
+                  <em>{plan?.executionPhase ?? 'observe'}</em>
+                </div>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role || 'Wallet'}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                </div>
               </div>;
             })}
           </div> : <div className="simpleEmptyBundle">No wallets yet. Generate or import wallets to continue.</div>}
@@ -618,10 +625,15 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             </label>
             {wallets.map((wallet, index) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              return <div className="deploymentWalletFlowRow" key={`dev-${wallet.id}`}>
-                <strong>{wallet.role || `Wallet ${index + 1}`}</strong>
-                <code title={wallet.address}>{short(wallet.address)}</code>
-                <span>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</span>
+              return <div className="deploymentWalletFlowRow walletBoxLayout" key={`dev-${wallet.id}`}>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role || `Wallet ${index + 1}`}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                </div>
                 <span className="launchWalletInputs">
                   <WalletPlanNumberField label="planned buy" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
                   <WalletPlanNumberField label="max buy" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
@@ -636,10 +648,16 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
               const enabled = plan?.executionPhase === 'bundle' || plan?.role.toLowerCase().includes('bundle');
-              return <label className="deploymentWalletFlowRow selectable" key={`bundle-${wallet.id}`}>
+              return <label className="deploymentWalletFlowRow selectable walletBoxLayout" key={`bundle-${wallet.id}`}>
                 <input name={`bundle.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <strong>{wallet.role}</strong>
-                <code title={wallet.address}>{short(wallet.address)}</code>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                </div>
                 <span className="launchWalletInputs">
                   <WalletPlanNumberField label="planned SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
                   <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
@@ -654,10 +672,16 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
               const enabled = plan?.executionPhase === 'sniper' || plan?.role.toLowerCase().includes('sniper');
-              return <label className="deploymentWalletFlowRow selectable" key={`sniper-${wallet.id}`}>
+              return <label className="deploymentWalletFlowRow selectable walletBoxLayout" key={`sniper-${wallet.id}`}>
                 <input name={`sniper.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <strong>{wallet.role}</strong>
-                <code title={wallet.address}>{short(wallet.address)}</code>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                </div>
                 <span className="launchWalletInputs riskInputs">
                   <WalletPlanNumberField label="buy cap SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
                   <WalletPlanNumberField label="slip bps" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
@@ -721,10 +745,16 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             {wallets.map((wallet) => {
               const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
               const enabled = plan?.executionPhase === 'task' || plan?.role.toLowerCase().includes('task');
-              return <label className="deploymentWalletFlowRow selectable taskRow" key={`task-${wallet.id}`}>
+              return <label className="deploymentWalletFlowRow selectable taskRow walletBoxLayout" key={`task-${wallet.id}`}>
                 <input name={`task.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <strong>{wallet.role}</strong>
-                <code title={wallet.address}>{short(wallet.address)}</code>
+                <div className="walletBoxLayer walletBoxIdentityLayer">
+                  <strong>{wallet.role}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                </div>
+                <div className="walletBoxLayer walletBoxMetaLayer">
+                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                  <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'}</small>
+                </div>
                 <span className="launchWalletInputs taskInputs">
                   <WalletPlanNumberField label="amount SOL" name={`task.${wallet.id}.taskAmountSol`} min="0" step="0.001" value={plan?.taskAmountSol ?? plan?.plannedBuySol ?? 0} placeholder="0.010" />
                   <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
