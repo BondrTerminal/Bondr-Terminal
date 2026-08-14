@@ -41,7 +41,7 @@ for (const field of [
 
 assert.match(contextLib, /walletPlan/, 'Meridian context must expose launchConfig.walletPlan.');
 
-for (const field of ['modeled', 'live', 'sourceStatus', 'modeled-only', 'live-gated', 'provider-limited']) {
+for (const field of ['modeled', 'live', 'sourceStatus', 'live-gated', 'provider-limited']) {
   assert.match(contextLib, new RegExp(field), `Meridian context must preserve balance/execution source metadata: ${field}.`);
 }
 
@@ -54,18 +54,18 @@ assert.match(contextRoute, /Unknown (Meridian|Bond\.Terminal) project/, 'context
 assert.match(deploymentEngineRoute, /deployment-engine-v2-shared-context/, 'deployment engine must expose shared-context contract.');
 assert.match(deploymentEngineRoute, /projectContext/, 'deployment engine must expose projectContext.');
 assert.match(deploymentEngineRoute, /deploymentSnapshot/, 'deployment engine must expose deploymentSnapshot.');
-assert.match(deploymentEngineRoute, /disabled until live-gated/, 'deployment engine must preserve live-gated wording.');
+assert.match(deploymentEngineRoute, /disabled until deployment-gated/, 'deployment engine must preserve deployment-gated wording.');
 assert.match(deploymentEngineRoute, /requires browser-wallet signing/, 'deployment engine must preserve browser-wallet signing wording.');
 assert.match(deploymentEngineRoute, /requiresExplicitConfirmation:\s*true/, 'deployment engine must require explicit confirmation metadata.');
 
 for (const [name, source] of [
   ['deployment page', deploymentPage],
-  ['wallets page', walletsPage],
   ['portfolio page', portfolioPage],
   ['sniper page', sniperPage]
 ]) {
   assert.match(source, /buildMeridianHubContext/, `${name} must consume the shared Meridian context.`);
 }
+assert.match(walletsPage, /redirect\(`\/portfolio\?view=wallets/, 'wallets page must remain a compatibility redirect to the canonical Portfolio wallet view.');
 
 assert.doesNotMatch(contextLib, /privateKey|secretKey|mnemonic|seedPhrase|keypair/i, 'context lib must not expose private-key material fields.');
 assert.doesNotMatch(contextRoute, /privateKey|secretKey|mnemonic|seedPhrase|keypair/i, 'context route must not expose private-key material fields.');

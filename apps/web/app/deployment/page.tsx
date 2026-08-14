@@ -1,5 +1,6 @@
 import { eventsForProject, launchPreflight, readinessScore, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
+import { buildMeridianHubContext } from '../../lib/meridian-context';
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
 import { LaunchConfigEditor } from './components/LaunchConfigEditor';
 import { CreateProjectLauncher } from '../components/CreateProjectLauncher';
@@ -80,10 +81,12 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const params = await searchParams;
   const rpc = await getSolanaRpcHealth();
   const store: MeridianStore = await getMeridianWalletStore();
-  const selectedProject = params?.project ? store.projects.find((project) => project.id === params.project) : undefined;
-  const projects = selectedProject ? [selectedProject] : store.projects;
+  const hubContext = buildMeridianHubContext(params?.project ?? null, store);
+  const selectedContext = hubContext.activeProjectId ? hubContext.projects[0] : undefined;
+  const selectedProject = selectedContext?.project;
+  const projects = selectedProject ? [selectedProject] : hubContext.projects.map((context) => context.project);
   const activeProject = selectedProject ?? projects[0];
-  const activeWallets = activeProject ? walletsForGroup(activeProject.walletGroupId, store).filter((wallet) => !wallet.archived) : [];
+  const activeWallets = selectedContext?.wallets ?? (activeProject ? walletsForGroup(activeProject.walletGroupId, store).filter((wallet) => !wallet.archived) : []);
 
   return (
     <main>
