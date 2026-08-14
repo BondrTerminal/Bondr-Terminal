@@ -6,15 +6,41 @@ import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../li
 
 type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-type LaunchTab = 'token' | 'risk' | 'wallets' | 'review';
+type LaunchTab = 'token' | 'wallets' | 'buy' | 'task' | 'review';
 
 type WalletUse = 'creator' | 'launch-readiness' | 'treasury' | 'observe';
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
-  { id: 'token', label: 'Token Info', detail: 'Metadata, launch path, funding' },
-  { id: 'risk', label: 'Risk', detail: 'Caps, TP/SL, cooldowns' },
-  { id: 'wallets', label: 'Wallet Setup', detail: 'Dev, bundle, sniper, task' },
-  { id: 'review', label: 'Review', detail: 'Gates and save state' }
+  { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
+  { id: 'wallets', label: 'Wallet Setup', detail: 'Select launch wallets' },
+  { id: 'buy', label: 'Buy Mode', detail: 'Snipe, bundle, dev buy' },
+  { id: 'task', label: 'Task Builder', detail: 'Automated wallet tasks' },
+  { id: 'review', label: 'Overview & Deploy', detail: 'Preflight and gates' }
 ];
+const LAUNCH_PLATFORMS = [
+  { value: 'pump', label: 'Pump', detail: 'Pump.fun launch path' },
+  { value: 'bonk', label: 'Bonk', detail: 'Bonk launch path' },
+  { value: 'bonkers', label: 'Bonkers', detail: 'Bonkers route preview' },
+  { value: 'bags', label: 'Bags', detail: 'Bags route preview' },
+  { value: 'printr', label: 'Printr', detail: 'Printr route preview' }
+] as const;
+const PLATFORM_VALUES = ['pump', 'bonk', 'bonkers', 'bags', 'printr'] as const;
+const QUOTE_TOKENS = [
+  { value: 'SOL', label: 'SOL', detail: 'Native curve quote' },
+  { value: 'USDC', label: 'USDC', detail: 'Amounts convert from SOL' }
+] as const;
+const QUOTE_TOKEN_VALUES = ['SOL', 'USDC'] as const;
+const TOKEN_MODES = [
+  { value: 'classic', label: 'Classic', detail: 'Standard token launch' },
+  { value: 'mayhem', label: 'Mayhem', detail: 'Higher-intensity route preset' }
+] as const;
+const TOKEN_MODE_VALUES = ['classic', 'mayhem'] as const;
+const BUY_MODES = [
+  { value: 'snipe', label: 'Snipe', detail: 'Fast automated wallet snipes after launch.', bestFor: 'Best for speed' },
+  { value: 'bundle', label: 'Bundle', detail: 'Bundle multiple buys in the same launch window.', bestFor: 'Best for launch impact' },
+  { value: 'launch-bundle-snipe', label: 'Launch + Bundle + Snipe', detail: 'Launch, bundle, and snipe wallets execute as one plan.', bestFor: 'Best for full automation' },
+  { value: 'dev-buy-only', label: 'Dev Buy Only', detail: 'Launch with only the developer buy.', bestFor: 'Best for manual control' }
+] as const;
+const BUY_MODE_VALUES = ['snipe', 'bundle', 'launch-bundle-snipe', 'dev-buy-only'] as const;
 const DEFAULT_TAKE_PROFIT = [35, 75, 150];
 const TASK_TYPES = ['timed-buy', 'timed-sell', 'smart-sell', 'auto-take-profit', 'stop-loss', 'trailing-stop'] as const;
 const TASK_PRESETS = ['fast-paced-balance', 'smooth-flow', 'custom'] as const;
@@ -104,6 +130,10 @@ function defaultPlan(wallets: Wallet[]): WalletPlanEntry[] {
 function defaultConfig(project: Project, wallets: Wallet[]): LaunchConfig {
   return {
     route: {
+      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      quoteToken: 'SOL',
+      tokenMode: 'classic',
+      buyMode: 'snipe',
       initialBuySol: project.fundingPlan.devBuySol ?? 0,
       slippageBps: 100,
       priorityFeeMode: 'auto capped',
@@ -212,6 +242,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     setMessage('Saving launch configuration…');
     const form = new FormData(event.currentTarget);
     const devWalletId = stringFrom(form, 'dev.walletId', wallets[0]?.id ?? '');
+    const platform = optionFrom(form, 'route.platform', PLATFORM_VALUES, initial.route.platform ?? 'pump');
+    const quoteToken = optionFrom(form, 'route.quoteToken', QUOTE_TOKEN_VALUES, initial.route.quoteToken ?? 'SOL');
+    const tokenMode = optionFrom(form, 'route.tokenMode', TOKEN_MODE_VALUES, initial.route.tokenMode ?? 'classic');
+    const buyMode = optionFrom(form, 'route.buyMode', BUY_MODE_VALUES, initial.route.buyMode ?? 'snipe');
     const walletPlan = wallets.map((wallet, index) => {
       const existing = initial.walletPlan.find((entry) => entry.walletId === wallet.id) ?? defaultPlan([wallet])[0];
       const phase = phaseForWallet(form, wallet, index, devWalletId);
@@ -264,7 +298,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       };
     });
     const body = {
-      launchPath: stringFrom(form, 'launchPath', project.launchPath),
+      launchPath: platform === 'bonk' ? 'bonk' : platform === 'pump' ? 'pump.fun' : project.launchPath,
       tokenMint: stringFrom(form, 'tokenMint', project.tokenMint ?? ''),
       pool: stringFrom(form, 'pool', project.pool ?? ''),
       metadata: {
@@ -287,6 +321,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         ...initial,
         route: {
           ...initial.route,
+          platform,
+          quoteToken,
+          tokenMode,
+          buyMode,
           initialBuySol: numberFrom(form, 'route.initialBuySol', initial.route.initialBuySol),
           slippageBps: numberFrom(form, 'route.slippageBps', initial.route.slippageBps),
           priorityFeeMode: stringFrom(form, 'route.priorityFeeMode', initial.route.priorityFeeMode),
@@ -358,41 +396,81 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       <section aria-labelledby="launch-tab-button-token" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'token'} id="launch-tab-token" role="tabpanel">
         <div className="sectionIntro compactIntro">
           <span>Token Info</span>
-          <h2>{project.name}</h2>
-          <p>Configure metadata, launch path, funding assumptions, route preferences, and launch-wallet roles. This screen does not deploy tokens, fund wallets, sign, or broadcast.</p>
+          <h2>Pump-style launch panel</h2>
+          <p>Set the token metadata, image, platform, quote token, and token mode before moving into wallet selection.</p>
         </div>
-        <div className="launchConfigEditorGrid compact">
-          <label><span>Token name</span><input name="metadata.name" defaultValue={project.metadata.name || project.name} /></label>
-          <label><span>Ticker</span><input name="metadata.symbol" defaultValue={project.metadata.symbol || project.ticker} /></label>
-          <label><span>Launch path</span><select name="launchPath" defaultValue={project.launchPath}><option value="pump.fun">pump.fun</option><option value="raydium">raydium</option><option value="meteora">meteora</option><option value="bonk">bonk</option></select></label>
-          <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" /></label>
-          <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
-          <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} placeholder="/uploads or https://" /></label>
-          <label className="wide"><span>Description</span><textarea name="metadata.description" defaultValue={project.metadata.description} placeholder="Two-second token description" rows={4} /></label>
-          <label><span>Website</span><input name="metadata.website" defaultValue={project.metadata.website} placeholder="https://" /></label>
-          <label><span>X / Twitter</span><input name="metadata.twitter" defaultValue={project.metadata.twitter} placeholder="@handle or URL" /></label>
-          <label><span>Telegram</span><input name="metadata.telegram" defaultValue={project.metadata.telegram} placeholder="t.me/..." /></label>
-          <label><span>Total budget SOL</span><input name="funding.budgetSol" type="number" step="0.001" defaultValue={project.fundingPlan.budgetSol} /></label>
-          <label><span>Dev buy SOL</span><input name="funding.devBuySol" type="number" step="0.001" defaultValue={project.fundingPlan.devBuySol} /></label>
-          <label><span>Liquidity SOL</span><input name="funding.liquiditySol" type="number" step="0.001" defaultValue={project.fundingPlan.liquiditySol} /></label>
-          <label><span>Fee reserve SOL</span><input name="funding.feeReserveSol" type="number" step="0.001" defaultValue={project.fundingPlan.feeReserveSol} /></label>
-          <label><span>Collection wallet id</span><input name="funding.collectionWalletId" defaultValue={project.fundingPlan.collectionWalletId} /></label>
-          <label><span>Initial buy SOL cap</span><input name="route.initialBuySol" type="number" step="0.001" defaultValue={initial.route.initialBuySol} /></label>
-          <label><span>Slippage bps cap</span><input name="route.slippageBps" type="number" step="1" defaultValue={initial.route.slippageBps} /></label>
-          <label><span>Priority fee policy</span><input name="route.priorityFeeMode" defaultValue={initial.route.priorityFeeMode} /></label>
-          <label><span>Graduation monitor</span><input name="route.graduationMonitor" defaultValue={initial.route.graduationMonitor} /></label>
-          <label><span>Raydium liquidity SOL</span><input name="route.raydiumLiquiditySol" type="number" step="0.001" defaultValue={initial.route.raydiumLiquiditySol} /></label>
-          <label><span>Withheld token %</span><input name="route.raydiumWithheldTokenPct" type="number" step="0.1" defaultValue={initial.route.raydiumWithheldTokenPct} /></label>
-          <label><span>Withheld token amount</span><input name="route.raydiumWithheldTokenAmount" type="number" step="1" defaultValue={initial.route.raydiumWithheldTokenAmount} /></label>
-          <label className="launchCheckbox"><span>Burn LP if a future LP adapter is approved</span><input name="route.burnLiquidity" type="checkbox" defaultChecked={initial.route.burnLiquidity} /></label>
+        <div className="launchTokenPanel">
+          <label className="tokenImageDropzone">
+            <span>Token Image</span>
+            <strong>{project.metadata.imageUrl ? 'Image attached' : 'Upload or drag & drop'}</strong>
+            <small>PNG, JPG, GIF, or SVG preview. Existing image URL remains editable below.</small>
+            <input name="metadata.imageFile" type="file" accept="image/*" />
+          </label>
+          <div className="launchConfigEditorGrid compact launchTokenFields">
+            <label><span>Name</span><input name="metadata.name" defaultValue={project.metadata.name || project.name} placeholder="Token name" /></label>
+            <label><span>Symbol</span><input name="metadata.symbol" defaultValue={project.metadata.symbol || project.ticker} placeholder="TICKER" /></label>
+            <label className="wide"><span>Description</span><textarea name="metadata.description" defaultValue={project.metadata.description} placeholder="Two-second token description" rows={4} /></label>
+            <label><span>Website optional</span><input name="metadata.website" defaultValue={project.metadata.website} placeholder="https://" /></label>
+            <label><span>X URL optional</span><input name="metadata.twitter" defaultValue={project.metadata.twitter} placeholder="@handle or URL" /></label>
+            <label><span>Telegram optional</span><input name="metadata.telegram" defaultValue={project.metadata.telegram} placeholder="t.me/..." /></label>
+            <label><span>Image URL</span><input name="metadata.imageUrl" defaultValue={project.metadata.imageUrl} placeholder="/uploads or https://" /></label>
+            <label><span>Token mint</span><input name="tokenMint" defaultValue={project.tokenMint ?? ''} placeholder="not launched" /></label>
+            <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
+          </div>
+        </div>
+        <div className="launchSegmentStack">
+          <div>
+            <span>Platform</span>
+            <div className="launchSegmentGrid five">
+              {LAUNCH_PLATFORMS.map((platform) => <label className="launchSegmentOption" key={platform.value}>
+                <input name="route.platform" type="radio" value={platform.value} defaultChecked={(initial.route.platform ?? 'pump') === platform.value} />
+                <strong>{platform.label}</strong>
+                <small>{platform.detail}</small>
+              </label>)}
+            </div>
+          </div>
+          <div>
+            <span>Quote Token</span>
+            <div className="launchSegmentGrid two">
+              {QUOTE_TOKENS.map((quote) => <label className="launchSegmentOption" key={quote.value}>
+                <input name="route.quoteToken" type="radio" value={quote.value} defaultChecked={(initial.route.quoteToken ?? 'SOL') === quote.value} />
+                <strong>{quote.label}</strong>
+                <small>{quote.detail}</small>
+              </label>)}
+            </div>
+          </div>
+          <div>
+            <span>Token Mode</span>
+            <div className="launchSegmentGrid two">
+              {TOKEN_MODES.map((mode) => <label className="launchSegmentOption" key={mode.value}>
+                <input name="route.tokenMode" type="radio" value={mode.value} defaultChecked={(initial.route.tokenMode ?? 'classic') === mode.value} />
+                <strong>{mode.label}</strong>
+                <small>{mode.detail}</small>
+              </label>)}
+            </div>
+          </div>
         </div>
       </section>
 
-      <section aria-labelledby="launch-tab-button-risk" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'risk'} id="launch-tab-risk" role="tabpanel">
+      <section aria-labelledby="launch-tab-button-buy" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'buy'} id="launch-tab-buy" role="tabpanel">
         <div className="sectionIntro compactIntro">
-          <span>Risk policy</span>
-          <h2>Deployer and wallet task automation limits</h2>
-          <p>These are policy rails for launch, snipe/protection, timed buys/sells, smart sell, auto take-profit, stop-loss, and cooldown behavior. They are not fake-volume controls.</p>
+          <span>Buy Mode</span>
+          <h2>Select the launch execution route</h2>
+          <p>Choose how deployer, bundle, sniper, and task wallets participate before setting the execution limits.</p>
+        </div>
+        <div className="launchBuyModeGrid">
+          {BUY_MODES.map((mode) => <label className="launchBuyModeCard" key={mode.value}>
+            <input name="route.buyMode" type="radio" value={mode.value} defaultChecked={(initial.route.buyMode ?? 'snipe') === mode.value} />
+            <span>{mode.bestFor}</span>
+            <strong>{mode.label}</strong>
+            <p>{mode.detail}</p>
+            <small>{wallets.length} wallets available · {selectedTaskSol.toFixed(4)} SOL task max</small>
+          </label>)}
+        </div>
+        <div className="sectionIntro compactIntro launchSubIntro">
+          <span>Execution limits</span>
+          <h2>Caps, take-profit, stop-loss, and cooldowns</h2>
+          <p>These route limits apply to launch, bundle, snipe/protection, and automated deployer wallet task behavior.</p>
         </div>
         <div className="launchConfigEditorGrid compact">
           <label><span>Max initial buy SOL</span><input name="dev.maxInitialBuySol" type="number" step="0.001" defaultValue={initial.devWalletRules.maxInitialBuySol} /></label>
@@ -409,11 +487,40 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
       </section>
 
-      <section aria-labelledby="launch-tab-button-wallets" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets'} id="launch-tab-wallets" role="tabpanel">
+      <section aria-labelledby={activeTab === 'task' ? 'launch-tab-button-task' : 'launch-tab-button-wallets'} className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets' && activeTab !== 'task'} id={activeTab === 'task' ? 'launch-tab-task' : 'launch-tab-wallets'} role="tabpanel">
         <div className="sectionIntro compactIntro">
-          <span>Wallet rails</span>
-          <h2>Dev wallet → bundle → sniper → task wallets</h2>
-          <p>Wallet deployment follows the exact launch order: dev wallet, bundle wallets, sniper wallets, then Task Manager wallets. Signing still requires browser-wallet match and live execution stays gated.</p>
+          <span>{activeTab === 'task' ? 'Task Builder' : 'Wallet rails'}</span>
+          <h2>{activeTab === 'task' ? 'Create deployer wallet task' : 'Select wallets for launch'}</h2>
+          <p>{activeTab === 'task' ? 'Select task wallets and configure automated deployer wallet execution controls.' : 'Choose the dev wallet first, then assign bundle and sniper wallets. Task wallets are configured in the next route step.'}</p>
+        </div>
+        <div className="launchWalletSetupHeader">
+          <div className="launchWalletRoleStrip">
+            {['Dev', 'Create', 'Import', 'Global', 'Fund', 'Export'].map((role) => <button type="button" key={role}>{role}</button>)}
+          </div>
+          <div className="launchWalletBalanceBox">
+            <span>Total SOL Balance</span>
+            <strong>{wallets.reduce((sum, wallet) => sum + wallet.balanceSol, 0).toFixed(4)} SOL</strong>
+            <button type="button">Use All</button>
+          </div>
+        </div>
+        <div className="launchWalletListPanel">
+          <div className="launchWalletListHeader">
+            <span>Wallet List</span>
+            <strong>{wallets.length} available</strong>
+            <a href={`/portfolio?view=wallets&project=${project.id}`}>Open Wallet Center</a>
+          </div>
+          {wallets.length ? <div className="launchWalletList">
+            {wallets.map((wallet) => {
+              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+              return <label className="launchWalletSelectRow" key={`select-${wallet.id}`}>
+                <input type="checkbox" defaultChecked={Boolean(plan?.participate)} />
+                <strong>{wallet.role || 'Wallet'}</strong>
+                <code title={wallet.address}>{short(wallet.address)}</code>
+                <span>{wallet.balanceSol.toFixed(4)} SOL</span>
+                <small>{wallet.custodyMode === 'managed-local' ? 'managed-local' : 'browser/watch-only'} · {plan?.executionPhase ?? 'observe'}</small>
+              </label>;
+            })}
+          </div> : <div className="simpleEmptyBundle">No wallets yet. Generate or import wallets to continue.</div>}
         </div>
         {wallets.length ? <div className="deploymentWalletFlow">
           <section className="deploymentWalletFlowStep">
@@ -535,7 +642,40 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       </section>
 
       <section aria-labelledby="launch-tab-button-review" className="deploymentDisabledPanel launchWizardPanel" hidden={activeTab !== 'review'} id="launch-tab-review" role="tabpanel">
-        <div className="sectionIntro compactIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>
+        <div className="sectionIntro compactIntro"><span>Overview & Deploy</span><h2>Review launch plan</h2><p>Confirm metadata, wallet counts, buy route, task plan, and execution gates before any future deployment action.</p></div>
+        <div className="launchOverviewGrid">
+          <div>
+            <span>Token</span>
+            <strong>{project.metadata.name || project.name} / {project.metadata.symbol || project.ticker}</strong>
+            <small>{project.metadata.description || 'Metadata description pending'}</small>
+          </div>
+          <div>
+            <span>Image</span>
+            <strong>{project.metadata.imageUrl ? 'Attached' : 'Pending'}</strong>
+            <small>{project.metadata.imageUrl || 'Upload or paste an image URL in Token Info'}</small>
+          </div>
+          <div>
+            <span>Platform / mode</span>
+            <strong>{initial.route.platform ?? 'pump'} · {initial.route.tokenMode ?? 'classic'}</strong>
+            <small>Quote token: {initial.route.quoteToken ?? 'SOL'}</small>
+          </div>
+          <div>
+            <span>Buy mode</span>
+            <strong>{BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe'))?.label ?? 'Snipe'}</strong>
+            <small>{BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe'))?.bestFor ?? 'Best for speed'}</small>
+          </div>
+          <div>
+            <span>Wallets</span>
+            <strong>{wallets.length} total · {selectedTaskCount} task</strong>
+            <small>Dev wallet: {short(wallets.find((wallet) => wallet.id === defaultDevWalletId)?.address ?? '')}</small>
+          </div>
+          <div>
+            <span>Planned SOL</span>
+            <strong>{initial.walletPlan.reduce((sum, entry) => sum + (entry.participate ? entry.plannedBuySol : 0), 0).toFixed(4)} planned</strong>
+            <small>{initial.walletPlan.reduce((sum, entry) => sum + (entry.participate ? entry.maxBuySol : 0), 0).toFixed(4)} max</small>
+          </div>
+        </div>
+        <div className="sectionIntro compactIntro launchSubIntro"><span>Execution gate</span><h2>Deploy controls are disabled</h2><p>A-profile allows Terminal quote/build/simulate/sign testing only. Deployment execution needs a later explicit approval profile and separate broadcast gate.</p></div>
         <div className="deploymentAdapterGrid">
           <div><span>Unsigned deploy builder</span><strong>Disabled</strong><small>adapter not active</small></div>
           <div><span>Browser-wallet deploy signature</span><strong>Disabled</strong><small>deployment gate off</small></div>

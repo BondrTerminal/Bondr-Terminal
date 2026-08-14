@@ -14144,7 +14144,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchWizardTabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 7px;
   min-width: 0;
 }
@@ -14221,6 +14221,212 @@ body > .createProjectModal .professionalCreateProjectShell {
   min-width: min(320px, 100%);
   color: rgba(249, 235, 224, 0.68);
   line-height: 1.35;
+}
+.launchTokenPanel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+.tokenImageDropzone {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  min-height: 240px;
+  padding: 18px;
+  border: 1px dashed rgba(255, 127, 17, 0.46);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 127, 17, 0.12), rgba(0, 0, 0, 0.22));
+  text-align: center;
+}
+.tokenImageDropzone span,
+.launchSegmentStack > div > span,
+.launchWalletListHeader span,
+.launchWalletBalanceBox span,
+.launchBuyModeCard span,
+.launchOverviewGrid span {
+  color: rgba(249, 235, 224, 0.6);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.tokenImageDropzone strong {
+  color: #f9ebe0;
+  font-size: 1.1rem;
+}
+.tokenImageDropzone small {
+  color: rgba(249, 235, 224, 0.68);
+  line-height: 1.35;
+}
+.tokenImageDropzone input {
+  width: 100%;
+  color: rgba(249, 235, 224, 0.74);
+}
+.launchTokenFields {
+  align-content: start;
+}
+.launchSegmentStack {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.launchSegmentStack > div {
+  display: grid;
+  gap: 7px;
+}
+.launchSegmentGrid {
+  display: grid;
+  gap: 8px;
+}
+.launchSegmentGrid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.launchSegmentGrid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.launchSegmentOption,
+.launchBuyModeCard {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.launchSegmentOption input,
+.launchBuyModeCard input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff7f11;
+}
+.launchSegmentOption:has(input:checked),
+.launchBuyModeCard:has(input:checked) {
+  border-color: rgba(255, 127, 17, 0.56);
+  background: rgba(255, 127, 17, 0.12);
+}
+.launchSegmentOption strong,
+.launchBuyModeCard strong,
+.launchWalletBalanceBox strong,
+.launchWalletListHeader strong,
+.launchWalletSelectRow strong,
+.launchOverviewGrid strong {
+  min-width: 0;
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.launchSegmentOption small,
+.launchBuyModeCard small,
+.launchWalletSelectRow small,
+.launchOverviewGrid small {
+  color: rgba(249, 235, 224, 0.64);
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+.launchSubIntro {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(249, 235, 224, 0.1);
+}
+.launchBuyModeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.launchBuyModeCard p {
+  margin: 0;
+  color: rgba(249, 235, 224, 0.72);
+  line-height: 1.35;
+}
+.launchWalletSetupHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.28fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.launchWalletRoleStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.launchWalletRoleStrip button,
+.launchWalletBalanceBox button,
+.launchWalletListHeader a {
+  min-height: 32px;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f9ebe0;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.launchWalletBalanceBox {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.launchWalletListPanel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.launchWalletListHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.launchWalletListHeader a {
+  color: #ffb166;
+  text-decoration: none;
+}
+.launchWalletList {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.launchWalletSelectRow {
+  display: grid;
+  grid-template-columns: 22px minmax(120px, 0.8fr) minmax(120px, 0.75fr) 100px minmax(160px, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(249, 235, 224, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.launchWalletSelectRow code,
+.launchWalletSelectRow span {
+  min-width: 0;
+  color: rgba(249, 235, 224, 0.76);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.launchOverviewGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.launchOverviewGrid > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
 }
 .deploymentCockpitMain .cleanLaunchConfigEditor > .documentCard,
 .deploymentCockpitMain .deploymentLaunchBuilderPanel,
@@ -14448,7 +14654,11 @@ body > .createProjectModal .professionalCreateProjectShell {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .launchWizardTopbar,
-  .launchWizardTabs {
+  .launchWizardTabs,
+  .launchTokenPanel,
+  .launchWalletSetupHeader,
+  .launchBuyModeGrid,
+  .launchOverviewGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .launchWizardTitle {
@@ -14471,6 +14681,13 @@ body > .createProjectModal .professionalCreateProjectShell {
   .deploymentOperatorRail,
   .launchWizardTopbar,
   .launchWizardTabs,
+  .launchTokenPanel,
+  .launchSegmentGrid.five,
+  .launchSegmentGrid.two,
+  .launchWalletSetupHeader,
+  .launchBuyModeGrid,
+  .launchWalletSelectRow,
+  .launchOverviewGrid,
   .deploymentCockpitMain .launchConfigEditorGrid.compact,
   .deploymentTaskCommandGrid,
   .deploymentAdvancedGrid,

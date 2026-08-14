@@ -28,6 +28,10 @@ function stringField(value: unknown, fallback = '', max = 500) {
 function defaultLaunchConfig(project: Project): LaunchConfig {
   return {
     route: {
+      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      quoteToken: 'SOL',
+      tokenMode: 'classic',
+      buyMode: 'snipe',
       initialBuySol: project.fundingPlan.devBuySol,
       slippageBps: 500,
       priorityFeeMode: 'auto capped',
@@ -115,9 +119,17 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
 
 function mergeLaunchConfig(project: Project, patch?: LaunchConfigPatch['launchConfig']): LaunchConfig {
   const base = normalizedLaunchConfig(project);
+  const platform = ['pump', 'bonk', 'bonkers', 'bags', 'printr'].includes(String(patch?.route?.platform)) ? patch?.route?.platform : base.route.platform;
+  const quoteToken = ['SOL', 'USDC'].includes(String(patch?.route?.quoteToken)) ? patch?.route?.quoteToken : base.route.quoteToken;
+  const tokenMode = ['classic', 'mayhem'].includes(String(patch?.route?.tokenMode)) ? patch?.route?.tokenMode : base.route.tokenMode;
+  const buyMode = ['snipe', 'bundle', 'launch-bundle-snipe', 'dev-buy-only'].includes(String(patch?.route?.buyMode)) ? patch?.route?.buyMode : base.route.buyMode;
   return {
     route: {
       ...base.route,
+      platform,
+      quoteToken,
+      tokenMode,
+      buyMode,
       initialBuySol: numberField(patch?.route?.initialBuySol, base.route.initialBuySol, 0, 1000),
       slippageBps: numberField(patch?.route?.slippageBps, base.route.slippageBps, 1, 2000),
       priorityFeeMode: stringField(patch?.route?.priorityFeeMode, base.route.priorityFeeMode, 80),

@@ -42,6 +42,10 @@ export type WalletPlanEntry = {
 
 export type LaunchConfig = {
   route: {
+    platform?: 'pump' | 'bonk' | 'bonkers' | 'bags' | 'printr';
+    quoteToken?: 'SOL' | 'USDC';
+    tokenMode?: 'classic' | 'mayhem';
+    buyMode?: 'snipe' | 'bundle' | 'launch-bundle-snipe' | 'dev-buy-only';
     initialBuySol: number;
     slippageBps: number;
     priorityFeeMode: string;
