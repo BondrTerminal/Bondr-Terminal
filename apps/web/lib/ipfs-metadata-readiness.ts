@@ -38,6 +38,7 @@ type PinataResult = {
   PinSize?: number;
   Timestamp?: string;
 };
+type PinataErrorPayload = PinataResult & { error?: unknown; message?: unknown };
 
 function configured() {
   return Boolean(pinataJwt());
@@ -138,8 +139,17 @@ async function pinataFetch(path: string, init: RequestInit) {
     },
     cache: 'no-store'
   });
-  const payload = await response.json().catch(() => ({})) as PinataResult & { error?: string; message?: string };
-  if (!response.ok || !payload.IpfsHash) throw new Error(payload.error ?? payload.message ?? `Pinata request failed with ${response.status}.`);
+  const payload = await response.json().catch(() => ({})) as PinataErrorPayload;
+  if (!response.ok || !payload.IpfsHash) {
+    const detail = typeof payload.error === 'string'
+      ? payload.error
+      : typeof payload.message === 'string'
+        ? payload.message
+        : Object.keys(payload).length
+          ? JSON.stringify(payload)
+          : '';
+    throw new Error(detail || `Pinata request failed with ${response.status}.`);
+  }
   return payload as Required<Pick<PinataResult, 'IpfsHash'>> & PinataResult;
 }
 
