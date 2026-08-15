@@ -50,14 +50,14 @@ const LAUNCH_PLATFORMS = [
     label: 'Pump.fun',
     headline: 'Bonding curve launch',
     detail: 'Pump.fun/PumpPortal create route. Uses IPFS metadata, client mint, deployer signer proof, and gated unsigned build rehearsal.',
-    status: 'preview-ready'
+    status: 'rehearsal-ready'
   },
   {
     value: 'raydium',
     label: 'Raydium',
     headline: 'Original LP + burn',
     detail: 'Original token deployment path with Raydium LP add and automated LP burn. Requires real Raydium builder, LP mint verification, burn tx, and simulation.',
-    status: 'builder-needed'
+    status: 'not-developed'
   }
 ] as const;
 const PLATFORM_VALUES = ['pump', 'raydium'] as const;
@@ -283,6 +283,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [activeTab, setActiveTab] = useState<LaunchTab>('token');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [message, setMessage] = useState('Deployment execution is disabled. Saving configuration only.');
+  const [activeRoutePlatform, setActiveRoutePlatform] = useState<(typeof PLATFORM_VALUES)[number]>(initial.route.platform ?? 'pump');
   const [imagePreviewUrl, setImagePreviewUrl] = useState(project.metadata.imageUrl);
   const [relayStatus, setRelayStatus] = useState<{ status: string; relayEnabled: boolean; maxTipSol: number; blockers: string[] } | null>(null);
   const [truthRails, setTruthRails] = useState<TruthRail[]>([]);
@@ -311,9 +312,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const tokenImageUrl = imagePreviewUrl || project.metadata.imageUrl;
   const selectedDevWallet = wallets.find((wallet) => wallet.id === defaultDevWalletId) ?? wallets[0] ?? null;
   const selectedBuyMode = BUY_MODES.find((mode) => mode.value === (initial.route.buyMode ?? 'snipe')) ?? BUY_MODES[0];
-  const selectedPlatform = LAUNCH_PLATFORMS.find((platform) => platform.value === (initial.route.platform ?? 'pump')) ?? LAUNCH_PLATFORMS[0];
+  const selectedPlatform = LAUNCH_PLATFORMS.find((platform) => platform.value === activeRoutePlatform) ?? LAUNCH_PLATFORMS[0];
   const tokenReady = Boolean((project.metadata.name || project.name) && (project.metadata.symbol || project.ticker) && project.metadata.description && tokenImageUrl);
-  const routeReady = Boolean(initial.route.platform && initial.route.quoteToken && initial.route.buyMode);
+  const routeReady = Boolean(activeRoutePlatform && initial.route.quoteToken && initial.route.buyMode);
   const walletReady = Boolean(selectedDevWallet && participatingPlans.length > 0);
   const riskReady = Boolean(initial.devWalletRules.stopLossPct < 0 && initial.devWalletRules.takeProfitPercents.length && initial.devWalletRules.perTxSellCapPct > 0);
   const ipfsReady = /^ipfs:\/\//i.test(project.metadata.metadataUri ?? '') || /\/ipfs\//i.test(project.metadata.metadataUri ?? '') || /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
@@ -396,6 +397,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       });
     return () => { active = false; };
   }, [project.id]);
+
+  useEffect(() => {
+    setActiveRoutePlatform(initial.route.platform ?? 'pump');
+  }, [initial.route.platform, project.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -738,16 +743,33 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <div><span>Max exposure</span><strong>{maxSol.toFixed(4)} SOL</strong><small>{plannedSol.toFixed(4)} planned</small></div>
           <div><span>Review</span><strong>{blockedCount ? `${blockedCount} blocked` : 'ready to dry-run'}</strong><small>{dryRunReady ? 'dry-run pass' : 'dry-run needed'}</small></div>
         </div>
-        <section className="launchRouteChoicePanel" aria-label="Deployment route choice">
+        <section className="launchRouteTabsPanel" aria-label="Deployment launch path">
           <div className="launchRouteChoiceIntro">
             <span>Launch route</span>
             <strong>Choose one deployment path</strong>
             <small>This choice controls which builder/readiness contract BONDR evaluates. Gates remain closed.</small>
           </div>
-          <div className="launchRouteChoiceGrid">
+          <div className="launchRouteTabList" role="tablist" aria-label="Launch path tabs">
             {LAUNCH_PLATFORMS.map((platform) => (
-              <label className="launchRouteChoiceButton" key={platform.value}>
-                <input name="route.platform" type="radio" value={platform.value} defaultChecked={(initial.route.platform ?? 'pump') === platform.value} />
+              <label
+                aria-controls={`launch-path-panel-${platform.value}`}
+                aria-selected={activeRoutePlatform === platform.value}
+                className={`launchRouteTabButton ${activeRoutePlatform === platform.value ? 'active' : ''}`}
+                key={platform.value}
+                role="tab"
+              >
+                <input
+                  checked={activeRoutePlatform === platform.value}
+                  name="route.platform"
+                  onChange={() => {
+                    setActiveRoutePlatform(platform.value);
+                    setActiveTab('route');
+                    setSaveState('idle');
+                    setMessage(`${platform.label} launch path selected. Save configuration to persist this route.`);
+                  }}
+                  type="radio"
+                  value={platform.value}
+                />
                 <span>{platform.label}</span>
                 <strong>{platform.headline}</strong>
                 <small>{platform.detail}</small>
@@ -831,39 +853,75 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <h2>Select launch route and buy mode</h2>
           <p>Choose the venue adapter and execution mode before assigning wallets and risk caps.</p>
         </div>
-        <div className="launchBuyModeGrid">
-          {BUY_MODES.map((mode) => <label className="launchBuyModeCard" key={mode.value}>
-            <input name="route.buyMode" type="radio" value={mode.value} defaultChecked={(initial.route.buyMode ?? 'snipe') === mode.value} />
-            <span>{mode.bestFor}</span>
-            <strong>{mode.label}</strong>
-            <p>{mode.detail}</p>
-            <small>{wallets.length} wallets available · {selectedTaskSol.toFixed(4)} SOL task max</small>
-          </label>)}
-        </div>
-        <div className="launchSegmentStack routeOnlySegmentStack">
-          <div>
-            <span>Route Adapter</span>
-            <div className="launchSegmentGrid two">
-              <div className="launchAdapterReadinessCard"><strong>Pump.fun / PumpPortal</strong><small>IPFS metadata, trade-local create/dev buy, local signing, explicit broadcast.</small><em>mapped</em></div>
-              <div className="launchAdapterReadinessCard"><strong>Raydium original LP + burn</strong><small>SPL token deploy, Raydium LP add, LP mint/account verification, burn transaction, simulation proof.</small><em>mapped</em></div>
+        <div className="launchPathPanelStack">
+          <section className="launchPathPanel pump" hidden={activeRoutePlatform !== 'pump'} id="launch-path-panel-pump" role="tabpanel">
+            <div className="launchPathPanelHeader">
+              <span>Pump.fun path</span>
+              <strong>PumpPortal bonding-curve launch rehearsal</strong>
+              <small>Use this path for Pump.fun create, dev buy, optional bundle/sniper/task rails, signer proof, and disabled provider-build review.</small>
             </div>
-          </div>
-          <div>
-            <span>Pump.fun launch options</span>
-            <div className="launchConfigEditorGrid compact">
-              <label><span>Initial buy SOL</span><input name="route.initialBuySol" type="number" min="0" step="0.001" defaultValue={initial.route.initialBuySol} /></label>
-              <label><span>Slippage bps</span><input name="route.slippageBps" type="number" min="1" max="2000" step="1" defaultValue={initial.route.slippageBps} /></label>
-              <label>
-                <span>Priority fee mode</span>
-                <select name="route.priorityFeeMode" defaultValue={initial.route.priorityFeeMode}>
-                  <option value="auto capped">auto capped</option>
-                  <option value="manual">manual</option>
-                  <option value="disabled">disabled</option>
-                </select>
-              </label>
-              <label><span>Graduation monitor</span><input name="route.graduationMonitor" defaultValue={initial.route.graduationMonitor} placeholder="PumpSwap graduation / Raydium pool handoff" /></label>
+            <div className="launchAdapterReadinessCard"><strong>Pump.fun / PumpPortal</strong><small>IPFS metadata, trade-local create/dev buy, local signing, explicit broadcast.</small><em>rehearsal-ready</em></div>
+            <div className="launchBuyModeGrid">
+              {BUY_MODES.map((mode) => <label className="launchBuyModeCard" key={mode.value}>
+                <input name="route.buyMode" type="radio" value={mode.value} defaultChecked={(initial.route.buyMode ?? 'snipe') === mode.value} />
+                <span>{mode.bestFor}</span>
+                <strong>{mode.label}</strong>
+                <p>{mode.detail}</p>
+                <small>{wallets.length} wallets available · {selectedTaskSol.toFixed(4)} SOL task max</small>
+              </label>)}
             </div>
-          </div>
+            <div>
+              <span className="launchPathFieldGroupLabel">Pump.fun launch options</span>
+              <div className="launchConfigEditorGrid compact">
+                <label><span>Initial buy SOL</span><input name="route.initialBuySol" type="number" min="0" step="0.001" defaultValue={initial.route.initialBuySol} /></label>
+                <label><span>Slippage bps</span><input name="route.slippageBps" type="number" min="1" max="2000" step="1" defaultValue={initial.route.slippageBps} /></label>
+                <label>
+                  <span>Priority fee mode</span>
+                  <select name="route.priorityFeeMode" defaultValue={initial.route.priorityFeeMode}>
+                    <option value="auto capped">auto capped</option>
+                    <option value="manual">manual</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                </label>
+                <label><span>Graduation monitor</span><input name="route.graduationMonitor" defaultValue={initial.route.graduationMonitor} placeholder="PumpSwap graduation / Raydium pool handoff" /></label>
+              </div>
+            </div>
+          </section>
+          <section className="launchPathPanel raydium" hidden={activeRoutePlatform !== 'raydium'} id="launch-path-panel-raydium" role="tabpanel">
+            <div className="launchPathPanelHeader">
+              <span>Raydium path</span>
+              <strong>Original LP add + automated LP burn</strong>
+              <small>This path is configuration-only until the real Raydium LP builder, LP token resolver, burn transaction builder, and simulation proof exist.</small>
+            </div>
+            <div className="launchAdapterReadinessCard blocked"><strong>Raydium original LP + burn</strong><small>SPL token deploy, Raydium LP add, LP mint/account verification, burn transaction, simulation proof.</small><em>builder-missing</em></div>
+            <div>
+              <span className="launchPathFieldGroupLabel">Raydium launch options</span>
+              <div className="launchConfigEditorGrid compact">
+                <label><span>LP SOL liquidity</span><input name="route.raydiumLiquiditySol" type="number" min="0" step="0.001" defaultValue={initial.route.raydiumLiquiditySol} /></label>
+                <label><span>Withheld token %</span><input name="route.raydiumWithheldTokenPct" type="number" min="0" max="100" step="0.1" defaultValue={initial.route.raydiumWithheldTokenPct} /></label>
+                <label><span>Withheld token amount</span><input name="route.raydiumWithheldTokenAmount" type="number" min="0" step="1" defaultValue={initial.route.raydiumWithheldTokenAmount} /></label>
+                <label className="launchCheckboxField"><input name="route.burnLiquidity" type="checkbox" defaultChecked={initial.route.burnLiquidity} /><span>Automated LP burn after verified LP mint/account</span></label>
+              </div>
+            </div>
+            <div className="raydiumBuilderChecklist" aria-label="Raydium builder requirements">
+              {[
+                ['SPL token creation', 'implemented'],
+                ['Raydium original LP add builder', 'missing'],
+                ['LP mint/account resolver', 'missing'],
+                ['Automated LP burn transaction', 'gated'],
+                ['LP add + burn simulation proof', 'missing']
+              ].map(([label, status]) => (
+                <div className={status === 'implemented' ? 'ready' : status === 'gated' ? 'review' : 'blocked'} key={label}>
+                  <span>{label}</span>
+                  <strong>{status}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="launchRouteBlockerNote">
+              <strong>Raydium is not launch-developed yet.</strong>
+              <small>Missing real LP add builder, LP mint/account derivation, verified LP account proof, and simulation proof. The burn transaction builder exists but stays gated until LP account verification clears.</small>
+            </div>
+          </section>
         </div>
       </section>
 

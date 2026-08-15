@@ -2,8 +2,8 @@ import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 
-type EngineStatus = 'transaction-builder-ready' | 'deployment-disabled' | 'rehearsal-contract-ready' | 'protocol-sdk-required';
-type ImplementationStatus = 'builder-implemented' | 'rehearsal-contract-only' | 'adapter-missing';
+type EngineStatus = 'transaction-builder-ready' | 'deployment-disabled' | 'rehearsal-contract-ready' | 'protocol-sdk-required' | 'not-required';
+type ImplementationStatus = 'builder-implemented' | 'rehearsal-contract-only' | 'adapter-missing' | 'not-required';
 
 function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
   return project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === phase) ?? [];
@@ -128,7 +128,7 @@ export const LP_ADAPTER_READINESS = [
   {
     id: 'pumpfun-pumpportal-launch',
     label: 'Pump.fun / PumpPortal bonding curve',
-    implementationStatus: 'rehearsal-contract-only' as ImplementationStatus,
+    implementationStatus: 'not-required' as ImplementationStatus,
     requiredSdkOrApi: 'PumpPortal trade-local create for unsigned launch transaction',
     requiredInputs: ['IPFS metadata URI', 'dev wallet', 'client mint keypair public key', 'initial buy SOL', 'slippage cap', 'priority fee cap'],
     signingModel: 'browser dev wallet plus client-created mint keypair; server never signs',
@@ -144,19 +144,30 @@ export const LP_ADAPTER_READINESS = [
     requiredInputs: ['base token mint', 'quote/SOL mint', 'initial token liquidity', 'initial SOL/quote liquidity', 'deployer wallet', 'pool config', 'LP token destination', 'burn authority/policy'],
     signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool + burn transactions',
     simulationRequirement: 'simulate pool create/add-liquidity transaction, verify LP token mint/account, then simulate LP burn before signature/broadcast',
-    blockers: ['raydium-original-lp-builder-missing', 'lp-token-account-derivation-missing', 'lp-burn-transaction-builder-missing', 'lp-burn-simulation-proof-missing'],
+    blockers: ['raydium-original-lp-builder-missing', 'lp-token-account-derivation-missing', 'verified-lp-token-account-required', 'lp-burn-simulation-proof-missing'],
     lpPolicy: 'Automated LP burn is in-scope only after BONDR can build and verify the real Raydium LP token account and burn transaction.'
   }
 ] as const;
 
-export function buildCreateLpEngineReadiness() {
+export function buildCreateLpEngineReadiness(project: Project | null) {
+  const routePlatform = project?.launchPath === 'raydium' || project?.launchConfig?.route.platform === 'raydium' ? 'raydium' : 'pump';
+  const selectedAdapter = routePlatform === 'raydium'
+    ? LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!
+    : LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'pumpfun-pumpportal-launch')!;
+  const raydiumBlockers = LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!.blockers;
+
   return {
     contract: 'bondr-create-lp-engine-readiness-v1' as const,
-    status: 'protocol-sdk-required' as EngineStatus,
-    implementationStatus: 'adapter-missing' as ImplementationStatus,
+    routePlatform,
+    selectedAdapterId: selectedAdapter.id,
+    status: routePlatform === 'raydium' ? 'protocol-sdk-required' as EngineStatus : 'not-required' as EngineStatus,
+    implementationStatus: routePlatform === 'raydium' ? 'adapter-missing' as ImplementationStatus : 'not-required' as ImplementationStatus,
     execution: 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction' as const,
     adapters: LP_ADAPTER_READINESS,
-    blockers: Array.from(new Set(LP_ADAPTER_READINESS.flatMap((adapter) => adapter.blockers))),
+    blockers: routePlatform === 'raydium' ? Array.from(raydiumBlockers) : [],
+    routeSummary: routePlatform === 'raydium'
+      ? 'Raydium launch is config-only until the original LP add builder, LP token verification, LP burn builder, and simulations are implemented.'
+      : 'Pump.fun launch does not require BONDR-created LP at launch; LP creation is not a blocker for the Pump.fun route.',
     safety: {
       noFakeLpCreation: true,
       noSigning: true,
@@ -171,6 +182,6 @@ export function buildDeploymentEngineReadiness(project: Project | null, wallets:
     contract: 'bondr-deployment-engine-readiness-v1' as const,
     tokenMint: buildTokenMintEngineReadiness(project, wallets, activation),
     launchBundle: buildLaunchBundleEngineReadiness(project, wallets, activation),
-    createLp: buildCreateLpEngineReadiness()
+    createLp: buildCreateLpEngineReadiness(project)
   };
 }

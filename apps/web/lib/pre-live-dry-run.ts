@@ -107,6 +107,9 @@ export function buildPreLiveDryRun(project: Project, store: MeridianStore): PreL
     if (!route || !numberOk(route.raydiumLiquiditySol, 0.000001)) blockers.push('raydium-liquidity-missing');
     if (!route || !numberOk(route.raydiumWithheldTokenPct, 0, 100)) blockers.push('raydium-withheld-token-policy-missing');
     if (!route?.burnLiquidity) warnings.push('raydium-burn-liquidity-not-enabled');
+    blockers.push('raydium-original-lp-builder-missing');
+    blockers.push('verified-lp-token-account-required');
+    blockers.push('raydium-lp-burn-simulation-proof-missing');
   } else {
     blockers.push('launch-path-invalid');
   }

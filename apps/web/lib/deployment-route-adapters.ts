@@ -3,6 +3,7 @@ import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import { pinataJwt } from './ipfs-metadata-readiness';
 import { buildPumpPortalCreatePreview } from './pumpportal-deploy-readiness';
+import { buildRaydiumLaunchReadiness } from './raydium-launch-readiness';
 import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 
 export type DeploymentRouteAdapterId =
@@ -15,7 +16,9 @@ export type DeploymentRouteAdapter = {
   id: DeploymentRouteAdapterId;
   label: string;
   route: string;
-  supportLevel: 'mapped' | 'research' | 'scaffolded' | 'blocked';
+  supportLevel: 'preview-ready' | 'mapped' | 'research' | 'scaffolded' | 'blocked';
+  completionStatus: 'rehearsal-ready' | 'mapped-not-developed' | 'blocked';
+  builderStatus: 'provider-preview-builder-present' | 'rehearsal-only' | 'builder-missing';
   requiredInputs: string[];
   apiFlow: string[];
   signingModel: string;
@@ -28,7 +31,9 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     id: 'pumpportal-create',
     label: 'Pump.fun / PumpPortal create',
     route: 'PumpPortal trade-local create',
-    supportLevel: 'scaffolded',
+    supportLevel: 'preview-ready',
+    completionStatus: 'rehearsal-ready',
+    builderStatus: 'provider-preview-builder-present',
     requiredInputs: ['metadata URI from IPFS', 'dev wallet public key', 'mint keypair public key', 'initial dev buy SOL', 'slippage bps', 'priority fee cap'],
     apiFlow: ['upload metadata to IPFS', 'POST https://pumpportal.fun/api/trade-local with action=create', 'deserialize transaction', 'verify signer and mint binding', 'simulate', 'browser/dev wallet sign', 'broadcast only after approval'],
     signingModel: 'client-side dev wallet plus client-created mint keypair; server never signs',
@@ -40,6 +45,8 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     label: 'PumpPortal trade-local',
     route: 'Post-launch buy/sell preview',
     supportLevel: 'mapped',
+    completionStatus: 'mapped-not-developed',
+    builderStatus: 'rehearsal-only',
     requiredInputs: ['mint', 'wallet public key', 'side', 'amount', 'denominatedInSol', 'slippage', 'priorityFee', 'pool'],
     apiFlow: ['POST trade-local', 'deserialize versioned transaction', 'bind signer/mint/amount policy', 'simulate', 'browser wallet sign', 'broadcast only after separate approval'],
     signingModel: 'browser wallet per participating wallet',
@@ -51,6 +58,8 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     label: 'PumpPortal Jito bundle',
     route: 'Array trade-local body plus Jito sendBundle',
     supportLevel: 'research',
+    completionStatus: 'mapped-not-developed',
+    builderStatus: 'rehearsal-only',
     requiredInputs: ['up to five wallet intents', 'signed transactions per wallet', 'Jito endpoint', 'Jito tip cap', 'bundle simulation result'],
     apiFlow: ['build array body', 'deserialize each transaction', 'verify wallet/mint/amount policies', 'sign per wallet', 'submit bundle only after approval'],
     signingModel: 'one approved signer per bundle leg; no server custody',
@@ -61,12 +70,14 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     id: 'raydium-original-lp-burn',
     label: 'Raydium original LP + burn',
     route: 'SPL token deploy, Raydium LP add, LP-token burn',
-    supportLevel: 'mapped',
+    supportLevel: 'blocked',
+    completionStatus: 'mapped-not-developed',
+    builderStatus: 'builder-missing',
     requiredInputs: ['mint', 'token metadata', 'deployer wallet', 'SOL liquidity', 'withheld token allocation', 'LP burn policy'],
     apiFlow: ['build SPL token mint transaction', 'build Raydium pool/liquidity transaction', 'resolve LP mint/account', 'build LP burn transaction', 'simulate all legs', 'browser wallet sign', 'broadcast only after approval'],
     signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool and burn transactions',
     safeguards: ['exact deployer signer', 'exact mint binding', 'liquidity SOL cap', 'withheld token cap', 'LP mint/account verification', 'burn destination verification', 'simulation proof'],
-    blockedUntil: ['Raydium original LP builder implemented', 'LP burn transaction builder implemented', 'simulation proof', 'explicit launch approval']
+    blockedUntil: ['Raydium original LP builder implemented', 'verified LP mint/account resolver implemented', 'LP burn simulation proof', 'explicit launch approval']
   }
 ];
 
@@ -97,9 +108,11 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const signingReadiness = buildWalletSigningReadiness(project, wallets);
   const maxDevBuySol = devPlan?.maxBuySol || devPlan?.plannedBuySol || project.fundingPlan.devBuySol || 0;
   const route = project.launchConfig?.route;
+  const routePlatform = project.launchPath.toLowerCase().includes('raydium') || route?.platform === 'raydium' ? 'raydium' : 'pump';
   const metadataFieldsReady = Boolean(project.metadata.name && project.metadata.symbol && project.metadata.description && project.metadata.imageUrl);
   const ipfsReady = /^ipfs:\/\//i.test(project.metadata.metadataUri ?? '') || /\/ipfs\//i.test(project.metadata.metadataUri ?? '') || /^ipfs:\/\//i.test(project.metadata.imageUrl) || /\/ipfs\//i.test(project.metadata.imageUrl);
   const pumpPortalCreatePreview = buildPumpPortalCreatePreview(project, wallets, activation);
+  const raydiumLaunchReadiness = buildRaydiumLaunchReadiness(project, wallets, activation);
   const jitoTipCapSol = relay.tip.maxSol;
   const maxPriorityFeeSol = project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0;
   const estimatedCreateFeeSol = Number(process.env.DEPLOYMENT_ESTIMATED_CREATE_FEE_SOL ?? '0.005');
@@ -122,6 +135,38 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const optionalBlockers = blockers.filter((blocker) => optionalBlockerIds.includes(blocker));
   const rehearsalBlockers = blockers.filter((blocker) => !intentionalLiveGateBlockers.includes(blocker) && !optionalBlockers.includes(blocker));
 
+  const selectedRouteAdapter = routePlatform === 'raydium'
+    ? DEPLOYMENT_ROUTE_ADAPTERS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!
+    : DEPLOYMENT_ROUTE_ADAPTERS.find((adapter) => adapter.id === 'pumpportal-create')!;
+  const pumpStructuralBlockers = pumpPortalCreatePreview.blockers.filter((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker));
+  const routeCompleteness = routePlatform === 'raydium'
+    ? {
+      platform: 'raydium' as const,
+      status: 'not-developed' as const,
+      selectable: true,
+      developed: false,
+      adapterId: selectedRouteAdapter.id,
+      builderStatus: selectedRouteAdapter.builderStatus,
+      missingBuilders: ['raydium-original-lp-builder', 'lp-token-account-derivation', 'lp-burn-simulation-proof'],
+      gatedBuilders: ['lp-burn-transaction-builder'],
+      blockers: selectedRouteAdapter.blockedUntil,
+      summary: 'Raydium is selectable for config, but it is not launch-developed until BONDR can build, verify, and simulate the Raydium LP add plus LP burn transactions.'
+    }
+    : {
+      platform: 'pump' as const,
+      status: 'rehearsal-ready' as const,
+      selectable: true,
+      developed: true,
+      adapterId: selectedRouteAdapter.id,
+      builderStatus: selectedRouteAdapter.builderStatus,
+      missingBuilders: [] as string[],
+      blockers: pumpStructuralBlockers,
+      missingInputs: pumpStructuralBlockers,
+      summary: pumpStructuralBlockers.length
+        ? 'Pump.fun route is implemented for preview/build-disabled rehearsal; this project/session still needs required inputs.'
+        : 'Pump.fun route is wired through preview and disabled provider-build rehearsal; live gates still require explicit approval.'
+    };
+
   return {
     status: blockers.length ? 'blocked' : 'ready-for-approval',
     mode: 'dev-wallet-only',
@@ -131,7 +176,8 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     rehearsalBlockers,
     optionalBlockers,
     intentionalLiveGateBlockers,
-    adapterRecommendation: project.launchPath.toLowerCase().includes('raydium') || route?.platform === 'raydium' ? 'raydium-original-lp-burn' : 'pumpportal-create',
+    adapterRecommendation: selectedRouteAdapter.id,
+    routeCompleteness,
     devWallet: devWallet ? { id: devWallet.id, role: devWallet.role, address: devWallet.address, shortAddress: short(devWallet.address), custodyMode: devWallet.custodyMode ?? 'watch-only' } : null,
     railCounts: { bundle: bundlePlans.length, sniper: sniperPlans.length, task: taskPlans.length },
     approvalSummary: {
@@ -157,6 +203,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       publicLaunchConfirmation: 'pending Yakuzamoto approval'
     },
     pumpPortalCreateReadiness: pumpPortalCreatePreview,
+    raydiumLaunchReadiness,
     ipfsMetadataReadiness: {
       status: ipfsReady ? 'ready' : pinataJwt() ? 'pinning-provider-configured-upload-needed' : 'provider-required',
       imageUrl: project.metadata.imageUrl || null,

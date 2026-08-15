@@ -110,6 +110,12 @@ export type PumpPortalBuildCreateResult = {
     mint: string;
     feePayer: string | null;
   };
+  providerResponse?: {
+    status: number;
+    statusText: string;
+    contentType: string;
+    bodyPreview?: string;
+  };
   execution: 'blocked-no-provider-call' | 'provider-build-disabled-no-call' | 'provider-build-policy-blocked-no-signing-no-broadcast' | 'unsigned-create-transaction-built-no-signing-no-broadcast';
 };
 
@@ -378,11 +384,27 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
   const contentType = response.headers.get('content-type') ?? '';
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    return { ...base, status: 'blocked', blockers: [`pumpportal-build-failed-${response.status}`], warnings: [...preview.warnings, text.slice(0, 240)], execution: 'blocked-no-provider-call' };
+    const providerResponse = { status: response.status, statusText: response.statusText, contentType, bodyPreview: text.slice(0, 240) };
+    return {
+      ...base,
+      status: 'blocked',
+      blockers: [`pumpportal-build-failed-${response.status}`],
+      warnings: [...preview.warnings, response.statusText || null, text.slice(0, 240) || null].filter((item): item is string => Boolean(item)),
+      providerResponse,
+      execution: 'blocked-no-provider-call'
+    };
   }
   if (contentType.includes('application/json')) {
     const json = await response.json().catch(() => null) as { error?: string; message?: string } | null;
-    return { ...base, status: 'blocked', blockers: ['pumpportal-returned-json-not-transaction'], warnings: [...preview.warnings, json?.error ?? json?.message ?? 'PumpPortal returned JSON instead of serialized transaction bytes.'], execution: 'blocked-no-provider-call' };
+    const message = json?.error ?? json?.message ?? 'PumpPortal returned JSON instead of serialized transaction bytes.';
+    return {
+      ...base,
+      status: 'blocked',
+      blockers: ['pumpportal-returned-json-not-transaction'],
+      warnings: [...preview.warnings, message],
+      providerResponse: { status: response.status, statusText: response.statusText, contentType, bodyPreview: message.slice(0, 240) },
+      execution: 'blocked-no-provider-call'
+    };
   }
 
   const build = normalizeSerializedTransaction(await response.arrayBuffer());

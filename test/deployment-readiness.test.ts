@@ -11,6 +11,7 @@ import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExec
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
+import { buildLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
@@ -162,6 +163,32 @@ async function withProviderBuild<T>(body: (calls: { count: number }) => Promise<
   }
 }
 
+async function withProviderFailure<T>(body: (calls: { count: number }) => Promise<T>) {
+  const previousEnabled = process.env.PUMPPORTAL_BUILD_ENABLED;
+  const previousUrl = process.env.PUMPPORTAL_TRADE_LOCAL_URL;
+  const previousFetch = globalThis.fetch;
+  const calls = { count: 0 };
+  try {
+    process.env.PUMPPORTAL_BUILD_ENABLED = 'true';
+    process.env.PUMPPORTAL_TRADE_LOCAL_URL = 'https://example.invalid/pumpportal-test';
+    globalThis.fetch = (async () => {
+      calls.count += 1;
+      return new Response('Bad Request', {
+        status: 400,
+        statusText: "Cannot read properties of undefined (reading 'toBuffer')",
+        headers: { 'content-type': 'text/plain; charset=utf-8' }
+      });
+    }) as typeof fetch;
+    return await body(calls);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.PUMPPORTAL_BUILD_ENABLED;
+    else process.env.PUMPPORTAL_BUILD_ENABLED = previousEnabled;
+    if (previousUrl === undefined) delete process.env.PUMPPORTAL_TRADE_LOCAL_URL;
+    else process.env.PUMPPORTAL_TRADE_LOCAL_URL = previousUrl;
+    globalThis.fetch = previousFetch;
+  }
+}
+
 test('deployment route adapters keep live launch rails explicit', () => {
   assert.deepEqual(DEPLOYMENT_ROUTE_ADAPTERS.map((adapter) => adapter.id), [
     'pumpportal-create',
@@ -170,6 +197,13 @@ test('deployment route adapters keep live launch rails explicit', () => {
     'raydium-original-lp-burn'
   ]);
   assert.ok(DEPLOYMENT_ROUTE_ADAPTERS.every((adapter) => adapter.blockedUntil.length > 0));
+  const pump = DEPLOYMENT_ROUTE_ADAPTERS.find((adapter) => adapter.id === 'pumpportal-create');
+  const raydium = DEPLOYMENT_ROUTE_ADAPTERS.find((adapter) => adapter.id === 'raydium-original-lp-burn');
+  assert.equal(pump?.completionStatus, 'rehearsal-ready');
+  assert.equal(pump?.builderStatus, 'provider-preview-builder-present');
+  assert.equal(raydium?.supportLevel, 'blocked');
+  assert.equal(raydium?.completionStatus, 'mapped-not-developed');
+  assert.equal(raydium?.builderStatus, 'builder-missing');
 });
 
 test('deployment launch path normalization only allows Pump.fun and Raydium', () => {
@@ -190,6 +224,9 @@ test('deployment editor exposes Pump.fun route options as saveable form controls
   for (const control of [
     'name="route.platform"',
     'value={platform.value}',
+    'launchRouteTabsPanel',
+    'launchRouteTabButton',
+    'launch-path-panel-pump',
     'name="route.quoteToken"',
     'name="route.tokenMode"',
     'name="route.buyMode"',
@@ -200,6 +237,25 @@ test('deployment editor exposes Pump.fun route options as saveable form controls
   ]) {
     assert.ok(source.includes(control), `missing launch option control ${control}`);
   }
+  assert.ok(source.includes('rehearsal-ready'));
+  assert.ok(source.includes('PumpPortal bonding-curve launch rehearsal'));
+});
+
+test('deployment editor exposes Raydium options but marks route not developed', () => {
+  const source = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
+  for (const control of [
+    'launch-path-panel-raydium',
+    'raydiumBuilderChecklist',
+    'name="route.raydiumLiquiditySol"',
+    'name="route.raydiumWithheldTokenPct"',
+    'name="route.raydiumWithheldTokenAmount"',
+    'name="route.burnLiquidity"'
+  ]) {
+    assert.ok(source.includes(control), `missing Raydium option control ${control}`);
+  }
+  assert.ok(source.includes('not-developed'));
+  assert.ok(source.includes('builder-missing'));
+  assert.ok(source.includes('Raydium is not launch-developed yet.'));
 });
 
 test('dev-wallet-only readiness blocks broadcast and exposes approval summary', () => {
@@ -207,6 +263,12 @@ test('dev-wallet-only readiness blocks broadcast and exposes approval summary', 
   assert.equal(readiness.mode, 'dev-wallet-only');
   assert.equal(readiness.broadcastReady, false);
   assert.equal(readiness.adapterRecommendation, 'pumpportal-create');
+  assert.equal(readiness.routeCompleteness.platform, 'pump');
+  assert.equal(readiness.routeCompleteness.status, 'rehearsal-ready');
+  assert.equal(readiness.routeCompleteness.developed, true);
+  assert.equal(readiness.routeCompleteness.adapterId, 'pumpportal-create');
+  assert.equal(readiness.routeCompleteness.builderStatus, 'provider-preview-builder-present');
+  assert.ok(readiness.routeCompleteness.blockers.includes('ipfs-provider-required') || readiness.routeCompleteness.blockers.includes('ipfs-upload-needed'));
   assert.equal(readiness.approvalSummary.devWalletAddress, wallet.address);
   assert.equal(readiness.approvalSummary.maxDevBuySol, 0.01);
   assert.ok(readiness.blockers.includes('deployment-gate-closed'));
@@ -227,6 +289,24 @@ test('raydium route readiness recommends original LP burn adapter', () => {
   };
   const readiness = buildDeploymentLaunchReadiness(raydiumProject, [wallet], activation);
   assert.equal(readiness.adapterRecommendation, 'raydium-original-lp-burn');
+  assert.equal(readiness.routeCompleteness.platform, 'raydium');
+  assert.equal(readiness.routeCompleteness.status, 'not-developed');
+  assert.equal(readiness.routeCompleteness.developed, false);
+  assert.equal(readiness.routeCompleteness.builderStatus, 'builder-missing');
+  assert.equal(readiness.raydiumLaunchReadiness.contract, 'bondr-raydium-launch-readiness-v1');
+  assert.equal(readiness.raydiumLaunchReadiness.selected, true);
+  assert.equal(readiness.raydiumLaunchReadiness.status, 'builder-missing');
+  assert.equal(readiness.raydiumLaunchReadiness.developed, false);
+  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-original-lp-builder'));
+  assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('lp-burn-transaction-builder'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('lp-burn-transaction-builder'));
+  assert.ok(readiness.raydiumLaunchReadiness.blockers.includes('verified-lp-token-account-required'));
+  assert.deepEqual(readiness.routeCompleteness.missingBuilders, [
+    'raydium-original-lp-builder',
+    'lp-token-account-derivation',
+    'lp-burn-simulation-proof'
+  ]);
+  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['lp-burn-transaction-builder']);
   assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
@@ -282,11 +362,14 @@ test('deployment engine launch bundle readiness models legs, caps, signing order
   assert.equal(engines.launchBundle.safety.noRelaySubmit, true);
 });
 
-test('deployment engine LP readiness stays scoped to Pump.fun and Raydium original LP burn', () => {
+test('deployment engine LP readiness does not block Pump.fun route with Raydium LP work', () => {
   const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
   assert.equal(engines.createLp.contract, 'bondr-create-lp-engine-readiness-v1');
-  assert.equal(engines.createLp.status, 'protocol-sdk-required');
-  assert.equal(engines.createLp.implementationStatus, 'adapter-missing');
+  assert.equal(engines.createLp.routePlatform, 'pump');
+  assert.equal(engines.createLp.selectedAdapterId, 'pumpfun-pumpportal-launch');
+  assert.equal(engines.createLp.status, 'not-required');
+  assert.equal(engines.createLp.implementationStatus, 'not-required');
+  assert.deepEqual(engines.createLp.blockers, []);
   assert.deepEqual(engines.createLp.adapters.map((adapter) => adapter.id), [
     'pumpfun-pumpportal-launch',
     'raydium-original-lp-burn'
@@ -294,11 +377,61 @@ test('deployment engine LP readiness stays scoped to Pump.fun and Raydium origin
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredSdkOrApi.length > 0));
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredInputs.length > 0));
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.simulationRequirement.includes('simulate')));
-  assert.ok(engines.createLp.blockers.includes('pumpportal-provider-build-gated'));
-  assert.ok(engines.createLp.blockers.includes('raydium-original-lp-builder-missing'));
-  assert.ok(engines.createLp.blockers.includes('lp-burn-transaction-builder-missing'));
   assert.equal(engines.createLp.safety.noFakeLpCreation, true);
   assert.equal(engines.createLp.execution, 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction');
+});
+
+test('deployment engine LP readiness marks Raydium route builder-missing', () => {
+  const raydiumProject = structuredClone(project);
+  raydiumProject.launchPath = 'raydium';
+  raydiumProject.launchConfig = {
+    ...raydiumProject.launchConfig!,
+    route: {
+      ...raydiumProject.launchConfig!.route,
+      platform: 'raydium',
+      raydiumLiquiditySol: 1,
+      raydiumWithheldTokenPct: 10,
+      burnLiquidity: true
+    }
+  };
+  const engines = buildDeploymentEngineReadiness(raydiumProject, [wallet], activation);
+  assert.equal(engines.createLp.routePlatform, 'raydium');
+  assert.equal(engines.createLp.selectedAdapterId, 'raydium-original-lp-burn');
+  assert.equal(engines.createLp.status, 'protocol-sdk-required');
+  assert.equal(engines.createLp.implementationStatus, 'adapter-missing');
+  assert.ok(engines.createLp.blockers.includes('raydium-original-lp-builder-missing'));
+  assert.ok(engines.createLp.blockers.includes('verified-lp-token-account-required'));
+  assert.ok(!engines.createLp.blockers.includes('lp-burn-transaction-builder-missing'));
+  assert.ok(engines.createLp.blockers.includes('lp-burn-simulation-proof-missing'));
+});
+
+test('LP burn builder creates unsigned transaction only from verified LP inputs', () => {
+  const burn = buildLpBurnTransaction({
+    owner: wallet.address,
+    lpMint: 'BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj',
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    amount: 1,
+    decimals: 9,
+    recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87'
+  });
+  assert.equal(burn.contract, 'bondr-lp-burn-transaction-v1');
+  assert.equal(burn.status, 'built');
+  assert.equal(burn.execution, 'unsigned-lp-burn-transaction-built-no-signing-no-broadcast');
+  assert.equal(burn.requiredSigners[0], wallet.address);
+  assert.equal(typeof burn.transactionBase64, 'string');
+  assert.equal(burn.safety.noSigning, true);
+  assert.equal(burn.safety.requiresVerifiedLpAccount, true);
+});
+
+test('LP burn builder rejects missing verified LP token account', () => {
+  assert.throws(() => buildLpBurnTransaction({
+    owner: wallet.address,
+    lpMint: 'BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj',
+    lpTokenAccount: '',
+    amount: 1,
+    decimals: 9,
+    recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87'
+  }), /lpTokenAccount/);
 });
 
 test('pumpportal create preview names IPFS and mint blockers without calling provider', () => {
@@ -398,6 +531,8 @@ test('deployment readiness separates rehearsal blockers from intentional live ga
   };
   const readiness = buildDeploymentLaunchReadiness(ipfsProject, [wallet], activation);
   assert.equal(readiness.rehearsalStatus, 'ready-for-dry-run-rehearsal');
+  assert.equal(readiness.routeCompleteness.status, 'rehearsal-ready');
+  assert.equal(readiness.routeCompleteness.developed, true);
   assert.deepEqual(readiness.rehearsalBlockers, []);
   assert.deepEqual(readiness.optionalBlockers, []);
   assert.deepEqual(readiness.intentionalLiveGateBlockers, ['deployment-gate-closed', 'broadcast-gate-closed']);
@@ -455,6 +590,22 @@ test('pumpportal build-create blocks returned transaction missing mint signer', 
     assert.equal(result.safety.noSigning, true);
     assert.equal(result.safety.noBroadcast, true);
   }, serializedProviderTransaction({ includeMintSigner: false }));
+});
+
+test('pumpportal build-create preserves provider failure diagnostics', async () => {
+  await withProviderFailure(async (calls) => {
+    const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address, confirmBuild: true });
+    assert.equal(result.status, 'blocked');
+    assert.equal(result.execution, 'blocked-no-provider-call');
+    assert.equal(calls.count, 1);
+    assert.deepEqual(result.blockers, ['pumpportal-build-failed-400']);
+    assert.equal(result.providerResponse?.status, 400);
+    assert.equal(result.providerResponse?.statusText, "Cannot read properties of undefined (reading 'toBuffer')");
+    assert.equal(result.providerResponse?.contentType, 'text/plain; charset=utf-8');
+    assert.equal(result.providerResponse?.bodyPreview, 'Bad Request');
+    assert.ok(result.warnings.includes("Cannot read properties of undefined (reading 'toBuffer')"));
+    assert.ok(result.warnings.includes('Bad Request'));
+  });
 });
 
 test('pumpportal build-create blocks bad mint before provider call', async () => {

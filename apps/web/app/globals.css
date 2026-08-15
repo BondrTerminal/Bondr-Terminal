@@ -15124,7 +15124,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   border-color: rgba(255, 127, 17, 0.58);
   color: #ffb166;
 }
-.launchRouteChoicePanel {
+.launchRouteChoicePanel,
+.launchRouteTabsPanel {
   display: grid;
   grid-template-columns: minmax(220px, 0.28fr) minmax(0, 1fr);
   gap: 10px;
@@ -15134,7 +15135,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   background: rgba(0, 0, 0, 0.18);
 }
 .launchRouteChoiceIntro,
-.launchRouteChoiceButton {
+.launchRouteChoiceButton,
+.launchRouteTabButton {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -15147,7 +15149,8 @@ body > .createProjectModal .professionalCreateProjectShell {
   background: rgba(255, 255, 255, 0.025);
 }
 .launchRouteChoiceIntro span,
-.launchRouteChoiceButton span {
+.launchRouteChoiceButton span,
+.launchRouteTabButton span {
   color: rgba(249, 235, 224, 0.58);
   font-size: 10px;
   font-weight: 950;
@@ -15155,18 +15158,26 @@ body > .createProjectModal .professionalCreateProjectShell {
   text-transform: uppercase;
 }
 .launchRouteChoiceIntro strong,
-.launchRouteChoiceButton strong {
+.launchRouteChoiceButton strong,
+.launchRouteTabButton strong {
   min-width: 0;
   color: #f9ebe0;
   overflow-wrap: anywhere;
 }
 .launchRouteChoiceIntro small,
-.launchRouteChoiceButton small {
+.launchRouteChoiceButton small,
+.launchRouteTabButton small {
   color: rgba(249, 235, 224, 0.66);
   line-height: 1.34;
   overflow-wrap: anywhere;
 }
 .launchRouteChoiceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+.launchRouteTabList {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -15180,6 +15191,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
 }
+.launchRouteTabButton {
+  position: relative;
+  min-height: 122px;
+  padding: 12px 12px 12px 42px;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+}
 .launchRouteChoiceButton input {
   position: absolute;
   top: 14px;
@@ -15188,7 +15208,20 @@ body > .createProjectModal .professionalCreateProjectShell {
   height: 16px;
   accent-color: #ff7f11;
 }
+.launchRouteTabButton input {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  accent-color: #ff7f11;
+}
 .launchRouteChoiceButton:has(input:checked) {
+  border-color: rgba(255, 127, 17, 0.58);
+  background: rgba(255, 127, 17, 0.12);
+}
+.launchRouteTabButton.active,
+.launchRouteTabButton:has(input:checked) {
   border-color: rgba(255, 127, 17, 0.58);
   background: rgba(255, 127, 17, 0.12);
 }
@@ -15203,6 +15236,27 @@ body > .createProjectModal .professionalCreateProjectShell {
   font-style: normal;
   font-weight: 950;
   text-transform: uppercase;
+}
+.launchRouteTabButton em {
+  width: fit-content;
+  margin-top: 2px;
+  padding: 3px 7px;
+  border: 1px solid rgba(35, 206, 107, 0.24);
+  border-radius: 999px;
+  color: #7ee7a6;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.launchRouteChoiceButton:has(input[value="raydium"]:checked) em,
+.launchRouteChoiceButton:has(input[value="raydium"]) em {
+  border-color: rgba(255, 196, 87, 0.28);
+  color: #ffd18a;
+}
+.launchRouteTabButton:has(input[value="raydium"]) em {
+  border-color: rgba(255, 196, 87, 0.28);
+  color: #ffd18a;
 }
 .launchWizardViewport {
   min-height: clamp(680px, 72vh, 1080px);
@@ -15317,6 +15371,74 @@ body > .createProjectModal .professionalCreateProjectShell {
 .routeOnlySegmentStack {
   margin-top: 14px;
 }
+.launchPathPanelStack {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.launchPathPanel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.launchPathPanel[hidden] {
+  display: none !important;
+}
+.launchPathPanelHeader {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.launchPathPanelHeader span,
+.launchPathFieldGroupLabel,
+.raydiumBuilderChecklist span {
+  color: rgba(249, 235, 224, 0.6);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.launchPathPanelHeader strong {
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.launchPathPanelHeader small {
+  color: rgba(249, 235, 224, 0.68);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.raydiumBuilderChecklist {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.raydiumBuilderChecklist div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.raydiumBuilderChecklist div.ready {
+  border-color: rgba(35, 206, 107, 0.26);
+  background: rgba(35, 206, 107, 0.08);
+}
+.raydiumBuilderChecklist div.blocked {
+  border-color: rgba(255, 196, 87, 0.24);
+  background: rgba(255, 196, 87, 0.07);
+}
+.raydiumBuilderChecklist strong {
+  color: #f9ebe0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
 .launchAdapterReadinessCard {
   display: grid;
   gap: 6px;
@@ -15345,6 +15467,52 @@ body > .createProjectModal .professionalCreateProjectShell {
   font-style: normal;
   font-weight: 900;
   text-transform: uppercase;
+}
+.launchAdapterReadinessCard.blocked {
+  border-color: rgba(186, 18, 0, 0.34);
+  background: rgba(186, 18, 0, 0.08);
+}
+.launchAdapterReadinessCard.blocked em {
+  border-color: rgba(255, 196, 87, 0.28);
+  color: #ffd18a;
+}
+.launchCheckboxField {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid rgba(249, 235, 224, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.launchCheckboxField input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff7f11;
+}
+.launchCheckboxField span {
+  color: rgba(249, 235, 224, 0.78);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.launchRouteBlockerNote {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 196, 87, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 196, 87, 0.07);
+}
+.launchRouteBlockerNote strong {
+  color: #ffd18a;
+  font-size: 0.86rem;
+}
+.launchRouteBlockerNote small {
+  color: rgba(249, 235, 224, 0.72);
+  line-height: 1.35;
 }
 .launchSegmentOption,
 .launchBuyModeCard {
@@ -15827,10 +15995,12 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchWizardTopbar,
   .launchWizardTabs,
   .launchRouteChoicePanel,
+  .launchRouteTabsPanel,
   .launchTokenPanel,
   .routeAdapterStrip,
   .launchWalletSetupHeader,
   .launchBuyModeGrid,
+  .raydiumBuilderChecklist,
   .launchOverviewGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15860,12 +16030,15 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchWizardTopbar,
   .launchWizardTabs,
   .launchRouteChoicePanel,
+  .launchRouteTabsPanel,
   .launchRouteChoiceGrid,
+  .launchRouteTabList,
   .launchTokenPanel,
   .routeAdapterStrip,
   .launchSegmentGrid.five,
   .launchSegmentGrid.three,
   .launchSegmentGrid.two,
+  .raydiumBuilderChecklist,
   .launchWalletSetupHeader,
   .launchBuyModeGrid,
   .launchWalletSelectRow,
