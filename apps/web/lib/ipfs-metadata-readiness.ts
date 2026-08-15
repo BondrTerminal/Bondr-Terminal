@@ -18,7 +18,7 @@ export type IpfsMetadataReadiness = {
   status: 'ready-to-pin' | 'blocked' | 'pinned';
   provider: 'pinata';
   providerConfigured: boolean;
-  requiredEnv: ['PINATA_JWT'];
+  requiredEnv: string[];
   optionalEnv: ['IPFS_GATEWAY_URL'];
   blockers: string[];
   warnings: string[];
@@ -40,7 +40,11 @@ type PinataResult = {
 };
 
 function configured() {
-  return Boolean(process.env.PINATA_JWT?.trim());
+  return Boolean(pinataJwt());
+}
+
+export function pinataJwt() {
+  return process.env.PINATA_JWT?.trim() || process.env.BONDR_PINATA_API?.trim() || '';
 }
 
 export function ipfsUri(cid: string) {
@@ -98,7 +102,7 @@ export function buildIpfsMetadataReadiness(project: Project): IpfsMetadataReadin
     status: metadataUri ? 'pinned' : blockers.length ? 'blocked' : 'ready-to-pin',
     provider: 'pinata',
     providerConfigured,
-    requiredEnv: ['PINATA_JWT'],
+    requiredEnv: ['PINATA_JWT', 'BONDR_PINATA_API'],
     optionalEnv: ['IPFS_GATEWAY_URL'],
     blockers,
     warnings,
@@ -124,8 +128,8 @@ function decodeDataUrl(dataUrl: string) {
 }
 
 async function pinataFetch(path: string, init: RequestInit) {
-  const jwt = process.env.PINATA_JWT?.trim();
-  if (!jwt) throw new Error('PINATA_JWT is not configured.');
+  const jwt = pinataJwt();
+  if (!jwt) throw new Error('PINATA_JWT or BONDR_PINATA_API is not configured.');
   const response = await fetch(`https://api.pinata.cloud${path}`, {
     ...init,
     headers: {

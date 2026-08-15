@@ -23,7 +23,7 @@ Sprint 1 of the execution backend spine adds the IPFS metadata pipeline needed b
 - POST with `confirmPin:true` requires:
   - same-origin mutation authorization
   - mutations enabled
-  - `PINATA_JWT`
+  - `PINATA_JWT` or legacy alias `BONDR_PINATA_API`
   - valid token metadata
   - image attached
 - This endpoint only pins image/metadata and stores the metadata URI.
@@ -33,7 +33,7 @@ Sprint 1 of the execution backend spine adds the IPFS metadata pipeline needed b
 
 - Image pin: `POST https://api.pinata.cloud/pinning/pinFileToIPFS`
 - Metadata pin: `POST https://api.pinata.cloud/pinning/pinJSONToIPFS`
-- Auth: `Authorization: Bearer <PINATA_JWT>`
+- Auth: `Authorization: Bearer <PINATA_JWT>`; `BONDR_PINATA_API` is accepted as a backwards-compatible bearer-token alias.
 
 ## Still Blocked
 
@@ -48,4 +48,3 @@ Sprint 1 of the execution backend spine adds the IPFS metadata pipeline needed b
 - Pinata JSON pin docs: https://docs.pinata.cloud/api-reference/endpoint/ipfs/pin-json-to-ipfs
 - Pinata uploading files guide: https://docs.pinata.cloud/files/uploading-files
 - PumpPortal creation docs: https://pumpportal.fun/creation/
-

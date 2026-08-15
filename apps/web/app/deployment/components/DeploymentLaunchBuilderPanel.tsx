@@ -329,7 +329,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         <div>
           <span>IPFS metadata</span>
           <strong>Pinata image + metadata JSON</strong>
-          <small>Preview is read-only. Pinning requires `PINATA_JWT` and the explicit pin action.</small>
+          <small>Preview is read-only. Pinning requires `PINATA_JWT` or `BONDR_PINATA_API` and the explicit pin action.</small>
         </div>
         <span className="deploymentBuilderActionRow">
           <button className="button secondary" type="button" onClick={() => void requestIpfsMetadata(false)} disabled={ipfsLoading}>

@@ -724,7 +724,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <small>{ipfsState?.readiness?.metadataUri ?? project.metadata.metadataUri ?? (currentIpfsBlockers.join(' · ') || 'Pin token image and metadata before PumpPortal create.')}</small>
           </div>
           <div className="deploymentHarnessStatusGrid">
-            <div><span>Provider</span><strong>{ipfsState?.readiness?.providerConfigured ? 'configured' : 'missing'}</strong><small>PINATA_JWT</small></div>
+            <div><span>Provider</span><strong>{ipfsState?.readiness?.providerConfigured ? 'configured' : 'missing'}</strong><small>PINATA_JWT or BONDR_PINATA_API</small></div>
             <div><span>Image source</span><strong>{ipfsState?.readiness?.image?.source ?? 'unknown'}</strong><small>{ipfsState?.readiness?.image?.bytesKnown ? 'bytes known' : 'bytes unavailable'}</small></div>
             <div><span>Metadata URI</span><strong>{project.metadata.metadataUri ? 'saved' : 'missing'}</strong><small>{project.metadata.metadataUri ?? 'ipfs:// required'}</small></div>
           </div>

@@ -1,6 +1,7 @@
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
+import { pinataJwt } from './ipfs-metadata-readiness';
 import { buildPumpPortalCreatePreview } from './pumpportal-deploy-readiness';
 import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 
@@ -169,10 +170,10 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     },
     pumpPortalCreateReadiness: pumpPortalCreatePreview,
     ipfsMetadataReadiness: {
-      status: ipfsReady ? 'ready' : process.env.PINATA_JWT ? 'pinning-provider-configured-upload-needed' : 'provider-required',
+      status: ipfsReady ? 'ready' : pinataJwt() ? 'pinning-provider-configured-upload-needed' : 'provider-required',
       imageUrl: project.metadata.imageUrl || null,
       metadataUri: project.metadata.metadataUri ?? null,
-      requiredEnv: ['PINATA_JWT'],
+      requiredEnv: ['PINATA_JWT', 'BONDR_PINATA_API'],
       optionalEnv: ['IPFS_GATEWAY_URL'],
       blockers: [
         project.metadata.imageUrl ? null : 'token-image-missing',

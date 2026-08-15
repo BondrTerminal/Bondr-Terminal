@@ -244,6 +244,24 @@ test('ipfs metadata readiness validates token metadata without pinning', () => {
   assert.equal(readiness.metadataJson.symbol, 'ASD');
 });
 
+test('ipfs metadata readiness accepts BONDR_PINATA_API as a Pinata bearer alias', () => {
+  const previousJwt = process.env.PINATA_JWT;
+  const previousAlias = process.env.BONDR_PINATA_API;
+  try {
+    delete process.env.PINATA_JWT;
+    process.env.BONDR_PINATA_API = 'test-pinata-bearer-token';
+    const readiness = buildIpfsMetadataReadiness(project);
+    assert.equal(readiness.providerConfigured, true);
+    assert.equal(readiness.blockers.includes('pinata-jwt-missing'), false);
+    assert.deepEqual(readiness.requiredEnv, ['PINATA_JWT', 'BONDR_PINATA_API']);
+  } finally {
+    if (previousJwt === undefined) delete process.env.PINATA_JWT;
+    else process.env.PINATA_JWT = previousJwt;
+    if (previousAlias === undefined) delete process.env.BONDR_PINATA_API;
+    else process.env.BONDR_PINATA_API = previousAlias;
+  }
+});
+
 test('token metadata json includes image and optional social extensions', () => {
   const metadata = buildTokenMetadataJson(project, 'ipfs://bafyimage');
   assert.equal(metadata.name, 'sda');

@@ -1,5 +1,6 @@
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { pinataJwt } from './ipfs-metadata-readiness';
 import { createHash } from 'node:crypto';
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 
@@ -181,7 +182,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
   const image = imageSource(imageUrl);
   const imageAlreadyIpfs = isIpfsUri(imageUrl);
   const metadataUri = isIpfsUri(storedMetadataUri) ? storedMetadataUri : imageAlreadyIpfs ? imageUrl : null;
-  const providerConfigured = Boolean(process.env.PINATA_JWT);
+  const providerConfigured = Boolean(pinataJwt());
   const tokenName = project.metadata.name || project.name;
   const tokenSymbol = project.metadata.symbol || project.ticker;
   const description = project.metadata.description;
@@ -236,7 +237,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
     },
     ipfs: {
       status: imageAlreadyIpfs ? 'ready' : imageUrl ? providerConfigured ? 'provider-configured-upload-needed' : 'provider-required' : 'image-required',
-      requiredEnv: ['PINATA_JWT'],
+      requiredEnv: ['PINATA_JWT', 'BONDR_PINATA_API'],
       optionalEnv: ['IPFS_GATEWAY_URL'],
       providerConfigured,
       imageUrl,
