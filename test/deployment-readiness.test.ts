@@ -4,7 +4,7 @@ import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../ap
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
-import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
+import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
@@ -443,4 +443,31 @@ test('task readiness blocks durable worker and fake-volume policy gaps', () => {
   assert.ok(readiness.blockers.includes('anti-fake-volume-policy-required'));
   assert.equal(readiness.safety.noAutonomousTrading, true);
   assert.equal(readiness.safety.noFakeVolume, true);
+});
+
+test('task queue preview models queue records without worker execution', () => {
+  const preview = buildTaskQueuePreview(project, [wallet], activation);
+  assert.equal(preview.contract, 'bondr-task-queue-preview-v1');
+  assert.equal(preview.execution, 'task-queue-preview-only-no-worker-no-trading');
+  assert.ok(preview.blockers.includes('task-name-required'));
+  assert.ok(preview.blockers.includes('task-wallet-allowlist-required'));
+  assert.ok(preview.blockers.includes('durable-task-worker-missing'));
+  assert.equal(preview.safety.noAutonomousTrading, true);
+});
+
+test('task queue preview accepts safe task shape but keeps worker and broadcast blocked', () => {
+  const preview = buildTaskQueuePreview(project, [wallet], activation, {
+    taskName: 'standard rehearsal task',
+    walletIds: ['dev-wallet'],
+    schedule: 'interval',
+    intervalSeconds: 60,
+    maxRuns: 3,
+    cooldownSeconds: 60,
+    riskRuleId: 'standard-launch-rehearsal'
+  });
+  assert.equal(preview.status, 'preview-ready');
+  assert.ok(preview.blockers.includes('durable-task-worker-missing'));
+  assert.ok(preview.blockers.includes('task-queue-persistence-missing'));
+  assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+  assert.equal(preview.task.paused, true);
 });

@@ -149,3 +149,64 @@ export function buildTaskExecutionReadiness(project: Project | null, wallets: Wa
     execution: 'readiness-only-no-task-execution' as const
   };
 }
+
+export type TaskQueuePreviewInput = {
+  taskName?: string | null;
+  walletIds?: string[];
+  schedule?: 'manual' | 'interval' | 'timestamp';
+  intervalSeconds?: number;
+  maxRuns?: number;
+  cooldownSeconds?: number;
+  riskRuleId?: string | null;
+  paused?: boolean;
+};
+
+export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: TaskQueuePreviewInput = {}) {
+  const readiness = buildTaskExecutionReadiness(project, wallets, activation);
+  const walletIds = (input.walletIds ?? []).filter((walletId) => wallets.some((wallet) => wallet.id === walletId));
+  const maxRuns = typeof input.maxRuns === 'number' && Number.isFinite(input.maxRuns) ? input.maxRuns : 0;
+  const cooldownSeconds = typeof input.cooldownSeconds === 'number' && Number.isFinite(input.cooldownSeconds) ? input.cooldownSeconds : 0;
+  const intervalSeconds = typeof input.intervalSeconds === 'number' && Number.isFinite(input.intervalSeconds) ? input.intervalSeconds : 0;
+  const blockers = [
+    input.taskName?.trim() ? null : 'task-name-required',
+    walletIds.length ? null : 'task-wallet-allowlist-required',
+    input.schedule ? null : 'task-schedule-required',
+    input.schedule === 'interval' && intervalSeconds <= 0 ? 'task-interval-required' : null,
+    maxRuns > 0 ? null : 'task-max-runs-required',
+    cooldownSeconds > 0 ? null : 'task-cooldown-required',
+    input.riskRuleId?.trim() ? null : 'task-risk-rule-binding-required',
+    'durable-task-worker-missing',
+    'task-queue-persistence-missing',
+    activation.broadcastEnabled ? null : 'broadcast-gate-closed'
+  ].filter((item): item is string => Boolean(item));
+  return {
+    contract: 'bondr-task-queue-preview-v1' as const,
+    status: blockers.filter((blocker) => !['durable-task-worker-missing', 'task-queue-persistence-missing', 'broadcast-gate-closed'].includes(blocker)).length ? 'blocked' : 'preview-ready',
+    projectId: project?.id ?? null,
+    task: {
+      taskName: input.taskName?.trim() || null,
+      walletIds,
+      schedule: input.schedule ?? null,
+      intervalSeconds,
+      maxRuns,
+      cooldownSeconds,
+      riskRuleId: input.riskRuleId?.trim() || null,
+      paused: input.paused !== false
+    },
+    lifecycle: {
+      create: 'preview-only',
+      pause: 'required-before-live-worker',
+      resume: 'required-before-live-worker',
+      cancel: 'required-before-live-worker'
+    },
+    readiness,
+    blockers,
+    safety: {
+      noAutonomousTrading: true,
+      noBackgroundBroadcast: true,
+      noTaskPersistence: true,
+      noFakeVolume: true
+    },
+    execution: 'task-queue-preview-only-no-worker-no-trading' as const
+  };
+}
