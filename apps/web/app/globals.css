@@ -14034,6 +14034,100 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: rgba(249, 235, 224, 0.7);
   line-height: 1.38;
 }
+.deploymentOpsConsole {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.13);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 127, 17, 0.075), transparent 42%),
+    rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 1px 0 rgba(249, 235, 224, 0.05);
+}
+.deploymentOpsVerdict,
+.deploymentOpsMetrics > div,
+.deploymentStagePill {
+  min-width: 0;
+}
+.deploymentOpsVerdict {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 12px;
+  border-left: 3px solid #ff7f11;
+  background: rgba(0, 0, 0, 0.22);
+}
+.deploymentOpsVerdict span,
+.deploymentOpsMetrics span,
+.deploymentStagePill span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.deploymentOpsVerdict strong {
+  color: #f9ebe0;
+  font-size: clamp(1.2rem, 1.8vw, 1.7rem);
+  line-height: 1.05;
+}
+.deploymentOpsVerdict small,
+.deploymentOpsMetrics small,
+.deploymentStagePill small {
+  color: rgba(249, 235, 224, 0.66);
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+.deploymentOpsMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.deploymentOpsMetrics > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.deploymentOpsMetrics strong,
+.deploymentStagePill strong {
+  color: #f9ebe0;
+  overflow-wrap: anywhere;
+}
+.deploymentStageStrip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+  padding-top: 2px;
+}
+.deploymentStagePill {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid rgba(249, 235, 224, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.026);
+}
+.deploymentStagePill.ready {
+  border-color: rgba(35, 206, 107, 0.24);
+  background: rgba(35, 206, 107, 0.05);
+}
+.deploymentStagePill.review {
+  border-color: rgba(255, 177, 102, 0.24);
+  background: rgba(255, 177, 102, 0.052);
+}
+.deploymentStagePill.blocked {
+  border-color: rgba(255, 77, 109, 0.22);
+  background: rgba(255, 77, 109, 0.047);
+}
+.deploymentStagePill.ready strong { color: #7ee7a6; }
+.deploymentStagePill.review strong { color: #ffb166; }
+.deploymentStagePill.blocked strong { color: #ff8ca3; }
 .deploymentCockpitGrid {
   display: grid;
   grid-template-columns: minmax(0, 2.85fr) minmax(280px, 0.62fr);
@@ -14920,6 +15014,14 @@ body > .createProjectModal .professionalCreateProjectShell {
   }
 }
 @media (max-width: 1180px) {
+  .deploymentOpsConsole,
+  .deploymentOpsMetrics,
+  .deploymentStageStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deploymentOpsVerdict {
+    grid-column: 1 / -1;
+  }
   .deploymentCockpitGrid {
     grid-template-columns: 1fr;
   }
@@ -14953,6 +15055,9 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 @media (max-width: 760px) {
   .deploymentCommandBar,
+  .deploymentOpsConsole,
+  .deploymentOpsMetrics,
+  .deploymentStageStrip,
   .deploymentCommandStats,
   .deploymentRailStats,
   .pumpPortalPreviewPanel,
@@ -15514,19 +15619,19 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchReviewBoard {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 .launchGoNoGoPanel {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
   align-items: center;
-  padding: 16px;
-  border: 1px solid rgba(255, 127, 17, 0.22);
+  padding: 14px;
+  border: 1px solid rgba(249, 235, 224, 0.13);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 127, 17, 0.12), rgba(0, 0, 0, 0.08)),
-    rgba(0, 0, 0, 0.24);
+    linear-gradient(90deg, rgba(255, 127, 17, 0.08), transparent 58%),
+    rgba(0, 0, 0, 0.28);
 }
 .launchGoNoGoMeter {
   --launch-score: 0%;
@@ -15558,7 +15663,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   padding: 12px;
   border: 1px solid rgba(249, 235, 224, 0.1);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.24);
 }
 .launchSequencePanel > div > span {
   grid-row: span 2;
@@ -15617,7 +15722,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   padding: 12px;
   border: 1px solid rgba(249, 235, 224, 0.1);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.026);
+  background: rgba(0, 0, 0, 0.2);
 }
 .executionReadinessGrid span {
   color: rgba(249, 235, 224, 0.62);
@@ -15639,9 +15744,9 @@ body > .createProjectModal .professionalCreateProjectShell {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid rgba(255, 127, 17, 0.18);
+  border: 1px solid rgba(249, 235, 224, 0.12);
   border-radius: 8px;
-  background: rgba(255, 127, 17, 0.05);
+  background: rgba(0, 0, 0, 0.24);
 }
 .executionTruthMapHeader {
   display: grid;
@@ -15731,6 +15836,10 @@ body > .createProjectModal .professionalCreateProjectShell {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 10px;
   align-items: stretch;
+  padding: 10px;
+  border: 1px solid rgba(255, 127, 17, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 127, 17, 0.045);
 }
 .launchFinalActionPanel button,
 .launchFinalActionPanel .preLiveDryRunAction button {
@@ -15742,6 +15851,11 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: #f9ebe0;
   font-weight: 950;
   cursor: pointer;
+}
+.launchFinalActionPanel button:hover,
+.launchFinalActionPanel .preLiveDryRunAction button:hover {
+  border-color: rgba(255, 127, 17, 0.46);
+  background: rgba(255, 127, 17, 0.16);
 }
 .launchFinalActionPanel .preLiveDryRunAction {
   display: grid;
@@ -15760,6 +15874,9 @@ body > .createProjectModal .professionalCreateProjectShell {
   background: rgba(255, 255, 255, 0.04);
 }
 @media (max-width: 1120px) {
+  .deploymentOpsConsole,
+  .deploymentOpsMetrics,
+  .deploymentStageStrip,
   .launchOperatorSummary,
   .launchSequencePanel,
   .launchFinalReviewGrid,

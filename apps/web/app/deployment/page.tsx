@@ -57,6 +57,16 @@ function GatePill({ label, enabled }: { label: string; enabled: boolean }) {
   return <span className={enabled ? 'deploymentGatePill on' : 'deploymentGatePill'}>{label}: {enabled ? 'on' : 'off'}</span>;
 }
 
+function StagePill({ label, status, detail }: { label: string; status: 'ready' | 'review' | 'blocked'; detail: string }) {
+  return (
+    <div className={`deploymentStagePill ${status}`}>
+      <span>{label}</span>
+      <strong>{status}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
 function RouteAdapterStrip({ activePath }: { activePath?: string }) {
   return (
     <section className="routeAdapterStrip" aria-label="Launch route adapters">
@@ -115,6 +125,21 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const maxBuySol = participatingPlan.reduce((sum, entry) => sum + entry.maxBuySol, 0);
   const dryRun = activeProject?.preLiveDryRun;
   const eventRows = activeProject ? eventsForProject(activeProject.id, store).slice(0, 6) : [];
+  const launchBlockers = launchReadiness?.blockers ?? [];
+  const primaryBlocker = launchBlockers.find((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker)) ?? launchBlockers[0] ?? activePreflight.find((check) => check.status === 'blocked')?.detail ?? 'Save configuration, run dry-run, then compile shadow plan.';
+  const commandVerdict = !activeProject
+    ? 'Project required'
+    : dryRun?.status === 'pass' && !launchBlockers.filter((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker)).length
+      ? 'Rehearsal ready'
+      : 'Rehearsal blocked';
+  const stagePills = activeProject ? [
+    { label: 'Token', status: activeProject.metadata.name && activeProject.metadata.symbol && activeProject.metadata.description && activeProject.metadata.imageUrl ? 'ready' as const : 'blocked' as const, detail: activeProject.metadata.symbol || activeProject.ticker },
+    { label: 'IPFS', status: launchReadiness?.ipfsMetadataReadiness.status === 'ready' ? 'ready' as const : 'blocked' as const, detail: launchReadiness?.ipfsMetadataReadiness.status ?? 'missing' },
+    { label: 'Signer', status: launchReadiness?.signingOrchestration.blockers.length ? 'review' as const : 'ready' as const, detail: launchReadiness?.devWallet?.shortAddress ?? 'wallet missing' },
+    { label: 'Shadow', status: 'review' as const, detail: 'compile packet' },
+    { label: 'Relay', status: launchReadiness?.relayReadiness.relayEnabled ? 'ready' as const : 'blocked' as const, detail: launchReadiness?.relayReadiness.status ?? 'Jito disabled' },
+    { label: 'Gates', status: activation.deploymentEnabled && activation.broadcastEnabled ? 'ready' as const : 'blocked' as const, detail: activation.readinessLevel }
+  ] : [];
 
   return (
     <main>
@@ -145,6 +170,23 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
         <section className="deploymentCockpitNotice" aria-label="Deployment safety status">
           <strong>{activation.deploymentEnabled ? 'Deployment gate open' : 'Deployment gate closed'}</strong>
           <p>Configure token info, dev wallet, bundle wallets, sniper wallets, and Task Manager rules here. No token launch, wallet funding, signature request, or deployment broadcast happens while the deployment gate is closed.</p>
+        </section>
+
+        <section className="deploymentOpsConsole" aria-label="Launch command center">
+          <div className="deploymentOpsVerdict">
+            <span>Launch state</span>
+            <strong>{commandVerdict}</strong>
+            <small>{primaryBlocker}</small>
+          </div>
+          <div className="deploymentOpsMetrics">
+            <div><span>Readiness</span><strong>{activeReadiness ? `${activeReadiness.score}%` : '0%'}</strong><small>{activeReadiness ? `${activeReadiness.ready}/${activeReadiness.total} base checks` : 'project missing'}</small></div>
+            <div><span>Dry-run</span><strong>{dryRun?.status ?? 'not run'}</strong><small>{dryRun?.blockers.length ? dryRun.blockers.join(', ') : 'run after save'}</small></div>
+            <div><span>Shadow packet</span><strong>available</strong><small>/api/execution/shadow-plan</small></div>
+            <div><span>Risk cap</span><strong>{maxBuySol.toFixed(3)} SOL</strong><small>{participatingPlan.length} active wallet(s)</small></div>
+          </div>
+          <div className="deploymentStageStrip">
+            {stagePills.map((item) => <StagePill key={item.label} {...item} />)}
+          </div>
         </section>
 
         <section className="deploymentCockpitGrid" aria-label="Deployment cockpit">
