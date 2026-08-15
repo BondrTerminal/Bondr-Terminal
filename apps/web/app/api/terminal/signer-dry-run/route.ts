@@ -38,12 +38,14 @@ function previewBlockers(action: TransactionPreviewAction, failed: boolean, fail
   return blockers;
 }
 
-function summarizeSimulationFailure(err: unknown, logs: string[] | null | undefined) {
+function summarizeSimulationFailure(err: unknown, logs: string[] | null | undefined, action: TransactionPreviewAction) {
   const errText = typeof err === 'string' ? err : JSON.stringify(err ?? 'unknown');
   const joinedLogs = (logs ?? []).join(' | ');
   const text = `${errText} ${joinedLogs}`.toLowerCase();
   if (text.includes('insufficient funds') || text.includes('insufficient lamports') || text.includes('accountnotfound') || text.includes('custom program error: 0x1')) {
-    return 'Simulation failed: connected signer appears to have insufficient SOL/token balance for this unsigned swap and network fees.';
+    return action === 'launch'
+      ? 'Simulation failed: deployer signer appears to have insufficient SOL for Pump.fun create, initial buy, rent, and network fees.'
+      : 'Simulation failed: connected signer appears to have insufficient SOL/token balance for this unsigned swap and network fees.';
   }
   if (text.includes('blockhash not found') || text.includes('blockhashnotfound')) return 'Simulation failed: transaction blockhash expired before simulation. Rebuild the unsigned transaction and simulate again.';
   if (text.includes('slippage') || text.includes('price impact')) return 'Simulation failed: route/slippage constraints no longer hold. Refresh quote and rebuild.';
@@ -148,7 +150,7 @@ export async function POST(request: Request) {
       ? await connection.simulateTransaction(transaction, { sigVerify: false, replaceRecentBlockhash: true })
       : await connection.simulateTransaction(transaction, undefined, false);
     const failed = Boolean(simulation.value.err);
-    const failureSummary = failed ? summarizeSimulationFailure(simulation.value.err, simulation.value.logs) : null;
+    const failureSummary = failed ? summarizeSimulationFailure(simulation.value.err, simulation.value.logs, action) : null;
     return Response.json({
       status: failed ? 'error' : 'ok',
       observedAt,

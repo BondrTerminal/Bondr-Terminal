@@ -56,6 +56,7 @@ type PumpPortalBuildState = {
     blockers: string[];
     warnings: string[];
     safety: { providerCallEnabled: boolean; confirmBuild: boolean };
+    builder?: { selected: string; pumpPortalEnabled: boolean; directSdkEnabled: boolean; directSdkMode?: string };
     requestBody: { publicKey: string | null; mint: string | null; amount: number; slippage: number; priorityFee: number; pool: string };
     build?: { transactionBytes: number; transactionHash: string; transactionBase64?: string; messageHash: string; requiredSigners: string[]; mint: string; feePayer: string | null; programs: string[] };
     intent?: { id: string; status: string; expectedSigner: string; expectedMint: string; transactionMessageHash: string | null; expiresAt: string } | null;
@@ -606,6 +607,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         <div className="pumpPortalPreviewResult">
           <div><span>Build status</span><strong>{pumpPortalBuild.result?.status ?? pumpPortalBuild.status ?? 'unknown'}</strong><small>{pumpPortalBuild.result?.execution ?? pumpPortalBuild.error ?? 'no provider call'}</small></div>
           <div><span>Provider call</span><strong>{pumpPortalBuild.result?.safety.providerCallEnabled ? 'enabled' : 'disabled'}</strong><small>confirm {pumpPortalBuild.result?.safety.confirmBuild ? 'yes' : 'no'}</small></div>
+          <div><span>Builder</span><strong>{pumpPortalBuild.result?.builder?.selected ?? 'pumpportal-local-create'}</strong><small>{pumpPortalBuild.result?.builder?.directSdkMode ?? (pumpPortalBuild.result?.builder?.directSdkEnabled ? 'direct SDK enabled' : 'PumpPortal Local')}</small></div>
           <div><span>Mint</span><strong>{short(pumpPortalBuild.result?.requestBody.mint)}</strong><small>fee payer {short(pumpPortalBuild.result?.build?.feePayer)}</small></div>
           <div><span>Unsigned bytes</span><strong>{pumpPortalBuild.result?.build ? `${pumpPortalBuild.result.build.transactionBytes} bytes` : 'not built'}</strong><small>{pumpPortalBuild.result?.build?.transactionBase64 ? 'handoff ready' : short(pumpPortalBuild.result?.build?.transactionHash)}</small></div>
           <div><span>Intent</span><strong>{short(pumpPortalBuild.result?.intent?.id)}</strong><small>{pumpPortalBuild.result?.intent?.status ?? 'not bound'}</small></div>

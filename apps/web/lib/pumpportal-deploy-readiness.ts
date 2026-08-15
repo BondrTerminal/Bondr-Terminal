@@ -2,6 +2,7 @@ import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import { pinataJwt } from './ipfs-metadata-readiness';
 import { createIntentAsync, hashBase64Transaction, type TerminalIntent } from './live-store';
+import { buildPumpFunDirectCreateTransaction, pumpFunDirectBuildEnabled, type PumpFunDirectCreateBuild } from './pumpfun-direct-create-builder';
 import { decodeTransactionPolicy } from './transaction-policy';
 import { createHash } from 'node:crypto';
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
@@ -135,6 +136,12 @@ export type PumpPortalBuildCreateResult = {
     contentType: string;
     bodyPreview?: string;
   };
+  builder: {
+    selected: 'pumpportal-local-create' | 'pump-sdk-direct-create';
+    pumpPortalEnabled: boolean;
+    directSdkEnabled: boolean;
+    directSdkMode?: PumpFunDirectCreateBuild['mode'];
+  };
   execution: 'blocked-no-provider-call' | 'provider-build-disabled-no-call' | 'provider-build-policy-blocked-no-signing-no-broadcast' | 'unsigned-create-transaction-built-no-signing-no-broadcast';
 };
 
@@ -205,7 +212,10 @@ function normalizeSerializedTransaction(payload: ArrayBuffer) {
   };
 }
 
-function inspectReturnedCreateTransaction(build: ReturnType<typeof normalizeSerializedTransaction>, requestBody: PumpPortalCreatePreview['payloadPreview']) {
+function inspectReturnedCreateTransaction(build: {
+  requiredSigners: string[];
+  feePayer: string | null;
+}, requestBody: PumpPortalCreatePreview['payloadPreview']) {
   const required = new Set(build.requiredSigners);
   return [
     requestBody.publicKey && build.feePayer === requestBody.publicKey ? null : 'pumpportal-fee-payer-mismatch',
@@ -373,6 +383,8 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
     connectedSigner && requestBody.publicKey && connectedSigner !== requestBody.publicKey ? 'browser-signer-dev-wallet-mismatch' : null
   ].filter((item): item is string => Boolean(item));
   const enabled = providerBuildEnabled();
+  const directEnabled = pumpFunDirectBuildEnabled();
+  const selectedBuilder: PumpPortalBuildCreateResult['builder']['selected'] = directEnabled ? 'pump-sdk-direct-create' : 'pumpportal-local-create';
   const confirmBuild = input.confirmBuild === true;
   const includeUnsignedTransaction = input.includeUnsignedTransaction === true;
   const shouldCreateIntent = input.createIntent === true;
@@ -390,17 +402,105 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
       noSigning: true as const,
       noBroadcast: true as const,
       noPrivateKeys: true as const,
-      providerCallEnabled: enabled,
+      providerCallEnabled: enabled || directEnabled,
       confirmBuild,
       deploymentGateIgnoredForBuildOnly: true as const
+    },
+    builder: {
+      selected: selectedBuilder,
+      pumpPortalEnabled: enabled,
+      directSdkEnabled: directEnabled
     }
   };
 
   if (blockers.length) {
     return { ...base, status: 'blocked', execution: 'blocked-no-provider-call' };
   }
-  if (!enabled || !confirmBuild) {
-    return { ...base, status: 'provider-build-disabled', blockers: enabled ? ['explicit-confirm-build-required'] : ['pumpportal-build-disabled'], execution: 'provider-build-disabled-no-call' };
+  if (!enabled && !directEnabled) {
+    return { ...base, status: 'provider-build-disabled', blockers: ['pumpportal-build-disabled', 'pump-direct-build-disabled'], execution: 'provider-build-disabled-no-call' };
+  }
+  if (!confirmBuild) {
+    return { ...base, status: 'provider-build-disabled', blockers: ['explicit-confirm-build-required'], execution: 'provider-build-disabled-no-call' };
+  }
+
+  if (directEnabled) {
+    try {
+      const build = await buildPumpFunDirectCreateTransaction({
+        publicKey: requestBody.publicKey,
+        tokenMetadata: requestBody.tokenMetadata,
+        mint,
+        amount: requestBody.amount,
+        tokenMode: project.launchConfig?.route.tokenMode ?? 'classic'
+      });
+      const returnedPolicyBlockers = inspectReturnedCreateTransaction(build, requestBody);
+      const inspectedBuild = {
+        transactionBytes: build.transactionBytes,
+        transactionHash: build.transactionHash,
+        requiredSigners: build.requiredSigners,
+        feePayer: build.feePayer,
+        messageHash: build.messageHash,
+        programs: build.programs,
+        accountKeys: build.accountKeys,
+        usesAddressLookupTables: build.usesAddressLookupTables,
+        mint: build.mint,
+        ...(includeUnsignedTransaction ? { transactionBase64: build.transactionBase64 } : {})
+      };
+      if (returnedPolicyBlockers.length) {
+        return {
+          ...base,
+          builder: { ...base.builder, directSdkMode: build.mode },
+          status: 'blocked',
+          build: inspectedBuild,
+          blockers: returnedPolicyBlockers,
+          execution: 'provider-build-policy-blocked-no-signing-no-broadcast'
+        };
+      }
+      const intent = shouldCreateIntent
+        ? await createIntentAsync({
+          expectedSigner: requestBody.publicKey!,
+          expectedMint: mint!,
+          expectedSide: 'buy',
+          expectedAmount: String(requestBody.amount),
+          slippageBps: Math.round(requestBody.slippage * 100),
+          allowedPrograms: build.programs,
+          requiredAccounts: Array.from(new Set([requestBody.publicKey!, mint!, ...build.requiredSigners])),
+          sourceRoute: '/api/deployment/pumpportal/build-create',
+          orderId: null,
+          bundleId: null,
+          quoteHash: null,
+          routeHash: hashBase64Transaction(build.transactionBase64),
+          transactionMessageHash: build.messageHash,
+          note: `Pump.fun direct SDK ${build.mode} transaction built and bound for client-side signing.`,
+          status: 'transaction_built'
+        })
+        : null;
+      return {
+        ...base,
+        builder: { ...base.builder, directSdkMode: build.mode },
+        status: 'built',
+        build: inspectedBuild,
+        intent: intent ? {
+          id: intent.id,
+          status: intent.status,
+          expectedSigner: intent.expectedSigner,
+          expectedMint: intent.expectedMint,
+          transactionMessageHash: intent.transactionMessageHash,
+          allowedPrograms: intent.allowedPrograms,
+          requiredAccounts: intent.requiredAccounts,
+          expiresAt: intent.expiresAt
+        } : null,
+        warnings: [...preview.warnings, `direct Pump.fun SDK builder used: ${build.mode}`],
+        execution: 'unsigned-create-transaction-built-no-signing-no-broadcast'
+      };
+    } catch (error) {
+      return {
+        ...base,
+        status: 'blocked',
+        blockers: ['pump-direct-build-failed'],
+        warnings: [...preview.warnings, error instanceof Error ? error.message : 'Pump.fun direct SDK builder failed.'],
+        execution: 'blocked-no-provider-call'
+      };
+    }
   }
 
   const response = await fetch(tradeLocalUrl(), {

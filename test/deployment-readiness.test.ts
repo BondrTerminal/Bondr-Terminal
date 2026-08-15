@@ -567,7 +567,9 @@ test('pumpportal build-create stays provider-disabled without signing or broadca
   assert.equal(result.contract, 'bondr-pumpportal-build-create-v1');
   assert.equal(result.status, 'provider-build-disabled');
   assert.equal(result.execution, 'provider-build-disabled-no-call');
-  assert.deepEqual(result.blockers, ['pumpportal-build-disabled']);
+  assert.deepEqual(result.blockers, ['pumpportal-build-disabled', 'pump-direct-build-disabled']);
+  assert.equal(result.builder.selected, 'pumpportal-local-create');
+  assert.equal(result.builder.directSdkEnabled, false);
   assert.equal(result.safety.noSigning, true);
   assert.equal(result.safety.noBroadcast, true);
   assert.equal(result.requestBody.action, 'create');
@@ -631,9 +633,22 @@ test('deployment launch builder stages signed PumpPortal create packets for sign
   assert.ok(source.includes("fetch('/api/terminal/signed-review'"));
   assert.ok(source.includes("fetch('/api/send-signed-transaction'"));
   assert.ok(source.includes("operation: 'launch'"));
+  assert.ok(source.includes('builder?.selected'));
   assert.ok(source.includes('Review Signed'));
   assert.ok(source.includes('Submit Signed'));
   assert.ok(source.includes('safeToBroadcastIfLiveEnabled'));
+});
+
+test('pump direct SDK adapter stays gated behind explicit env and shares handoff shape', () => {
+  const source = readFileSync(new URL('../apps/web/lib/pumpportal-deploy-readiness.ts', import.meta.url), 'utf8');
+  const directSource = readFileSync(new URL('../apps/web/lib/pumpfun-direct-create-builder.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("selected: 'pumpportal-local-create' | 'pump-sdk-direct-create'"));
+  assert.ok(directSource.includes('PUMP_DIRECT_BUILD_ENABLED'));
+  assert.ok(source.includes('buildPumpFunDirectCreateTransaction'));
+  assert.ok(source.includes("direct Pump.fun SDK builder used"));
+  assert.ok(directSource.includes('@pump-fun/pump-sdk'));
+  assert.ok(directSource.includes('createAndBuyInstructions'));
+  assert.ok(directSource.includes('createV2AndBuyInstructions'));
 });
 
 test('deployment create simulation and broadcast previews use launch semantics', () => {
@@ -641,6 +656,7 @@ test('deployment create simulation and broadcast previews use launch semantics',
   const sendSource = readFileSync(new URL('../apps/web/app/api/send-signed-transaction/route.ts', import.meta.url), 'utf8');
   assert.ok(signerDryRunSource.includes("action === 'create'"));
   assert.ok(signerDryRunSource.includes("return 'launch'"));
+  assert.ok(signerDryRunSource.includes('Pump.fun create, initial buy, rent, and network fees'));
   assert.ok(sendSource.includes("body?.operation === 'launch'"));
   assert.ok(sendSource.includes("return 'launch'"));
 });
