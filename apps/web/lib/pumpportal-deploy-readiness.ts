@@ -1,6 +1,8 @@
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import { pinataJwt } from './ipfs-metadata-readiness';
+import { createIntentAsync, hashBase64Transaction, type TerminalIntent } from './live-store';
+import { decodeTransactionPolicy } from './transaction-policy';
 import { createHash } from 'node:crypto';
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 
@@ -82,6 +84,8 @@ export type PumpPortalBuildCreateInput = {
   mintPublicKey?: string | null;
   connectedSigner?: string | null;
   confirmBuild?: boolean;
+  includeUnsignedTransaction?: boolean;
+  createIntent?: boolean;
 };
 
 export type PumpPortalBuildCreateResult = {
@@ -109,7 +113,22 @@ export type PumpPortalBuildCreateResult = {
     requiredSigners: string[];
     mint: string;
     feePayer: string | null;
+    transactionBase64?: string;
+    messageHash: string;
+    programs: string[];
+    accountKeys: string[];
+    usesAddressLookupTables: boolean;
   };
+  intent?: {
+    id: string;
+    status: TerminalIntent['status'];
+    expectedSigner: string;
+    expectedMint: string;
+    transactionMessageHash: string | null;
+    allowedPrograms: string[];
+    requiredAccounts: string[];
+    expiresAt: string;
+  } | null;
   providerResponse?: {
     status: number;
     statusText: string;
@@ -168,14 +187,21 @@ function buildStructuralBlockers(preview: PumpPortalCreatePreview) {
 
 function normalizeSerializedTransaction(payload: ArrayBuffer) {
   const bytes = Buffer.from(payload);
+  const transactionBase64 = bytes.toString('base64');
   const transaction = VersionedTransaction.deserialize(bytes);
+  const decoded = decodeTransactionPolicy(bytes);
   return {
     transactionBytes: bytes.length,
     transactionHash: createHash('sha256').update(bytes).digest('hex'),
+    transactionBase64,
     requiredSigners: transaction.message.staticAccountKeys
       .slice(0, transaction.message.header.numRequiredSignatures)
       .map((key) => key.toBase58()),
-    feePayer: transaction.message.staticAccountKeys[0]?.toBase58() ?? null
+    feePayer: transaction.message.staticAccountKeys[0]?.toBase58() ?? null,
+    messageHash: decoded.messageHash,
+    programs: decoded.programs,
+    accountKeys: decoded.accountKeys,
+    usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables)
   };
 }
 
@@ -348,6 +374,8 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
   ].filter((item): item is string => Boolean(item));
   const enabled = providerBuildEnabled();
   const confirmBuild = input.confirmBuild === true;
+  const includeUnsignedTransaction = input.includeUnsignedTransaction === true;
+  const shouldCreateIntent = input.createIntent === true;
   const base = {
     contract: 'bondr-pumpportal-build-create-v1' as const,
     observedAt,
@@ -410,8 +438,16 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
   const build = normalizeSerializedTransaction(await response.arrayBuffer());
   const returnedPolicyBlockers = inspectReturnedCreateTransaction(build, requestBody);
   const inspectedBuild = {
-    ...build,
-    mint: mint!
+    transactionBytes: build.transactionBytes,
+    transactionHash: build.transactionHash,
+    requiredSigners: build.requiredSigners,
+    feePayer: build.feePayer,
+    messageHash: build.messageHash,
+    programs: build.programs,
+    accountKeys: build.accountKeys,
+    usesAddressLookupTables: build.usesAddressLookupTables,
+    mint: mint!,
+    ...(includeUnsignedTransaction ? { transactionBase64: build.transactionBase64 } : {})
   };
   if (returnedPolicyBlockers.length) {
     return {
@@ -422,10 +458,39 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
       execution: 'provider-build-policy-blocked-no-signing-no-broadcast'
     };
   }
+  const intent = shouldCreateIntent
+    ? await createIntentAsync({
+      expectedSigner: requestBody.publicKey!,
+      expectedMint: mint!,
+      expectedSide: 'buy',
+      expectedAmount: String(requestBody.amount),
+      slippageBps: Math.round(requestBody.slippage * 100),
+      allowedPrograms: build.programs,
+      requiredAccounts: Array.from(new Set([requestBody.publicKey!, mint!, ...build.requiredSigners])),
+      sourceRoute: '/api/deployment/pumpportal/build-create',
+      orderId: null,
+      bundleId: null,
+      quoteHash: null,
+      routeHash: hashBase64Transaction(build.transactionBase64),
+      transactionMessageHash: build.messageHash,
+      note: 'PumpPortal create transaction built and bound for client-side signing.',
+      status: 'transaction_built'
+    })
+    : null;
   return {
     ...base,
     status: 'built',
     build: inspectedBuild,
+    intent: intent ? {
+      id: intent.id,
+      status: intent.status,
+      expectedSigner: intent.expectedSigner,
+      expectedMint: intent.expectedMint,
+      transactionMessageHash: intent.transactionMessageHash,
+      allowedPrograms: intent.allowedPrograms,
+      requiredAccounts: intent.requiredAccounts,
+      expiresAt: intent.expiresAt
+    } : null,
     execution: 'unsigned-create-transaction-built-no-signing-no-broadcast'
   };
 }

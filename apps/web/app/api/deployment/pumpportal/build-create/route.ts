@@ -10,6 +10,8 @@ type Body = {
   mintPublicKey?: unknown;
   connectedSigner?: unknown;
   confirmBuild?: unknown;
+  includeUnsignedTransaction?: unknown;
+  createIntent?: unknown;
 };
 
 function inputFrom(request: Request, body?: Body | null) {
@@ -18,7 +20,9 @@ function inputFrom(request: Request, body?: Body | null) {
     projectId: (typeof body?.projectId === 'string' ? body.projectId : searchParams.get('project'))?.trim() || null,
     mintPublicKey: (typeof body?.mintPublicKey === 'string' ? body.mintPublicKey : searchParams.get('mint'))?.trim() || null,
     connectedSigner: (typeof body?.connectedSigner === 'string' ? body.connectedSigner : searchParams.get('connectedSigner'))?.trim() || null,
-    confirmBuild: body?.confirmBuild === true || searchParams.get('confirmBuild') === 'true'
+    confirmBuild: body?.confirmBuild === true || searchParams.get('confirmBuild') === 'true',
+    includeUnsignedTransaction: body?.includeUnsignedTransaction === true || searchParams.get('includeUnsignedTransaction') === 'true',
+    createIntent: body?.createIntent === true || searchParams.get('createIntent') === 'true'
   };
 }
 

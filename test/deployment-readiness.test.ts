@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engine-readiness.js';
@@ -144,11 +145,20 @@ function serializedProviderTransaction(args: { includeMintSigner: boolean }) {
 async function withProviderBuild<T>(body: (calls: { count: number }) => Promise<T>, bytes = serializedProviderTransaction({ includeMintSigner: true })) {
   const previousEnabled = process.env.PUMPPORTAL_BUILD_ENABLED;
   const previousUrl = process.env.PUMPPORTAL_TRADE_LOCAL_URL;
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  const previousLiveStoreDatabaseUrl = process.env.LIVE_STORE_DATABASE_URL;
+  const previousWalletStoreDatabaseUrl = process.env.WALLET_STORE_DATABASE_URL;
   const previousFetch = globalThis.fetch;
+  const liveStorePath = new URL('../data/terminal-live-store.json', import.meta.url);
+  const hadLiveStore = existsSync(liveStorePath);
+  const previousLiveStore = hadLiveStore ? readFileSync(liveStorePath, 'utf8') : null;
   const calls = { count: 0 };
   try {
     process.env.PUMPPORTAL_BUILD_ENABLED = 'true';
     process.env.PUMPPORTAL_TRADE_LOCAL_URL = 'https://example.invalid/pumpportal-test';
+    delete process.env.DATABASE_URL;
+    delete process.env.LIVE_STORE_DATABASE_URL;
+    delete process.env.WALLET_STORE_DATABASE_URL;
     globalThis.fetch = (async () => {
       calls.count += 1;
       return new Response(bytes, { status: 200, headers: { 'content-type': 'application/octet-stream' } });
@@ -159,6 +169,18 @@ async function withProviderBuild<T>(body: (calls: { count: number }) => Promise<
     else process.env.PUMPPORTAL_BUILD_ENABLED = previousEnabled;
     if (previousUrl === undefined) delete process.env.PUMPPORTAL_TRADE_LOCAL_URL;
     else process.env.PUMPPORTAL_TRADE_LOCAL_URL = previousUrl;
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+    if (previousLiveStoreDatabaseUrl === undefined) delete process.env.LIVE_STORE_DATABASE_URL;
+    else process.env.LIVE_STORE_DATABASE_URL = previousLiveStoreDatabaseUrl;
+    if (previousWalletStoreDatabaseUrl === undefined) delete process.env.WALLET_STORE_DATABASE_URL;
+    else process.env.WALLET_STORE_DATABASE_URL = previousWalletStoreDatabaseUrl;
+    if (hadLiveStore && previousLiveStore !== null) {
+      mkdirSync(dirname(liveStorePath.pathname), { recursive: true });
+      writeFileSync(liveStorePath, previousLiveStore);
+    } else {
+      rmSync(new URL('../data', import.meta.url), { recursive: true, force: true });
+    }
     globalThis.fetch = previousFetch;
   }
 }
@@ -577,6 +599,30 @@ test('pumpportal build-create inspects returned unsigned transaction signers', a
     assert.ok(result.build?.requiredSigners.includes(wallet.address));
     assert.ok(result.build?.requiredSigners.includes(validMintPublicKey));
     assert.equal(Object.prototype.hasOwnProperty.call(result.build ?? {}, 'transactionBase64'), false);
+    assert.equal(result.intent, null);
+  });
+});
+
+test('pumpportal build-create can return explicit unsigned handoff and bound broadcast intent', async () => {
+  await withProviderBuild(async (calls) => {
+    const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, {
+      mintPublicKey: validMintPublicKey,
+      connectedSigner: wallet.address,
+      confirmBuild: true,
+      includeUnsignedTransaction: true,
+      createIntent: true
+    });
+    assert.equal(result.status, 'built');
+    assert.equal(calls.count, 1);
+    assert.ok(result.build?.transactionBase64);
+    assert.equal(result.build?.messageHash.length, 64);
+    assert.ok(result.build?.programs.includes(SystemProgram.programId.toBase58()));
+    assert.equal(result.intent?.status, 'transaction_built');
+    assert.equal(result.intent?.expectedSigner, wallet.address);
+    assert.equal(result.intent?.expectedMint, validMintPublicKey);
+    assert.equal(result.intent?.transactionMessageHash, result.build?.messageHash);
+    assert.deepEqual(result.intent?.requiredAccounts.sort(), [validMintPublicKey, wallet.address].sort());
+    assert.deepEqual(result.intent?.allowedPrograms, result.build?.programs);
   });
 });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Keypair } from '@solana/web3.js';
+import { Keypair, VersionedTransaction } from '@solana/web3.js';
 
 type BuildState = {
   status?: string;
@@ -57,7 +57,9 @@ type PumpPortalBuildState = {
     warnings: string[];
     safety: { providerCallEnabled: boolean; confirmBuild: boolean };
     requestBody: { publicKey: string | null; mint: string | null; amount: number; slippage: number; priorityFee: number; pool: string };
-    build?: { transactionBytes: number; transactionHash: string; requiredSigners: string[]; mint: string; feePayer: string | null };
+    build?: { transactionBytes: number; transactionHash: string; transactionBase64?: string; messageHash: string; requiredSigners: string[]; mint: string; feePayer: string | null; programs: string[] };
+    intent?: { id: string; status: string; expectedSigner: string; expectedMint: string; transactionMessageHash: string | null; expiresAt: string } | null;
+    providerResponse?: { status: number; statusText: string; contentType: string; bodyPreview?: string };
   };
   error?: string;
 };
@@ -106,14 +108,48 @@ type ShadowPlanState = {
   error?: string;
 };
 
+type SimulationState = {
+  status?: string;
+  execution?: string;
+  error?: string;
+  broadcastEnabled?: boolean;
+  simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null };
+  transactionPreview?: { simulationStatus?: string; blockers?: string[]; warnings?: string[] };
+};
+
+type SignedCreateState = {
+  status: 'idle' | 'signed' | 'blocked' | 'error';
+  message: string;
+  signedTransaction?: string;
+  intentId?: string;
+  expectedSigner?: string;
+  expectedMint?: string;
+  transactionMessageHash?: string | null;
+  simulationStatus?: string;
+};
+
 type BrowserSolanaProvider = {
   publicKey?: { toString(): string; toBase58?: () => string };
   connect(): Promise<{ publicKey: { toString(): string; toBase58?: () => string } }>;
+  signTransaction?(transaction: VersionedTransaction): Promise<VersionedTransaction>;
 };
 type BrowserWindowWithSolana = Window & { solana?: BrowserSolanaProvider };
 
 function short(value?: string | null) {
   return value ? `${value.slice(0, 6)}...${value.slice(-5)}` : 'not set';
+}
+
+function base64ToBytes(value: string) {
+  const binary = window.atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return window.btoa(binary);
 }
 
 export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deploymentEnabled }: { projectId: string; defaultPayer?: string | null; deploymentEnabled: boolean }) {
@@ -130,6 +166,9 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [pumpPortalBuildLoading, setPumpPortalBuildLoading] = useState(false);
   const [ipfsLoading, setIpfsLoading] = useState(false);
   const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
+  const [simulation, setSimulation] = useState<SimulationState | null>(null);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [signedCreate, setSignedCreate] = useState<SignedCreateState>({ status: 'idle', message: 'Build and simulate an unsigned create transaction before local signing.' });
   const [shadowLoading, setShadowLoading] = useState(false);
   const [shadowPlan, setShadowPlan] = useState<ShadowPlanState | null>(null);
   const [clientMintKeypair, setClientMintKeypair] = useState<Keypair | null>(null);
@@ -183,11 +222,20 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   async function buildPumpPortalCreate(confirmBuild: boolean) {
     setPumpPortalBuildLoading(true);
     setPumpPortalBuild(null);
+    setSimulation(null);
+    setSignedCreate({ status: 'idle', message: 'Build and simulate an unsigned create transaction before local signing.' });
     try {
       const response = await fetch('/api/deployment/pumpportal/build-create', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null, connectedSigner: connectedSigner.trim() || null, confirmBuild })
+        body: JSON.stringify({
+          projectId,
+          mintPublicKey: mint.trim() || null,
+          connectedSigner: connectedSigner.trim() || null,
+          confirmBuild,
+          includeUnsignedTransaction: confirmBuild,
+          createIntent: confirmBuild
+        })
       });
       const payload = await response.json().catch(() => ({})) as PumpPortalBuildState;
       setPumpPortalBuild(payload);
@@ -195,6 +243,79 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       setPumpPortalBuild({ status: 'error', error: error instanceof Error ? error.message : 'PumpPortal build-create request failed.' });
     } finally {
       setPumpPortalBuildLoading(false);
+    }
+  }
+
+  async function simulatePumpPortalCreate() {
+    const unsignedTransaction = pumpPortalBuild?.result?.build?.transactionBase64;
+    if (!unsignedTransaction) {
+      setSimulation({ status: 'blocked', error: 'Build an unsigned PumpPortal create transaction first.' });
+      return;
+    }
+    setSimulationLoading(true);
+    setSignedCreate({ status: 'idle', message: 'Simulation running. Sign only after it passes.' });
+    try {
+      const response = await fetch('/api/terminal/signer-dry-run', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          unsignedTransaction,
+          action: 'create',
+          mint: pumpPortalBuild?.result?.requestBody.mint ?? mint,
+          wallet: connectedSigner || payer
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as SimulationState;
+      setSimulation(payload);
+      setSignedCreate({
+        status: payload.status === 'ok' ? 'idle' : 'blocked',
+        message: payload.status === 'ok' ? 'Simulation passed. Ready for local browser signing.' : payload.error ?? 'Simulation did not pass.'
+      });
+    } catch (error) {
+      setSimulation({ status: 'error', error: error instanceof Error ? error.message : 'Simulation request failed.' });
+      setSignedCreate({ status: 'error', message: error instanceof Error ? error.message : 'Simulation request failed.' });
+    } finally {
+      setSimulationLoading(false);
+    }
+  }
+
+  async function signPumpPortalCreate() {
+    const unsignedTransaction = pumpPortalBuild?.result?.build?.transactionBase64;
+    const intent = pumpPortalBuild?.result?.intent;
+    if (!unsignedTransaction || !intent) {
+      setSignedCreate({ status: 'blocked', message: 'Unsigned transaction and bound intent are required before signing.' });
+      return;
+    }
+    if (simulation?.status !== 'ok') {
+      setSignedCreate({ status: 'blocked', message: 'Simulation must pass before signing.' });
+      return;
+    }
+    if (!clientMintKeypair || clientMintKeypair.publicKey.toBase58() !== pumpPortalBuild?.result?.requestBody.mint) {
+      setSignedCreate({ status: 'blocked', message: 'The in-memory client mint keypair must match the built mint public key.' });
+      return;
+    }
+    const provider = typeof window !== 'undefined' ? (window as BrowserWindowWithSolana).solana : undefined;
+    if (!provider?.signTransaction) {
+      setSignedCreate({ status: 'blocked', message: 'Browser wallet does not expose signTransaction.' });
+      return;
+    }
+    try {
+      const tx = VersionedTransaction.deserialize(base64ToBytes(unsignedTransaction));
+      tx.sign([clientMintKeypair]);
+      const signed = await provider.signTransaction(tx);
+      const signedTransaction = bytesToBase64(signed.serialize());
+      setSignedCreate({
+        status: 'signed',
+        message: 'Signed locally. Broadcast still requires explicit gate and final submit action.',
+        signedTransaction,
+        intentId: intent.id,
+        expectedSigner: intent.expectedSigner,
+        expectedMint: intent.expectedMint,
+        transactionMessageHash: intent.transactionMessageHash,
+        simulationStatus: 'ok'
+      });
+    } catch (error) {
+      setSignedCreate({ status: 'error', message: error instanceof Error ? error.message : 'Local signing failed.' });
     }
   }
 
@@ -364,6 +485,9 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <button className="button secondary" type="button" onClick={() => void buildPumpPortalCreate(false)} disabled={previewLoading || pumpPortalBuildLoading}>
             {pumpPortalBuildLoading ? 'Checking...' : 'Build Readiness'}
           </button>
+          <button className="button secondary" type="button" onClick={() => void buildPumpPortalCreate(true)} disabled={previewLoading || pumpPortalBuildLoading}>
+            {pumpPortalBuildLoading ? 'Building...' : 'Build Unsigned Create'}
+          </button>
         </span>
       </div>
       {pumpPortalPreview && (
@@ -382,8 +506,34 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Build status</span><strong>{pumpPortalBuild.result?.status ?? pumpPortalBuild.status ?? 'unknown'}</strong><small>{pumpPortalBuild.result?.execution ?? pumpPortalBuild.error ?? 'no provider call'}</small></div>
           <div><span>Provider call</span><strong>{pumpPortalBuild.result?.safety.providerCallEnabled ? 'enabled' : 'disabled'}</strong><small>confirm {pumpPortalBuild.result?.safety.confirmBuild ? 'yes' : 'no'}</small></div>
           <div><span>Mint</span><strong>{short(pumpPortalBuild.result?.requestBody.mint)}</strong><small>fee payer {short(pumpPortalBuild.result?.build?.feePayer)}</small></div>
-          <div><span>Unsigned bytes</span><strong>{pumpPortalBuild.result?.build ? `${pumpPortalBuild.result.build.transactionBytes} bytes` : 'not built'}</strong><small>{short(pumpPortalBuild.result?.build?.transactionHash)}</small></div>
+          <div><span>Unsigned bytes</span><strong>{pumpPortalBuild.result?.build ? `${pumpPortalBuild.result.build.transactionBytes} bytes` : 'not built'}</strong><small>{pumpPortalBuild.result?.build?.transactionBase64 ? 'handoff ready' : short(pumpPortalBuild.result?.build?.transactionHash)}</small></div>
+          <div><span>Intent</span><strong>{short(pumpPortalBuild.result?.intent?.id)}</strong><small>{pumpPortalBuild.result?.intent?.status ?? 'not bound'}</small></div>
           <div className="wide"><span>Blockers</span><strong>{pumpPortalBuild.result?.blockers.length ? pumpPortalBuild.result.blockers.join(', ') : pumpPortalBuild.error ?? 'build-ready'}</strong></div>
+          {pumpPortalBuild.result?.providerResponse && <div className="wide"><span>Provider response</span><strong>{pumpPortalBuild.result.providerResponse.status} {pumpPortalBuild.result.providerResponse.statusText}</strong><small>{pumpPortalBuild.result.providerResponse.bodyPreview ?? pumpPortalBuild.result.providerResponse.contentType}</small></div>}
+        </div>
+      )}
+      <div className="pumpPortalPreviewPanel">
+        <div>
+          <span>Simulation and local signature</span>
+          <strong>Unsigned tx → simulate → browser sign</strong>
+          <small>Requires a built unsigned create transaction, matching client mint keypair, matching browser signer, and passed simulation.</small>
+        </div>
+        <span className="deploymentBuilderActionRow">
+          <button className="button secondary" type="button" onClick={() => void simulatePumpPortalCreate()} disabled={simulationLoading || !pumpPortalBuild?.result?.build?.transactionBase64}>
+            {simulationLoading ? 'Simulating...' : 'Simulate Create'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => void signPumpPortalCreate()} disabled={simulationLoading || simulation?.status !== 'ok' || signedCreate.status === 'signed'}>
+            {signedCreate.status === 'signed' ? 'Signed Locally' : 'Sign Locally'}
+          </button>
+        </span>
+      </div>
+      {(simulation || signedCreate.status !== 'idle') && (
+        <div className="pumpPortalPreviewResult">
+          <div><span>Simulation</span><strong>{simulation?.status ?? 'not-run'}</strong><small>{simulation?.transactionPreview?.simulationStatus ?? simulation?.execution ?? simulation?.error ?? 'pending'}</small></div>
+          <div><span>Signed packet</span><strong>{signedCreate.status}</strong><small>{signedCreate.message}</small></div>
+          <div><span>Intent</span><strong>{short(signedCreate.intentId ?? pumpPortalBuild?.result?.intent?.id)}</strong><small>message {short(signedCreate.transactionMessageHash ?? pumpPortalBuild?.result?.intent?.transactionMessageHash)}</small></div>
+          <div><span>Broadcast packet</span><strong>{signedCreate.signedTransaction ? 'ready' : 'not ready'}</strong><small>{signedCreate.signedTransaction ? 'Submit only through /api/send-signed-transaction after final gate approval.' : 'Simulation and local signing required.'}</small></div>
+          <div className="wide"><span>Blockers</span><strong>{simulation?.transactionPreview?.blockers?.length ? simulation.transactionPreview.blockers.join(', ') : signedCreate.status === 'signed' ? 'broadcast gate still controls submit' : signedCreate.message}</strong></div>
         </div>
       )}
       <div className="pumpPortalPreviewPanel">
