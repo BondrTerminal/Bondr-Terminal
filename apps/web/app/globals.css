@@ -16598,12 +16598,87 @@ body > .createProjectModal .professionalCreateProjectShell {
   background: linear-gradient(135deg, rgba(255, 127, 17, 0.08), rgba(0, 0, 0, 0.2));
 }
 .deploymentHarnessActionPanel.signer,
-.deploymentHarnessActionPanel.shadow {
+.deploymentHarnessActionPanel.shadow,
+.deploymentHarnessActionPanel.mint {
   margin: 12px 0;
 }
 .deploymentHarnessActionPanel.signer.ready {
   border-color: rgba(85, 240, 168, 0.3);
   background: rgba(85, 240, 168, 0.07);
+}
+.deploymentHarnessActionPanel.mint {
+  border-color: rgba(86, 182, 214, 0.24);
+  background: linear-gradient(135deg, rgba(86, 182, 214, 0.07), rgba(0, 0, 0, 0.18));
+}
+.deploymentRehearsalBoard {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.13);
+  border-radius: 12px;
+  padding: 13px;
+  background: rgba(7, 6, 5, 0.58);
+}
+.deploymentRehearsalHeader {
+  display: grid;
+  gap: 4px;
+}
+.deploymentRehearsalHeader span {
+  color: var(--bondr-tangerine, #ff7f11);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.deploymentRehearsalHeader strong {
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 18px;
+  line-height: 1.1;
+}
+.deploymentRehearsalHeader small {
+  color: rgba(249, 235, 224, 0.62);
+}
+.deploymentRehearsalSteps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.deploymentRehearsalSteps > div {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.deploymentRehearsalSteps > div.pass {
+  border-color: rgba(85, 240, 168, 0.28);
+  background: rgba(85, 240, 168, 0.06);
+}
+.deploymentRehearsalSteps > div.review {
+  border-color: rgba(255, 127, 17, 0.2);
+  background: rgba(255, 127, 17, 0.05);
+}
+.deploymentRehearsalSteps > div.blocked {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.04);
+}
+.deploymentRehearsalSteps span {
+  color: rgba(249, 235, 224, 0.45);
+  font-size: 10px;
+  font-weight: 950;
+}
+.deploymentRehearsalSteps strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 13px;
+}
+.deploymentRehearsalSteps small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(249, 235, 224, 0.58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .deploymentHarnessActionPanel > div:first-child span,
 .deploymentHarnessStatusGrid span {
@@ -16691,6 +16766,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .launchFinalReviewGrid,
   .executionReadinessGrid,
   .executionTruthRailGrid,
+  .deploymentRehearsalSteps,
   .launchFinalActionPanel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
