@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 type WalletAction = 'phantom' | 'create' | 'import' | 'track' | 'send' | 'receive' | 'archive' | 'group' | 'export' | null;
 type WalletFilter = 'all' | 'project' | 'global' | 'trading' | 'treasury' | 'archived' | 'deployer' | 'launch' | 'reserve';
+type RailPhase = 'dev' | 'bundle' | 'sniper' | 'task' | 'observe';
 
 type BoardWallet = {
   id: string;
@@ -22,6 +23,9 @@ type BoardWallet = {
   balanceStatus: string;
   balanceSource: string;
   balanceNote: string;
+  tokenCount?: number;
+  tokenValueUsd?: number | null;
+  tokenStatus?: string;
   purpose: string;
   archived: boolean;
   custodyMode?: 'watch-only' | 'managed-local';
@@ -48,6 +52,34 @@ type SendBuildResult = {
   rpcProvider?: string;
   requiredSigners?: string[];
   transactionBase64?: string;
+};
+type LaunchConfigPayload = {
+  launchConfig?: {
+    walletPlan?: Array<{
+      walletId?: string;
+      role?: string;
+      participate?: boolean;
+      executionPhase?: RailPhase;
+      plannedBuySol?: number;
+      maxBuySol?: number;
+      maxSlippageBps?: number;
+      takeProfitPercents?: number[];
+      stopLossPct?: number;
+      trailingStopPct?: number;
+      perTxSellCapPct?: number;
+      cooldownSeconds?: number;
+    }>;
+  };
+};
+type JitoStatus = {
+  status?: string;
+  relay?: {
+    status?: string;
+    relayEnabled?: boolean;
+    maxTransactionsPerBundle?: number;
+    tip?: { maxSol?: number };
+    blockers?: string[];
+  };
 };
 
 type Props = {
@@ -100,6 +132,48 @@ function walletSolDisplay(wallet?: Pick<BoardWallet, 'balanceSol' | 'balanceStat
   return `${wallet.balanceSol.toFixed(4)} SOL`;
 }
 
+function railLabel(phase: RailPhase) {
+  if (phase === 'dev') return 'Deployer';
+  if (phase === 'bundle') return 'Bundle';
+  if (phase === 'sniper') return 'Sniper';
+  if (phase === 'task') return 'Task';
+  return 'Observe';
+}
+
+function roleForRail(phase: RailPhase) {
+  if (phase === 'dev') return 'dev wallet';
+  if (phase === 'bundle') return 'bundle wallet';
+  if (phase === 'sniper') return 'sniper wallet';
+  if (phase === 'task') return 'task wallet';
+  return 'observe wallet';
+}
+
+function inferWalletRail(wallet: BoardWallet): RailPhase {
+  const role = `${wallet.role} ${wallet.roleBadge} ${wallet.purpose}`.toLowerCase();
+  if (/dev|deployer|creator/.test(role)) return 'dev';
+  if (/bundle/.test(role)) return 'bundle';
+  if (/sniper|snipe/.test(role)) return 'sniper';
+  if (/task|automation|worker/.test(role)) return 'task';
+  return 'observe';
+}
+
+function canWalletSign(wallet: BoardWallet, activeWalletAddress: string) {
+  if (wallet.custodyMode === 'managed-local') return true;
+  return Boolean(activeWalletAddress && wallet.address === activeWalletAddress);
+}
+
+function initialRailDraft(wallets: BoardWallet[]) {
+  const active = wallets.filter((wallet) => !wallet.archived);
+  const draft: Record<RailPhase, string[]> = { dev: [], bundle: [], sniper: [], task: [], observe: [] };
+  for (const wallet of active) {
+    const phase = inferWalletRail(wallet);
+    if (phase === 'dev' && draft.dev.length) draft.observe.push(wallet.id);
+    else draft[phase].push(wallet.id);
+  }
+  if (!draft.dev.length && active[0]) draft.dev.push(active[0].id);
+  return draft;
+}
+
 const FUNDING_TEST_SOURCE = '8ynuDCvk9ApT4YfFCsSn4nah5XSMNCzh9V8UXHcY6RKz';
 const FUNDING_TEST_DESTINATION = '6oaGmdSBmMq7qCAc36cjivzgMVrozQq35ukka4EHGBuy';
 const FUNDING_TEST_AMOUNT_SOL = '0.001';
@@ -131,7 +205,9 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const [lastManagedWallet, setLastManagedWallet] = useState<CreatedManagedWallet | null>(null);
   const [activeWalletAddress, setActiveWalletAddress] = useState('');
   const [executionCapabilities, setExecutionCapabilities] = useState<ExecutionCapabilities | null>(null);
+  const [jitoStatus, setJitoStatus] = useState<JitoStatus | null>(null);
   const [sendBuildResult, setSendBuildResult] = useState<SendBuildResult>({ status: 'idle', message: 'Load the capped funding test, then build the unsigned transaction.' });
+  const [railDraft, setRailDraft] = useState<Record<RailPhase, string[]>>(() => initialRailDraft(wallets));
   const [loading, setLoading] = useState(false);
   const visibleWallets = useMemo(() => wallets.filter((wallet) => matchesFilter(wallet, filter, selectedGroupId)), [wallets, filter, selectedGroupId]);
   const activeWallets = wallets.filter((wallet) => !wallet.archived);
@@ -149,6 +225,16 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const fundingTestShape = Boolean(fromWallet && fromWallet.address === FUNDING_TEST_SOURCE && receiver === FUNDING_TEST_DESTINATION && amount === FUNDING_TEST_AMOUNT_SOL);
   const fundingGateEnabled = Boolean(executionCapabilities?.fundingBroadcastEnabled);
   const generalBroadcastEnabled = Boolean(executionCapabilities?.broadcastEnabled);
+  const bundleWallets = railDraft.bundle.map((id) => wallets.find((wallet) => wallet.id === id)).filter((wallet): wallet is BoardWallet => Boolean(wallet && !wallet.archived));
+  const sniperWallets = railDraft.sniper.map((id) => wallets.find((wallet) => wallet.id === id)).filter((wallet): wallet is BoardWallet => Boolean(wallet && !wallet.archived));
+  const taskWallets = railDraft.task.map((id) => wallets.find((wallet) => wallet.id === id)).filter((wallet): wallet is BoardWallet => Boolean(wallet && !wallet.archived));
+  const devWallet = railDraft.dev.map((id) => wallets.find((wallet) => wallet.id === id)).find((wallet): wallet is BoardWallet => Boolean(wallet && !wallet.archived)) ?? activeWallets[0] ?? null;
+  const executableRailWallets = [...(devWallet ? [devWallet] : []), ...bundleWallets, ...sniperWallets, ...taskWallets].filter((wallet, index, rows) => rows.findIndex((row) => row.id === wallet.id) === index);
+  const unsignedRailWallets = executableRailWallets.filter((wallet) => !canWalletSign(wallet, selectedActiveWallet));
+  const railPlannedSol = executableRailWallets.reduce((sum, wallet) => sum + Math.max(0, wallet.balanceSol || 0), 0);
+  const jitoMaxTx = Number(jitoStatus?.relay?.maxTransactionsPerBundle ?? 5);
+  const bundleOverLimit = bundleWallets.length > Math.max(0, jitoMaxTx - 1);
+  const railGateLabel = executionCapabilities?.broadcastEnabled ? 'broadcast enabled' : 'broadcast closed';
 
   function openAction(nextAction: Exclude<WalletAction, null>) {
     if (!managedLocalEnabled && (nextAction === 'create' || nextAction === 'import')) setMessage({ type: 'warn', text: 'Managed local wallet create/import is disabled for browser-wallet beta. Use Connect Phantom or Track Address/watch-only instead.' });
@@ -188,6 +274,30 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     window.addEventListener('bondr-active-wallet-changed', updateActiveWallet);
     return () => window.removeEventListener('bondr-active-wallet-changed', updateActiveWallet);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/relay/jito/status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((json: JitoStatus) => { if (!cancelled) setJitoStatus(json); })
+      .catch(() => { if (!cancelled) setJitoStatus({ status: 'unavailable', relay: { status: 'unavailable', relayEnabled: false, blockers: ['relay-status-fetch-failed'] } }); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    setRailDraft((current) => {
+      const activeIds = new Set(wallets.filter((wallet) => !wallet.archived).map((wallet) => wallet.id));
+      const next: Record<RailPhase, string[]> = {
+        dev: current.dev.filter((id) => activeIds.has(id)).slice(0, 1),
+        bundle: current.bundle.filter((id) => activeIds.has(id)),
+        sniper: current.sniper.filter((id) => activeIds.has(id)),
+        task: current.task.filter((id) => activeIds.has(id)),
+        observe: current.observe.filter((id) => activeIds.has(id))
+      };
+      if (!next.dev.length) return initialRailDraft(wallets);
+      return next;
+    });
+  }, [wallets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -379,6 +489,89 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     setMessage({ type: 'ok', text: `${wallet.role} selected as the active wallet for this browser.` });
   }
 
+  function phaseForWallet(walletId: string): RailPhase {
+    if (railDraft.dev.includes(walletId)) return 'dev';
+    if (railDraft.bundle.includes(walletId)) return 'bundle';
+    if (railDraft.sniper.includes(walletId)) return 'sniper';
+    if (railDraft.task.includes(walletId)) return 'task';
+    return 'observe';
+  }
+
+  function assignWalletRail(walletId: string, phase: RailPhase) {
+    setRailDraft((current) => {
+      const next: Record<RailPhase, string[]> = {
+        dev: current.dev.filter((id) => id !== walletId),
+        bundle: current.bundle.filter((id) => id !== walletId),
+        sniper: current.sniper.filter((id) => id !== walletId),
+        task: current.task.filter((id) => id !== walletId),
+        observe: current.observe.filter((id) => id !== walletId)
+      };
+      if (phase === 'dev') next.dev = [walletId];
+      else next[phase] = [...next[phase], walletId];
+      return next;
+    });
+    setMessage({ type: 'ok', text: `Wallet staged for ${railLabel(phase)} rail. Save into Deployment config when the rail set looks right.` });
+  }
+
+  function toggleRailSelection(walletId: string, phase: Exclude<RailPhase, 'dev'>) {
+    const currentPhase = phaseForWallet(walletId);
+    assignWalletRail(walletId, currentPhase === phase ? 'observe' : phase);
+  }
+
+  function saveRailDraftToBrowser() {
+    if (typeof window === 'undefined') return;
+    const payload = { projectId: selectedProjectId ?? null, savedAt: new Date().toISOString(), railDraft };
+    window.localStorage.setItem(`bondr.walletRailDraft.${selectedProjectId ?? 'global'}`, JSON.stringify(payload));
+    setMessage({ type: 'ok', text: 'Wallet rail draft saved in this browser. No launch config, funding, signing, or broadcast changed.' });
+  }
+
+  async function stageRailIntoDeployment() {
+    if (!selectedProjectId) {
+      setMessage({ type: 'warn', text: 'Open a project-scoped wallet dashboard before staging rails into Deployment.' });
+      return;
+    }
+    setLoading(true);
+    setMessage({ type: 'warn', text: 'Staging wallet rails into Deployment config. This is config-only; no signing, funding, or broadcast.' });
+    try {
+      const response = await fetch(`/api/projects/${selectedProjectId}/launch-config`, { cache: 'no-store' });
+      const payload = await response.json().catch(() => null) as LaunchConfigPayload | null;
+      if (!response.ok) throw new Error('Could not load existing launch config.');
+      const existingById = new Map((payload?.launchConfig?.walletPlan ?? []).map((entry) => [entry.walletId, entry]));
+      const walletPlan = wallets.map((wallet) => {
+        const phase = phaseForWallet(wallet.id);
+        const existing = existingById.get(wallet.id) ?? {};
+        return {
+          ...existing,
+          walletId: wallet.id,
+          role: roleForRail(phase),
+          participate: phase !== 'observe',
+          executionPhase: phase,
+          plannedBuySol: Number(existing.plannedBuySol ?? 0),
+          maxBuySol: Number(existing.maxBuySol ?? existing.plannedBuySol ?? 0),
+          maxSlippageBps: Number(existing.maxSlippageBps ?? 100),
+          takeProfitPercents: Array.isArray(existing.takeProfitPercents) ? existing.takeProfitPercents : [35, 75, 150],
+          stopLossPct: Number(existing.stopLossPct ?? -18),
+          trailingStopPct: Number(existing.trailingStopPct ?? 22),
+          perTxSellCapPct: Number(existing.perTxSellCapPct ?? 25),
+          cooldownSeconds: Number(existing.cooldownSeconds ?? 60)
+        };
+      });
+      const patch = await fetch(`/api/projects/${selectedProjectId}/launch-config`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ launchConfig: { walletPlan } })
+      });
+      const json = await patch.json().catch(() => null) as null | { error?: string; persisted?: boolean; mode?: string };
+      if (!patch.ok) throw new Error(json?.error ?? 'Deployment wallet rail staging failed.');
+      setMessage({ type: 'ok', text: `Wallet rails staged into Deployment config (${json?.persisted ? 'persisted' : json?.mode ?? 'accepted'}). Gates remain closed.` });
+      router.refresh();
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Deployment wallet rail staging failed.' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function useFundingTest() {
     const source = wallets.find((wallet) => wallet.address === FUNDING_TEST_SOURCE);
     if (source) setFromWalletId(source.id);
@@ -425,6 +618,41 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
         <div><span>Funding test</span><strong>{fundingGateEnabled ? 'enabled' : 'disabled'}</strong><small>{fundingTestShape ? 'approved shape loaded' : 'load capped test'}</small></div>
       </div>
 
+      <section className="walletLaunchRailDesk" aria-label="Launch wallet rail">
+        <div className="walletLaunchRailHeader">
+          <div>
+            <span>Launch wallet rail</span>
+            <strong>{selectedProjectName ? `${selectedProjectName} routing` : 'Project routing'}</strong>
+            <small>Organize wallets into Deployment, Jito bundle, Sniper, Task, and observe rails before launch rehearsal.</small>
+          </div>
+          <div className="walletLaunchRailActions">
+            <button type="button" onClick={saveRailDraftToBrowser}>Save Draft</button>
+            <button type="button" onClick={stageRailIntoDeployment} disabled={loading || !selectedProjectId}>{loading ? 'Staging...' : 'Stage To Deployment'}</button>
+            <a href={deploymentHref}>Open Launch Rail</a>
+          </div>
+        </div>
+        <div className="walletLaunchRailMetrics">
+          <div><span>Deployer</span><strong>{devWallet ? devWallet.shortAddress : 'missing'}</strong><small>{devWallet ? devWallet.role : 'assign one dev wallet'}</small></div>
+          <div><span>Bundle</span><strong>{bundleWallets.length}</strong><small>{bundleOverLimit ? `over Jito ${jitoMaxTx} tx limit` : `${Math.max(0, jitoMaxTx - 1)} buy legs available`}</small></div>
+          <div><span>Sniper</span><strong>{sniperWallets.length}</strong><small>fast-entry rail selection</small></div>
+          <div><span>Task</span><strong>{taskWallets.length}</strong><small>automation queue selection</small></div>
+          <div><span>Signer gaps</span><strong>{unsignedRailWallets.length}</strong><small>{unsignedRailWallets.length ? 'watch-only or mismatched' : 'current browser can sign selected rail'}</small></div>
+          <div><span>Modeled SOL</span><strong>{railPlannedSol.toFixed(4)}</strong><small>selected rail inventory, not live spend approval</small></div>
+          <div><span>Jito</span><strong>{jitoStatus?.relay?.relayEnabled ? 'enabled' : 'disabled'}</strong><small>tip cap {Number(jitoStatus?.relay?.tip?.maxSol ?? 0).toFixed(6)} SOL · {railGateLabel}</small></div>
+        </div>
+        <div className="walletRailLaneGrid">
+          {(['dev', 'bundle', 'sniper', 'task', 'observe'] as RailPhase[]).map((phase) => {
+            const laneWallets = (phase === 'dev' ? (devWallet ? [devWallet] : []) : railDraft[phase].map((id) => wallets.find((wallet) => wallet.id === id)).filter((wallet): wallet is BoardWallet => Boolean(wallet && !wallet.archived)));
+            return (
+              <div className={`walletRailLane ${phase}`} key={phase}>
+                <div><span>{railLabel(phase)}</span><strong>{laneWallets.length}</strong><small>{phase === 'bundle' ? 'Jito bundle candidates' : phase === 'dev' ? 'launch authority candidate' : phase === 'observe' ? 'read-only inventory' : `${railLabel(phase)} candidates`}</small></div>
+                {laneWallets.length ? laneWallets.slice(0, 5).map((wallet) => <p key={wallet.id}><strong>{wallet.role}</strong><span>{wallet.shortAddress} · {canWalletSign(wallet, selectedActiveWallet) ? 'can sign in current model' : 'signer blocked'}</span></p>) : <em>No wallets assigned</em>}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       <nav className="walletBoardTabs" aria-label="Wallet board filters">
         {tabs.map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} onClick={() => setFilter(value)} key={value}>{label}</button>)}
       </nav>
@@ -436,11 +664,15 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
           <div className="walletListRow walletListHead" role="row">
             <span></span><span>Wallet</span><span>Address</span><span>Balance</span><span>Group</span><span>Activity</span><span>Status</span><span>Actions</span>
           </div>
-          {visibleWallets.map((wallet) => (
-            <div className="walletListRow walletCenterBoxRow walletBoxLayout" role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
+          {visibleWallets.map((wallet) => {
+            const railPhase = phaseForWallet(wallet.id);
+            const signerReady = canWalletSign(wallet, selectedActiveWallet);
+            return (
+            <div className={`walletListRow walletCenterBoxRow walletBoxLayout rail-${railPhase}`} role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
               <div className="walletBoxLayer walletBoxTopLayer">
                 <label className="walletSelectCell"><input type="checkbox" checked={selectedActiveWallet === wallet.address} readOnly title={selectedActiveWallet === wallet.address ? 'Active in this browser' : 'Not active'} /> {selectedActiveWallet === wallet.address ? 'active' : 'selectable'}</label>
                 <span className={wallet.archived ? 'statusChip warn' : wallet.status === 'active' ? 'statusChip good' : 'statusChip'}>{wallet.archived ? 'archived' : wallet.status}</span>
+                <span className={`walletRailChip ${railPhase}`}>{railLabel(railPhase)}</span>
               </div>
               <div className="walletBoxLayer walletBoxIdentityLayer">
                 <button type="button" className="walletIdentityCell" onClick={() => setDetailWalletId(wallet.id)}>
@@ -453,6 +685,14 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
                 <div className="walletBalanceCell"><strong>{walletSolDisplay(wallet)}</strong><small title={wallet.balanceNote}>{wallet.balanceStatus === 'provider-limited' ? 'provider-limited' : wallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : wallet.balanceStatus} · {wallet.balanceSource}</small></div>
                 <div className="walletGroupCell"><strong>{wallet.groupName}</strong><small>{wallet.custodyMode === 'managed-local' ? wallet.keyExportedAt ? `exported ${wallet.keyExportedAt}` : 'backup needed' : 'watch-only no key'}</small></div>
                 <div className="walletActivityCell"><strong>{wallet.lastActivity}</strong><small>{wallet.lastActivityDetail}</small></div>
+                <div className="walletSignerCell"><strong>{signerReady ? 'signer ready' : 'signer blocked'}</strong><small>{wallet.custodyMode === 'managed-local' ? 'managed-local policy pending' : selectedActiveWallet === wallet.address ? 'browser signer matches' : 'watch-only or inactive browser signer'}</small></div>
+              </div>
+              <div className="walletRailAssignLayer">
+                <button type="button" className={railPhase === 'dev' ? 'active' : ''} onClick={() => assignWalletRail(wallet.id, 'dev')}>Dev</button>
+                <button type="button" className={railPhase === 'bundle' ? 'active' : ''} onClick={() => toggleRailSelection(wallet.id, 'bundle')}>Bundle</button>
+                <button type="button" className={railPhase === 'sniper' ? 'active' : ''} onClick={() => toggleRailSelection(wallet.id, 'sniper')}>Sniper</button>
+                <button type="button" className={railPhase === 'task' ? 'active' : ''} onClick={() => toggleRailSelection(wallet.id, 'task')}>Task</button>
+                <button type="button" className={railPhase === 'observe' ? 'active' : ''} onClick={() => assignWalletRail(wallet.id, 'observe')}>Observe</button>
               </div>
               <div className="walletRowActions">
                 <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('send'); }}>Send</button>
@@ -464,7 +704,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
                 <a href={deploymentHref}>Launch Prep</a><a href={terminalHref}>Terminal</a><a href={portfolioHref}>Portfolio</a>
               </div>
             </div>
-          ))}
+          )})}
           {!visibleWallets.length && <div className="walletEmptyState">No wallets match this filter.</div>}
         </div>
       </div>
