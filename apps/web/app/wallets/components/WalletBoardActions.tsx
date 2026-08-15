@@ -235,6 +235,20 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const jitoMaxTx = Number(jitoStatus?.relay?.maxTransactionsPerBundle ?? 5);
   const bundleOverLimit = bundleWallets.length > Math.max(0, jitoMaxTx - 1);
   const railGateLabel = executionCapabilities?.broadcastEnabled ? 'broadcast enabled' : 'broadcast closed';
+  const railIssueCount = (devWallet ? 0 : 1) + unsignedRailWallets.length + (bundleOverLimit ? 1 : 0);
+  const railStatusLabel = railIssueCount ? `${railIssueCount} review` : 'rail ready';
+  const selectedDetailWallet = selectedWallet ?? fromWallet ?? activeWallets[0] ?? null;
+  const backedUpManagedWallets = wallets.filter((wallet) => wallet.custodyMode === 'managed-local' && wallet.keyExportedAt).length;
+  const backupNeededWallets = wallets.filter((wallet) => wallet.custodyMode === 'managed-local' && !wallet.keyExportedAt && !wallet.archived).length;
+  const transactionReadinessRows = [
+    { label: 'Signer', state: selectedDetailWallet && canWalletSign(selectedDetailWallet, selectedActiveWallet) ? 'pass' : 'review', detail: selectedDetailWallet ? (canWalletSign(selectedDetailWallet, selectedActiveWallet) ? 'Current browser can sign this wallet model.' : 'Select the browser signer or use a managed-local gated wallet.') : 'Select a wallet before building transactions.' },
+    { label: 'Simulation', state: sendBuildResult.status === 'built' ? 'pass' : sendBuildResult.status === 'error' ? 'blocked' : 'review', detail: sendBuildResult.message },
+    { label: 'Broadcast', state: generalBroadcastEnabled ? 'review' : 'blocked', detail: generalBroadcastEnabled ? 'General broadcast gate is open; still require explicit action policy.' : 'General broadcast is closed, so Wallet Center cannot live-send arbitrary transfers.' },
+    { label: 'Funding test', state: fundingTestShape ? 'pass' : 'review', detail: fundingTestShape ? 'Approved capped transfer shape is loaded.' : 'Only the capped funding test can be built from this surface.' }
+  ];
+  const walletActivityRows = [...wallets]
+    .sort((a, b) => String(b.lastActivity).localeCompare(String(a.lastActivity)))
+    .slice(0, 6);
 
   function openAction(nextAction: Exclude<WalletAction, null>) {
     if (!managedLocalEnabled && (nextAction === 'create' || nextAction === 'import')) setMessage({ type: 'warn', text: 'Managed local wallet create/import is disabled for browser-wallet beta. Use Connect Phantom or Track Address/watch-only instead.' });
@@ -525,6 +539,68 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
     setMessage({ type: 'ok', text: 'Wallet rail draft saved in this browser. No launch config, funding, signing, or broadcast changed.' });
   }
 
+  function loadRailDraftFromBrowser() {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(`bondr.walletRailDraft.${selectedProjectId ?? 'global'}`);
+    if (!raw) {
+      setMessage({ type: 'warn', text: 'No saved wallet rail draft found in this browser.' });
+      return;
+    }
+    try {
+      const payload = JSON.parse(raw) as { railDraft?: Record<RailPhase, string[]> };
+      if (!payload.railDraft) throw new Error('missing rail draft');
+      setRailDraft({
+        dev: Array.isArray(payload.railDraft.dev) ? payload.railDraft.dev.slice(0, 1) : [],
+        bundle: Array.isArray(payload.railDraft.bundle) ? payload.railDraft.bundle : [],
+        sniper: Array.isArray(payload.railDraft.sniper) ? payload.railDraft.sniper : [],
+        task: Array.isArray(payload.railDraft.task) ? payload.railDraft.task : [],
+        observe: Array.isArray(payload.railDraft.observe) ? payload.railDraft.observe : []
+      });
+      setMessage({ type: 'ok', text: 'Loaded saved wallet rail draft from this browser.' });
+    } catch {
+      setMessage({ type: 'error', text: 'Saved wallet rail draft could not be parsed.' });
+    }
+  }
+
+  function autoSortRailDraft() {
+    setRailDraft(initialRailDraft(wallets));
+    setMessage({ type: 'ok', text: 'Wallet rails auto-sorted from wallet labels and purposes. Review before staging to Deployment.' });
+  }
+
+  function clearRailDraft() {
+    const active = wallets.filter((wallet) => !wallet.archived);
+    setRailDraft({ dev: active[0] ? [active[0].id] : [], bundle: [], sniper: [], task: [], observe: active.slice(1).map((wallet) => wallet.id) });
+    setMessage({ type: 'warn', text: 'Wallet rails reset to one dev candidate and observe-only inventory.' });
+  }
+
+  function applyBundlePreset() {
+    const active = wallets.filter((wallet) => !wallet.archived);
+    const dev = devWallet ?? active[0] ?? null;
+    const candidates = active.filter((wallet) => wallet.id !== dev?.id).slice(0, Math.max(0, jitoMaxTx - 1));
+    setRailDraft({
+      dev: dev ? [dev.id] : [],
+      bundle: candidates.map((wallet) => wallet.id),
+      sniper: [],
+      task: [],
+      observe: active.filter((wallet) => wallet.id !== dev?.id && !candidates.some((candidate) => candidate.id === wallet.id)).map((wallet) => wallet.id)
+    });
+    setMessage({ type: 'ok', text: `Jito bundle rehearsal preset staged with ${candidates.length} bundle wallet(s).` });
+  }
+
+  function applySniperPreset() {
+    const active = wallets.filter((wallet) => !wallet.archived);
+    const dev = devWallet ?? active[0] ?? null;
+    const candidates = active.filter((wallet) => wallet.id !== dev?.id).slice(0, 3);
+    setRailDraft({
+      dev: dev ? [dev.id] : [],
+      bundle: [],
+      sniper: candidates.map((wallet) => wallet.id),
+      task: [],
+      observe: active.filter((wallet) => wallet.id !== dev?.id && !candidates.some((candidate) => candidate.id === wallet.id)).map((wallet) => wallet.id)
+    });
+    setMessage({ type: 'ok', text: `Sniper rehearsal preset staged with ${candidates.length} sniper wallet(s).` });
+  }
+
   async function stageRailIntoDeployment() {
     if (!selectedProjectId) {
       setMessage({ type: 'warn', text: 'Open a project-scoped wallet dashboard before staging rails into Deployment.' });
@@ -589,18 +665,70 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
           <h1>Portfolio Wallets</h1>
           <p>{selectedProjectName ? `${selectedProjectName} · ${selectedGroupId}` : 'All wallet groups'} · Browser wallets sign in the wallet extension; watch-only records track public addresses; managed-local wallets require encrypted vault backup before funding.</p>
         </div>
-        <div className="walletBoardActions">
-          <ActionButton onClick={() => openAction('phantom')}>Connect Phantom</ActionButton>
-          <ActionButton onClick={() => openAction('track')}>Track Address</ActionButton>
-          <ActionButton onClick={() => openAction('create')} title={managedLocalEnabled ? 'Create encrypted managed-local wallet' : 'Managed-local wallet vault is disabled in this environment'}>Create Managed</ActionButton>
-          <ActionButton onClick={() => openAction('import')} title={managedLocalEnabled ? 'Import encrypted managed-local wallet' : 'Managed-local wallet vault is disabled in this environment'}>Import Managed</ActionButton>
-          <ActionButton onClick={() => openAction('send')}>Send</ActionButton>
-          <ActionButton onClick={() => openAction('receive')}>Receive</ActionButton>
-          <ActionButton onClick={() => openAction('archive')}>Archive</ActionButton>
-          <ActionButton onClick={() => openAction('export')}>Export Public Record</ActionButton>
-          <ActionButton onClick={() => openAction('group')}>Manage Groups</ActionButton>
+        <div className="walletBoardActions walletBoardRouteActions">
+          <a href={deploymentHref}>Launch Rail</a>
+          <a href={terminalHref}>Terminal</a>
+          <a href={portfolioHref}>Portfolio</a>
         </div>
       </header>
+
+      <section className="walletOpsCommandDesk" aria-label="Professional wallet operations dashboard">
+        <aside className="walletOpsRailMap">
+          <span>Workspace</span>
+          <strong>{selectedProjectName ?? 'Global wallet desk'}</strong>
+          <div className="walletOpsRailSteps" aria-label="Wallet rail workflow">
+            <span className="active">01 Inventory</span>
+            <span>02 Assign Rails</span>
+            <span>03 Prove Signers</span>
+            <span>04 Stage Launch</span>
+          </div>
+          <p>{railStatusLabel} · {executableRailWallets.length} routed · {railGateLabel}</p>
+        </aside>
+        <div className="walletOpsPrimaryPanel">
+          <div className="walletOpsPanelHeader">
+            <div>
+              <span>Wallet command surface</span>
+              <strong>Organize, configure, and route wallets</strong>
+              <small>Use the actions below to create records, select custody, stage launch rails, and move into Deployment without changing live gates.</small>
+            </div>
+          <div className="walletOpsStatusStack">
+            <span>{activeCount} active</span>
+            <span>{unsignedRailWallets.length} signer gap(s)</span>
+            <span>{bundleOverLimit ? 'bundle over cap' : 'bundle in cap'}</span>
+            <span>{jitoStatus?.relay?.relayEnabled ? 'Jito on' : 'Jito off'}</span>
+          </div>
+          </div>
+          <div className="walletOpsActionGrid" aria-label="Wallet action buttons">
+            <button type="button" onClick={() => openAction('phantom')}><span>Connect</span><strong>Browser signer</strong><small>Phantom public key only</small></button>
+            <button type="button" onClick={() => openAction('track')}><span>Track</span><strong>Public address</strong><small>Watch-only inventory</small></button>
+            <button type="button" onClick={() => openAction('create')} disabled={!managedLocalEnabled}><span>Create</span><strong>Managed wallet</strong><small>{managedLocalEnabled ? 'encrypted vault' : 'vault disabled'}</small></button>
+            <button type="button" onClick={() => openAction('import')} disabled={!managedLocalEnabled}><span>Import</span><strong>Managed key</strong><small>{managedLocalEnabled ? 'preview then encrypt' : 'vault disabled'}</small></button>
+            <button type="button" onClick={() => openAction('send')}><span>Build</span><strong>Funding test</strong><small>unsigned, capped only</small></button>
+            <button type="button" onClick={() => openAction('receive')}><span>Receive</span><strong>Deposit view</strong><small>address and Solscan</small></button>
+            <button type="button" onClick={() => openAction('group')}><span>Group</span><strong>Wallet sets</strong><small>project and global</small></button>
+            <button type="button" onClick={() => openAction('export')}><span>Export</span><strong>Records</strong><small>public metadata</small></button>
+          </div>
+        </div>
+        <aside className="walletOpsConfigPanel">
+          <span>Configuration</span>
+          <strong>Rail presets</strong>
+          <div className="walletOpsConfigButtons">
+            <button type="button" onClick={autoSortRailDraft}>Auto Sort</button>
+            <button type="button" onClick={applyBundlePreset}>Jito Bundle</button>
+            <button type="button" onClick={applySniperPreset}>Sniper Set</button>
+            <button type="button" onClick={clearRailDraft}>Observe Only</button>
+            <button type="button" onClick={saveRailDraftToBrowser}>Save Draft</button>
+            <button type="button" onClick={loadRailDraftFromBrowser}>Load Draft</button>
+            <button type="button" onClick={stageRailIntoDeployment} disabled={loading || !selectedProjectId}>{loading ? 'Staging' : 'Stage Config'}</button>
+            <a href={deploymentHref}>Open Launch</a>
+          </div>
+          <div className="walletOpsConfigReadout">
+            <div><span>Project group</span><strong>{selectedGroupId ?? 'global'}</strong></div>
+            <div><span>Bundle cap</span><strong>{jitoMaxTx} tx</strong></div>
+            <div><span>Stage target</span><strong>{selectedProjectId ?? 'none'}</strong></div>
+          </div>
+        </aside>
+      </section>
 
       <div className="walletBoardMetrics">
         <div><span>Total SOL</span><strong>{totalSol.toFixed(4)}</strong><small>source-labeled balance: live, modeled, or provider-limited</small></div>
@@ -617,6 +745,81 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
         <div><span>General broadcast</span><strong>{generalBroadcastEnabled ? 'enabled' : 'disabled'}</strong><small>Broad sends remain policy-gated</small></div>
         <div><span>Funding test</span><strong>{fundingGateEnabled ? 'enabled' : 'disabled'}</strong><small>{fundingTestShape ? 'approved shape loaded' : 'load capped test'}</small></div>
       </div>
+
+      <section className="walletDashboardGrid" aria-label="Wallet operations dashboard">
+        <article className="walletDashboardPanel selected">
+          <div className="walletDashboardPanelHead">
+            <div><span>Selected wallet</span><strong>{selectedDetailWallet ? selectedDetailWallet.role : 'No wallet selected'}</strong></div>
+            {selectedDetailWallet ? <button type="button" onClick={() => setDetailWalletId(selectedDetailWallet.id)}>Details</button> : null}
+          </div>
+          {selectedDetailWallet ? (
+            <>
+              <div className="walletSelectedAddressRow">
+                <code>{selectedDetailWallet.address}</code>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(selectedDetailWallet.address).then(() => setMessage({ type: 'ok', text: 'Wallet address copied.' })).catch(() => setMessage({ type: 'warn', text: 'Copy failed in this browser context.' }))}>Copy</button>
+              </div>
+              <div className="walletSelectedStats">
+                <div><span>SOL</span><strong>{walletSolDisplay(selectedDetailWallet)}</strong></div>
+                <div><span>Tokens</span><strong>{selectedDetailWallet.tokenCount ?? 0}</strong><small>{typeof selectedDetailWallet.tokenValueUsd === 'number' ? `$${selectedDetailWallet.tokenValueUsd.toFixed(2)}` : selectedDetailWallet.tokenStatus ?? 'unpriced'}</small></div>
+                <div><span>Custody</span><strong>{selectedDetailWallet.custodyMode === 'managed-local' ? 'managed' : 'watch-only'}</strong><small>{selectedDetailWallet.custodyMode === 'managed-local' ? selectedDetailWallet.keyExportedAt ? 'backup exported' : 'backup needed' : 'public record only'}</small></div>
+                <div><span>Rail</span><strong>{railLabel(phaseForWallet(selectedDetailWallet.id))}</strong><small>{canWalletSign(selectedDetailWallet, selectedActiveWallet) ? 'signer ready' : 'signer blocked'}</small></div>
+              </div>
+              <div className="walletSelectedActionRow">
+                <button type="button" onClick={() => selectWallet(selectedDetailWallet)}>{selectedActiveWallet === selectedDetailWallet.address ? 'Active signer' : 'Select signer'}</button>
+                <button type="button" onClick={() => { setFromWalletId(selectedDetailWallet.id); openAction('send'); }}>Build tx</button>
+                <button type="button" onClick={() => { setReceiveWalletId(selectedDetailWallet.id); openAction('receive'); }}>Receive</button>
+                <button type="button" onClick={() => { setFromWalletId(selectedDetailWallet.id); openAction('export'); }}>{selectedDetailWallet.custodyMode === 'managed-local' ? 'Backup' : 'Export'}</button>
+              </div>
+            </>
+          ) : <p className="walletDashboardEmpty">Create, track, or select a wallet to unlock transaction prep and launch rail controls.</p>}
+        </article>
+
+        <article className="walletDashboardPanel transaction">
+          <div className="walletDashboardPanelHead"><div><span>Transaction lanes</span><strong>Prepare, simulate, then gate</strong></div></div>
+          <div className="walletActionLaneGrid">
+            <div><span>Movement</span><button type="button" onClick={() => openAction('send')}>Send SOL</button><button type="button" disabled>Send SPL</button><button type="button" disabled>Distribute</button><button type="button" disabled>Collect</button></div>
+            <div><span>Trading</span><a href={terminalHref}>Open Terminal</a><button type="button" disabled>Buy</button><button type="button" disabled>Sell</button><button type="button" disabled>Swap</button></div>
+            <div><span>Safety</span><button type="button" onClick={useFundingTest}>Load capped test</button><button type="button" onClick={runSendPreflight} disabled={loading || !fundingTestShape}>{sendBuildResult.status === 'building' ? 'Building' : 'Build unsigned'}</button><button type="button" onClick={() => setSendBuildResult({ status: 'idle', message: 'Transaction draft cleared. Load the capped funding test, then build the unsigned transaction.' })}>Clear draft</button></div>
+            <div><span>Execution</span><a href={selectedProjectId ? `/live-beta-test?project=${selectedProjectId}` : '/live-beta-test'}>Live Beta</a><button type="button" disabled>Sign gated</button><button type="button" disabled>Broadcast gated</button></div>
+          </div>
+        </article>
+
+        <article className="walletDashboardPanel risk">
+          <div className="walletDashboardPanelHead"><div><span>Risk controls</span><strong>Policy visible before action</strong></div></div>
+          <div className="walletRiskControlGrid">
+            <div><span>Stop loss</span><strong>-18%</strong><small>deployment default</small></div>
+            <div><span>Take profit</span><strong>35 / 75 / 150</strong><small>staged per wallet</small></div>
+            <div><span>Sell cap</span><strong>25%</strong><small>per transaction</small></div>
+            <div><span>Cooldown</span><strong>60s</strong><small>task rail default</small></div>
+            <div><span>Slippage</span><strong>100 bps</strong><small>rail default</small></div>
+            <div><span>Jito max</span><strong>{jitoMaxTx} tx</strong><small>{bundleOverLimit ? 'bundle over limit' : 'bundle within cap'}</small></div>
+            <div><span>Managed backups</span><strong>{backedUpManagedWallets}/{backedUpManagedWallets + backupNeededWallets}</strong><small>{backupNeededWallets ? `${backupNeededWallets} backup needed` : 'no backup gaps'}</small></div>
+            <div><span>Gate state</span><strong>{railGateLabel}</strong><small>no live wallet mutation by dashboard</small></div>
+          </div>
+        </article>
+
+        <article className="walletDashboardPanel simulation">
+          <div className="walletDashboardPanelHead"><div><span>Simulation</span><strong>{sendBuildResult.status === 'built' ? 'Unsigned build ready' : sendBuildResult.status === 'error' ? 'Blocked' : 'Waiting for draft'}</strong></div></div>
+          <div className="walletSimulationRows">
+            {transactionReadinessRows.map((row) => <div className={`walletSimulationRow ${row.state}`} key={row.label}><span>{row.label}</span><strong>{row.state}</strong><small>{row.detail}</small></div>)}
+          </div>
+        </article>
+
+        <article className="walletDashboardPanel activity">
+          <div className="walletDashboardPanelHead"><div><span>Activity</span><strong>Recent wallet rows</strong></div><button type="button" onClick={() => router.refresh()}>Refresh</button></div>
+          <div className="walletActivityTable">
+            <div className="walletActivityTableHead"><span>Wallet</span><span>Rail</span><span>Status</span><span>Last activity</span></div>
+            {walletActivityRows.length ? walletActivityRows.map((wallet) => (
+              <div className="walletActivityTableRow" key={wallet.id}>
+                <strong>{wallet.role}</strong>
+                <span>{railLabel(phaseForWallet(wallet.id))}</span>
+                <span>{wallet.archived ? 'archived' : wallet.status}</span>
+                <small>{wallet.lastActivity} · {wallet.lastActivityDetail}</small>
+              </div>
+            )) : <p className="walletDashboardEmpty">No wallet records yet.</p>}
+          </div>
+        </article>
+      </section>
 
       <section className="walletLaunchRailDesk" aria-label="Launch wallet rail">
         <div className="walletLaunchRailHeader">

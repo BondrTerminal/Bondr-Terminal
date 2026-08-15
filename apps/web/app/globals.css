@@ -7389,8 +7389,10 @@ html, body { max-width: 100%; overflow-x: clip; }
 .walletBoardTitleBlock h1 { margin: 6px 0; font-size: clamp(42px, 6vw, 86px); line-height: .9; letter-spacing: -.075em; }
 .walletBoardTitleBlock p { max-width: 820px; margin: 0; font-size: 13px; line-height: 1.45; }
 .walletBoardActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.walletBoardActions button { border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 11px 10px; background: rgba(255,255,255,0.07); color: var(--text); font-weight: 900; cursor: pointer; }
-.walletBoardActions button:nth-child(3), .walletBoardActions button:nth-child(4) { border-color: rgba(85,240,168,0.36); background: rgba(85,240,168,0.10); color: #dfffee; }
+.walletBoardActions button,
+.walletBoardActions a { border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 11px 10px; background: rgba(255,255,255,0.07); color: var(--text); font-weight: 900; cursor: pointer; text-align: center; text-decoration: none; }
+.walletBoardActions button:nth-child(3), .walletBoardActions button:nth-child(4),
+.walletBoardActions a:first-child { border-color: rgba(85,240,168,0.36); background: rgba(85,240,168,0.10); color: #dfffee; }
 .walletBoardMetrics, .walletReadinessRail { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .walletBoardMetrics div, .walletReadinessRail div { min-width: 0; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,0.055); }
 .walletReadinessRail div { background: rgba(0,0,0,0.24); }
@@ -7472,6 +7474,439 @@ html, body { max-width: 100%; overflow-x: clip; }
 .walletCustodyExplainer strong { color: var(--text); }
 .walletCustodyExplainer em { color: var(--muted); font-style: normal; font-size: 12px; }
 .walletSecurityFootnote { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.walletOpsCommandDesk {
+  display: grid;
+  grid-template-columns: minmax(210px, .7fr) minmax(0, 1.65fr) minmax(260px, .85fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.walletOpsRailMap,
+.walletOpsPrimaryPanel,
+.walletOpsConfigPanel {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 18px;
+  background: rgba(7, 6, 5, .76);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .22);
+}
+.walletOpsRailMap,
+.walletOpsConfigPanel {
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.walletOpsPrimaryPanel {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 127, 17, .16), transparent 34%),
+    rgba(7, 6, 5, .78);
+}
+.walletOpsRailMap > span,
+.walletOpsPanelHeader span,
+.walletOpsConfigPanel > span,
+.walletOpsConfigReadout span,
+.walletOpsActionGrid button > span {
+  display: block;
+  color: var(--bondr-tangerine, #ff7f11);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.walletOpsRailMap > strong,
+.walletOpsConfigPanel > strong {
+  display: block;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+.walletOpsRailMap p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.walletOpsRailSteps {
+  display: grid;
+  gap: 7px;
+}
+.walletOpsRailSteps span {
+  border: 1px solid rgba(249, 235, 224, .12);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, .045);
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 900;
+}
+.walletOpsRailSteps span.active {
+  border-color: rgba(255, 127, 17, .38);
+  background: rgba(255, 127, 17, .12);
+  color: var(--bondr-linen, #f9ebe0);
+}
+.walletOpsPanelHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+.walletOpsPanelHeader strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: clamp(22px, 2.6vw, 36px);
+  line-height: 1;
+  letter-spacing: -.045em;
+}
+.walletOpsPanelHeader small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.walletOpsStatusStack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.walletOpsStatusStack span {
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 999px;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, .22);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+.walletOpsActionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.walletOpsActionGrid button {
+  min-width: 0;
+  min-height: 96px;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.walletOpsActionGrid button:hover,
+.walletOpsConfigButtons button:hover,
+.walletOpsConfigButtons a:hover {
+  border-color: rgba(255, 127, 17, .38);
+  background: rgba(255, 127, 17, .1);
+}
+.walletOpsActionGrid button:disabled {
+  opacity: .56;
+  cursor: not-allowed;
+}
+.walletOpsActionGrid button strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 16px;
+  line-height: 1.1;
+}
+.walletOpsActionGrid button small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.walletOpsConfigButtons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.walletOpsConfigButtons button,
+.walletOpsConfigButtons a {
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 10px;
+  padding: 9px 8px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+.walletOpsConfigButtons button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.walletOpsConfigButtons button:nth-last-child(2) {
+  grid-column: 1 / -1;
+  border-color: rgba(255, 127, 17, .38);
+  background: rgba(255, 127, 17, .12);
+}
+.walletOpsConfigReadout {
+  display: grid;
+  gap: 7px;
+}
+.walletOpsConfigReadout > div {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(0, 0, 0, .2);
+}
+.walletOpsConfigReadout strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--bondr-linen, #f9ebe0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walletDashboardGrid {
+  display: grid;
+  grid-template-columns: minmax(320px, .9fr) minmax(0, 1.45fr) minmax(300px, .9fr);
+  grid-template-areas:
+    "selected transaction risk"
+    "simulation activity activity";
+  gap: 12px;
+  align-items: stretch;
+}
+.walletDashboardPanel {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(7, 6, 5, .72);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .2);
+}
+.walletDashboardPanel.selected { grid-area: selected; }
+.walletDashboardPanel.transaction { grid-area: transaction; }
+.walletDashboardPanel.risk { grid-area: risk; }
+.walletDashboardPanel.simulation { grid-area: simulation; }
+.walletDashboardPanel.activity { grid-area: activity; }
+.walletDashboardPanelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.walletDashboardPanelHead span,
+.walletSelectedStats span,
+.walletRiskControlGrid span,
+.walletActionLaneGrid span,
+.walletSimulationRow span,
+.walletActivityTableHead span {
+  display: block;
+  color: var(--bondr-tangerine, #ff7f11);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.walletDashboardPanelHead strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: -.035em;
+}
+.walletDashboardPanelHead button,
+.walletSelectedActionRow button,
+.walletActionLaneGrid button,
+.walletActionLaneGrid a {
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 10px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+.walletDashboardPanelHead button:hover,
+.walletSelectedActionRow button:hover,
+.walletActionLaneGrid button:hover,
+.walletActionLaneGrid a:hover {
+  border-color: rgba(255, 127, 17, .38);
+  background: rgba(255, 127, 17, .1);
+}
+.walletDashboardPanelHead button:disabled,
+.walletSelectedActionRow button:disabled,
+.walletActionLaneGrid button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+.walletSelectedAddressRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 12px;
+  padding: 9px;
+  background: rgba(0, 0, 0, .22);
+}
+.walletSelectedAddressRow code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.walletSelectedAddressRow button {
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 9px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+.walletSelectedStats,
+.walletRiskControlGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.walletSelectedStats > div,
+.walletRiskControlGrid > div {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, .04);
+}
+.walletSelectedStats strong,
+.walletRiskControlGrid strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--bondr-linen, #f9ebe0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walletSelectedStats small,
+.walletRiskControlGrid small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walletSelectedActionRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.walletActionLaneGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.walletActionLaneGrid > div {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 13px;
+  padding: 10px;
+  background: rgba(0, 0, 0, .2);
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+.walletActionLaneGrid button,
+.walletActionLaneGrid a {
+  width: 100%;
+  text-align: center;
+  padding: 8px 7px;
+  font-size: 11px;
+}
+.walletSimulationRows {
+  display: grid;
+  gap: 8px;
+}
+.walletSimulationRow {
+  display: grid;
+  grid-template-columns: minmax(100px, .75fr) 90px minmax(0, 1.8fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, .04);
+}
+.walletSimulationRow strong {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.walletSimulationRow small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.walletSimulationRow.pass { border-color: rgba(85, 240, 168, .26); background: rgba(85, 240, 168, .06); }
+.walletSimulationRow.pass strong { color: var(--green); }
+.walletSimulationRow.review { border-color: rgba(255, 209, 102, .24); background: rgba(255, 209, 102, .055); }
+.walletSimulationRow.review strong { color: var(--yellow); }
+.walletSimulationRow.blocked { border-color: rgba(255, 92, 122, .24); background: rgba(255, 92, 122, .055); }
+.walletSimulationRow.blocked strong { color: var(--red); }
+.walletActivityTable {
+  display: grid;
+  gap: 7px;
+}
+.walletActivityTableHead,
+.walletActivityTableRow {
+  display: grid;
+  grid-template-columns: minmax(130px, .9fr) 90px 90px minmax(0, 1.7fr);
+  gap: 10px;
+  align-items: center;
+}
+.walletActivityTableHead {
+  border-bottom: 1px solid rgba(249, 235, 224, .12);
+  padding: 0 2px 8px;
+}
+.walletActivityTableRow {
+  border: 1px solid rgba(249, 235, 224, .1);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, .04);
+}
+.walletActivityTableRow strong,
+.walletActivityTableRow span,
+.walletActivityTableRow small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walletActivityTableRow strong {
+  color: var(--bondr-linen, #f9ebe0);
+}
+.walletActivityTableRow span,
+.walletActivityTableRow small,
+.walletDashboardEmpty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.walletDashboardEmpty {
+  margin: 0;
+  line-height: 1.45;
+}
 .walletLaunchRailDesk {
   display: grid;
   gap: 12px;
@@ -7716,17 +8151,34 @@ html, body { max-width: 100%; overflow-x: clip; }
   padding-top: 2px;
 }
 @media (max-width: 1120px) {
+  .walletOpsCommandDesk,
+  .walletOpsPanelHeader,
+  .walletDashboardGrid,
   .walletLaunchRailHeader,
   .walletListRow.walletCenterBoxRow.walletBoxLayout,
   .walletCenterBoxRow .walletBoxIdentityLayer,
   .walletCenterBoxRow .walletBoxMetaLayer {
     grid-template-columns: 1fr;
   }
+  .walletDashboardGrid { grid-template-areas: none; }
+  .walletDashboardPanel { grid-area: auto !important; }
+  .walletOpsStatusStack { justify-content: flex-start; }
+  .walletOpsActionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .walletActionLaneGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .walletLaunchRailActions { justify-content: flex-start; min-width: 0; }
   .walletRailLaneGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .walletRailAssignLayer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 680px) {
+  .walletOpsActionGrid,
+  .walletOpsConfigButtons,
+  .walletSelectedStats,
+  .walletSelectedActionRow,
+  .walletActionLaneGrid,
+  .walletRiskControlGrid,
+  .walletSimulationRow,
+  .walletActivityTableHead,
+  .walletActivityTableRow,
   .walletRailLaneGrid,
   .walletRailAssignLayer { grid-template-columns: 1fr; }
 }
