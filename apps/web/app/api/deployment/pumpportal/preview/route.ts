@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('project')?.trim() || null;
   const mintPublicKey = searchParams.get('mint')?.trim() || null;
+  const connectedSigner = searchParams.get('connectedSigner')?.trim() || null;
   const observedAt = new Date().toISOString();
   const store = await getMeridianWalletStore();
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     }, { headers: { 'cache-control': 'no-store' } });
   }
 
-  const preview = buildPumpPortalCreatePreview(active.project, active.wallets, getLiveActivationStatus(), { mintPublicKey });
+  const preview = buildPumpPortalCreatePreview(active.project, active.wallets, getLiveActivationStatus(), { mintPublicKey, connectedSigner });
 
   return Response.json({
     status: preview.status,
@@ -40,9 +41,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { projectId?: unknown; mintPublicKey?: unknown };
+  const body = await request.json().catch(() => ({})) as { projectId?: unknown; mintPublicKey?: unknown; connectedSigner?: unknown };
   const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : null;
   const mintPublicKey = typeof body.mintPublicKey === 'string' ? body.mintPublicKey.trim() : null;
+  const connectedSigner = typeof body.connectedSigner === 'string' ? body.connectedSigner.trim() : null;
   const observedAt = new Date().toISOString();
   const store = await getMeridianWalletStore();
 
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     }, { headers: { 'cache-control': 'no-store' } });
   }
 
-  const preview = buildPumpPortalCreatePreview(active.project, active.wallets, getLiveActivationStatus(), { mintPublicKey });
+  const preview = buildPumpPortalCreatePreview(active.project, active.wallets, getLiveActivationStatus(), { mintPublicKey, connectedSigner });
 
   return Response.json({
     status: preview.status,

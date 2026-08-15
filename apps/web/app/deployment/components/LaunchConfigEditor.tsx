@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Keypair } from '@solana/web3.js';
+import { Keypair, PublicKey } from '@solana/web3.js';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
 import { PreLiveDryRunAction } from '../../sniper/components/PreLiveDryRunAction';
 
@@ -98,6 +98,15 @@ const presetLabels: Record<(typeof TASK_PRESETS)[number], string> = {
 };
 
 function short(address: string) { return address ? `${address.slice(0, 6)}…${address.slice(-5)}` : '—'; }
+function isValidSolanaPublicKey(value: string) {
+  if (!value.trim()) return false;
+  try {
+    new PublicKey(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function formatPctList(values: number[]) { return values.length ? values.join(', ') : ''; }
 function pctListFrom(form: FormData, name: string, fallback: number[]) {
   const raw = String(form.get(name) ?? '').trim();
@@ -303,7 +312,8 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const multiWalletSigningReady = false;
   const signingBlockedCount = nonDevParticipating.length + (selectedDevWallet ? 1 : 0);
   const signerMatchesDev = Boolean(selectedDevWallet?.address && connectedSigner && selectedDevWallet.address === connectedSigner);
-  const mintReady = Boolean(clientMintPublicKey);
+  const mintReady = isValidSolanaPublicKey(clientMintPublicKey);
+  const mintInvalid = Boolean(clientMintPublicKey && !mintReady);
   const currentIpfsStatus = ipfsState?.readiness?.status ?? (ipfsReady ? 'pinned' : 'not checked');
   const currentIpfsBlockers = ipfsState?.readiness?.blockers ?? (ipfsReady ? [] : ['metadata-not-pinned-to-ipfs']);
   const shadowPacket = shadowState?.packet;
@@ -317,7 +327,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     { label: 'IPFS metadata', status: ipfsReady ? 'pass' : 'review', detail: ipfsReady ? 'metadata URI is pinned' : `${currentIpfsStatus} · ${currentIpfsBlockers[0] ?? 'pin metadata'}` },
     { label: 'Jito relay', status: relayStatus?.relayEnabled ? 'pass' : (bundleCount ? 'blocked' : 'review'), detail: relayStatus ? `${relayStatus.status} · tip cap ${relayStatus.maxTipSol.toFixed(6)} SOL` : 'checking relay status' },
     { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : signerMatchesDev ? 'pass' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : signerMatchesDev ? 'connected browser signer matches dev wallet' : 'single dev wallet still needs connected browser signer proof' },
-    { label: 'Client mint', status: mintReady ? 'pass' : 'review', detail: mintReady ? `${short(clientMintPublicKey)} ready for shadow compile` : 'Generate client-side public key before shadow compile' },
+    { label: 'Client mint', status: mintReady ? 'pass' : 'review', detail: mintReady ? `${short(clientMintPublicKey)} ready for shadow compile` : mintInvalid ? 'Mint public key is not a valid Solana address' : 'Generate client-side public key before shadow compile' },
     { label: 'Dry-run', status: dryRunReady ? 'pass' : 'review', detail: project.preLiveDryRun?.status ? `${project.preLiveDryRun.status} · ${(project.preLiveDryRun.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'Run pre-live dry-run after saving' },
     { label: 'Deploy gate', status: 'blocked', detail: 'Closed until explicit deployment approval' }
   ];
@@ -1147,14 +1157,14 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div className="deploymentRehearsalSteps">
               <div className={ipfsReady ? 'pass' : 'review'}><span>01</span><strong>IPFS</strong><small>{ipfsReady ? short(project.metadata.metadataUri ?? '') : (currentIpfsBlockers[0] ?? 'pin metadata')}</small></div>
               <div className={signerMatchesDev ? 'pass' : 'review'}><span>02</span><strong>Signer</strong><small>{signerMatchesDev ? short(connectedSigner) : signerMessage}</small></div>
-              <div className={mintReady ? 'pass' : 'review'}><span>03</span><strong>Client mint</strong><small>{mintReady ? short(clientMintPublicKey) : 'generate public key'}</small></div>
+              <div className={mintReady ? 'pass' : 'review'}><span>03</span><strong>Client mint</strong><small>{mintReady ? short(clientMintPublicKey) : mintInvalid ? 'invalid public key' : 'generate public key'}</small></div>
               <div className={dryRunReady ? 'pass' : 'review'}><span>04</span><strong>Dry-run</strong><small>{dryRunReady ? `${(project.preLiveDryRun?.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'run pre-live check'}</small></div>
               <div className={shadowPacket?.status === 'shadow-ready' ? 'pass' : shadowPacket ? 'review' : 'blocked'}><span>05</span><strong>Shadow</strong><small>{shadowPacket?.packetHash ? shadowPacket.packetHash.slice(0, 12) : 'compile packet'}</small></div>
             </div>
             <div className="deploymentHarnessActionPanel mint">
               <div>
                 <span>Client mint public key</span>
-                <strong>{mintReady ? short(clientMintPublicKey) : 'not generated'}</strong>
+                <strong>{mintReady ? short(clientMintPublicKey) : mintInvalid ? 'invalid mint' : 'not generated'}</strong>
                 <small>{mintMessage}</small>
               </div>
               <div className="deploymentHarnessStatusGrid">

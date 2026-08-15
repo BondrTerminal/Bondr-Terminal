@@ -9,6 +9,7 @@ import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExec
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
+import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -103,6 +104,60 @@ const activation = {
   warnings: []
 };
 
+const validMintPublicKey = 'Mint111111111111111111111111111111111111111';
+
+function ipfsReadyProject(): Project {
+  return {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+}
+
+function serializedProviderTransaction(args: { includeMintSigner: boolean }) {
+  const dev = new PublicKey(wallet.address);
+  const mint = new PublicKey(validMintPublicKey);
+  const instruction = new TransactionInstruction({
+    programId: SystemProgram.programId,
+    keys: [
+      { pubkey: dev, isSigner: true, isWritable: true },
+      { pubkey: mint, isSigner: args.includeMintSigner, isWritable: true }
+    ],
+    data: Buffer.alloc(0)
+  });
+  const message = new TransactionMessage({
+    payerKey: dev,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [instruction]
+  }).compileToV0Message();
+  return new VersionedTransaction(message).serialize();
+}
+
+async function withProviderBuild<T>(body: (calls: { count: number }) => Promise<T>, bytes = serializedProviderTransaction({ includeMintSigner: true })) {
+  const previousEnabled = process.env.PUMPPORTAL_BUILD_ENABLED;
+  const previousUrl = process.env.PUMPPORTAL_TRADE_LOCAL_URL;
+  const previousFetch = globalThis.fetch;
+  const calls = { count: 0 };
+  try {
+    process.env.PUMPPORTAL_BUILD_ENABLED = 'true';
+    process.env.PUMPPORTAL_TRADE_LOCAL_URL = 'https://example.invalid/pumpportal-test';
+    globalThis.fetch = (async () => {
+      calls.count += 1;
+      return new Response(bytes, { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+    }) as typeof fetch;
+    return await body(calls);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.PUMPPORTAL_BUILD_ENABLED;
+    else process.env.PUMPPORTAL_BUILD_ENABLED = previousEnabled;
+    if (previousUrl === undefined) delete process.env.PUMPPORTAL_TRADE_LOCAL_URL;
+    else process.env.PUMPPORTAL_TRADE_LOCAL_URL = previousUrl;
+    globalThis.fetch = previousFetch;
+  }
+}
+
 test('deployment route adapters keep live launch rails explicit', () => {
   assert.deepEqual(DEPLOYMENT_ROUTE_ADAPTERS.map((adapter) => adapter.id), [
     'pumpportal-create',
@@ -142,6 +197,7 @@ test('pumpportal create preview names IPFS and mint blockers without calling pro
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.equal(preview.safety.noProviderCall, true);
   assert.equal(preview.signerPreview.serverCustody, false);
+  assert.equal(preview.signerPreview.signerProofStatus, 'missing');
 });
 
 test('pumpportal create preview becomes structurally ready when IPFS URI and mint are present', () => {
@@ -158,8 +214,43 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.ipfs.status, 'ready');
   assert.equal(preview.payloadPreview.tokenMetadata.uri, 'ipfs://bafybeigdyrztkexample/metadata.json');
   assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
+  assert.equal(preview.presentInputs.mintPublicKey, true);
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('pumpportal create preview blocks invalid client mint before provider build', () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const preview = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'bad-mint', connectedSigner: wallet.address });
+  assert.equal(preview.status, 'blocked');
+  assert.equal(preview.presentInputs.mintPublicKey, false);
+  assert.ok(preview.blockers.includes('client-mint-public-key-invalid'));
+  assert.equal(preview.signerPreview.signerProofStatus, 'matched');
+  assert.equal(preview.safety.noProviderCall, true);
+});
+
+test('pumpportal create preview exposes browser signer proof status', () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    }
+  };
+  const missing = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111' });
+  assert.equal(missing.signerPreview.signerProofStatus, 'missing');
+  const mismatch = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111', connectedSigner: '11111111111111111111111111111111' });
+  assert.equal(mismatch.signerPreview.signerProofStatus, 'mismatch');
+  const matched = buildPumpPortalCreatePreview(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111', connectedSigner: wallet.address });
+  assert.equal(matched.signerPreview.signerProofStatus, 'matched');
 });
 
 test('deployment readiness separates rehearsal blockers from intentional live gates', () => {
@@ -186,15 +277,8 @@ test('deployment readiness separates rehearsal blockers from intentional live ga
 });
 
 test('pumpportal build-create stays provider-disabled without signing or broadcast', async () => {
-  const ipfsProject = {
-    ...project,
-    metadata: {
-      ...project.metadata,
-      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
-      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
-    }
-  };
-  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: 'Mint111111111111111111111111111111111111111', connectedSigner: wallet.address });
+  const ipfsProject = ipfsReadyProject();
+  const result = await buildPumpPortalCreateTransaction(ipfsProject, [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address });
   assert.equal(result.contract, 'bondr-pumpportal-build-create-v1');
   assert.equal(result.status, 'provider-build-disabled');
   assert.equal(result.execution, 'provider-build-disabled-no-call');
@@ -203,6 +287,46 @@ test('pumpportal build-create stays provider-disabled without signing or broadca
   assert.equal(result.safety.noBroadcast, true);
   assert.equal(result.requestBody.action, 'create');
   assert.equal(result.requestBody.tokenMetadata.uri, 'ipfs://bafybeigdyrztkexample/metadata.json');
+});
+
+test('pumpportal build-create refuses provider call without explicit confirmBuild', async () => {
+  await withProviderBuild(async (calls) => {
+    const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address });
+    assert.equal(result.status, 'provider-build-disabled');
+    assert.equal(result.execution, 'provider-build-disabled-no-call');
+    assert.deepEqual(result.blockers, ['explicit-confirm-build-required']);
+    assert.equal(result.safety.providerCallEnabled, true);
+    assert.equal(result.safety.confirmBuild, false);
+    assert.equal(calls.count, 0);
+  });
+});
+
+test('pumpportal build-create inspects returned unsigned transaction signers', async () => {
+  await withProviderBuild(async (calls) => {
+    const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address, confirmBuild: true });
+    assert.equal(result.status, 'built');
+    assert.equal(result.execution, 'unsigned-create-transaction-built-no-signing-no-broadcast');
+    assert.equal(calls.count, 1);
+    assert.equal(result.safety.noSigning, true);
+    assert.equal(result.safety.noBroadcast, true);
+    assert.equal(result.safety.noPrivateKeys, true);
+    assert.equal(result.build?.feePayer, wallet.address);
+    assert.ok(result.build?.requiredSigners.includes(wallet.address));
+    assert.ok(result.build?.requiredSigners.includes(validMintPublicKey));
+    assert.equal(Object.prototype.hasOwnProperty.call(result.build ?? {}, 'transactionBase64'), false);
+  });
+});
+
+test('pumpportal build-create blocks returned transaction missing mint signer', async () => {
+  await withProviderBuild(async (calls) => {
+    const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address, confirmBuild: true });
+    assert.equal(result.status, 'blocked');
+    assert.equal(result.execution, 'provider-build-policy-blocked-no-signing-no-broadcast');
+    assert.equal(calls.count, 1);
+    assert.ok(result.blockers.includes('pumpportal-mint-signer-missing'));
+    assert.equal(result.safety.noSigning, true);
+    assert.equal(result.safety.noBroadcast, true);
+  }, serializedProviderTransaction({ includeMintSigner: false }));
 });
 
 test('pumpportal build-create blocks bad mint before provider call', async () => {

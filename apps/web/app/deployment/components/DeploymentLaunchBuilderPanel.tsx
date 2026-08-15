@@ -39,6 +39,8 @@ type PumpPortalPreviewState = {
     };
     signerPreview: {
       devWalletAddress: string | null;
+      connectedSigner: string | null;
+      signerProofStatus: string;
       custodyMode: string;
       serverCustody: boolean;
     };
@@ -167,7 +169,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       const response = await fetch('/api/deployment/pumpportal/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null })
+        body: JSON.stringify({ projectId, mintPublicKey: mint.trim() || null, connectedSigner: connectedSigner.trim() || null })
       });
       const payload = await response.json().catch(() => ({})) as PumpPortalPreviewState;
       setPumpPortalPreview(payload);
@@ -217,7 +219,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       const address = response.publicKey.toBase58?.() ?? response.publicKey.toString();
       setConnectedSigner(address);
       setPayer((current) => current || address);
-      setSignerProofMessage(address === payer || !payer ? 'Browser signer connected.' : 'Connected signer does not match the selected deployer.');
+      setSignerProofMessage(address === payer || !payer ? 'Browser signer connected. No transaction signature requested.' : 'Connected signer does not match the selected deployer.');
     } catch (error) {
       setSignerProofMessage(error instanceof Error ? error.message : 'Browser signer connection failed.');
     }
@@ -369,6 +371,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Status</span><strong>{pumpPortalPreview.preview?.status ?? pumpPortalPreview.status ?? 'unknown'}</strong></div>
           <div><span>IPFS</span><strong>{pumpPortalPreview.preview?.ipfs.status ?? 'unknown'}</strong><small>{pumpPortalPreview.preview?.ipfs.imageSource ?? 'no image'} · provider {pumpPortalPreview.preview?.ipfs.providerConfigured ? 'configured' : 'missing'}</small></div>
           <div><span>Dev signer</span><strong>{short(pumpPortalPreview.preview?.signerPreview.devWalletAddress)}</strong><small>{pumpPortalPreview.preview?.signerPreview.custodyMode ?? 'unknown'} · server custody {pumpPortalPreview.preview?.signerPreview.serverCustody ? 'yes' : 'no'}</small></div>
+          <div><span>Signer proof</span><strong>{pumpPortalPreview.preview?.signerPreview.signerProofStatus ?? 'unknown'}</strong><small>{short(pumpPortalPreview.preview?.signerPreview.connectedSigner)}</small></div>
           <div><span>Amount / fee</span><strong>{pumpPortalPreview.preview ? `${pumpPortalPreview.preview.payloadPreview.amount.toFixed(4)} SOL` : 'unknown'}</strong><small>priority {pumpPortalPreview.preview?.payloadPreview.priorityFee ?? 0} SOL · slippage {pumpPortalPreview.preview?.payloadPreview.slippage ?? 0}%</small></div>
           <div className="wide"><span>Blockers</span><strong>{pumpPortalPreview.preview?.blockers.length ? pumpPortalPreview.preview.blockers.join(', ') : pumpPortalPreview.error ?? 'preview-ready; live gates still require approval'}</strong></div>
           {Boolean(pumpPortalPreview.preview?.warnings.length) && <div className="wide"><span>Warnings</span><strong>{pumpPortalPreview.preview?.warnings.join(', ')}</strong></div>}

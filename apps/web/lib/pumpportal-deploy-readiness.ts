@@ -63,6 +63,8 @@ export type PumpPortalCreatePreview = {
   signerPreview: {
     devWalletId: string | null;
     devWalletAddress: string | null;
+    connectedSigner: string | null;
+    signerProofStatus: 'matched' | 'missing' | 'mismatch';
     custodyMode: Wallet['custodyMode'] | 'missing';
     clientMintPublicKeyRequired: true;
     serverCustody: false;
@@ -102,14 +104,13 @@ export type PumpPortalBuildCreateResult = {
     deploymentGateIgnoredForBuildOnly: true;
   };
   build?: {
-    transactionBase64: string;
     transactionBytes: number;
     transactionHash: string;
     requiredSigners: string[];
     mint: string;
     feePayer: string | null;
   };
-  execution: 'blocked-no-provider-call' | 'provider-build-disabled-no-call' | 'unsigned-create-transaction-built-no-signing-no-broadcast';
+  execution: 'blocked-no-provider-call' | 'provider-build-disabled-no-call' | 'provider-build-policy-blocked-no-signing-no-broadcast' | 'unsigned-create-transaction-built-no-signing-no-broadcast';
 };
 
 function isPresent(value?: string | null) {
@@ -162,9 +163,7 @@ function buildStructuralBlockers(preview: PumpPortalCreatePreview) {
 function normalizeSerializedTransaction(payload: ArrayBuffer) {
   const bytes = Buffer.from(payload);
   const transaction = VersionedTransaction.deserialize(bytes);
-  const transactionBase64 = bytes.toString('base64');
   return {
-    transactionBase64,
     transactionBytes: bytes.length,
     transactionHash: createHash('sha256').update(bytes).digest('hex'),
     requiredSigners: transaction.message.staticAccountKeys
@@ -174,9 +173,24 @@ function normalizeSerializedTransaction(payload: ArrayBuffer) {
   };
 }
 
-export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: { mintPublicKey?: string | null } = {}): PumpPortalCreatePreview {
+function inspectReturnedCreateTransaction(build: ReturnType<typeof normalizeSerializedTransaction>, requestBody: PumpPortalCreatePreview['payloadPreview']) {
+  const required = new Set(build.requiredSigners);
+  return [
+    requestBody.publicKey && build.feePayer === requestBody.publicKey ? null : 'pumpportal-fee-payer-mismatch',
+    requestBody.publicKey && required.has(requestBody.publicKey) ? null : 'pumpportal-dev-signer-missing',
+    requestBody.mint && required.has(requestBody.mint) ? null : 'pumpportal-mint-signer-missing'
+  ].filter((item): item is string => Boolean(item));
+}
+
+export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: { mintPublicKey?: string | null; connectedSigner?: string | null } = {}): PumpPortalCreatePreview {
   const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
   const devWallet = wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
+  const rawMintPublicKey = input.mintPublicKey?.trim() || null;
+  const mintPublicKeyValid = rawMintPublicKey ? validPublicKey(rawMintPublicKey) : false;
+  const connectedSigner = input.connectedSigner?.trim() || null;
+  const signerProofStatus: PumpPortalCreatePreview['signerPreview']['signerProofStatus'] = connectedSigner && devWallet?.address
+    ? connectedSigner === devWallet.address ? 'matched' : 'mismatch'
+    : 'missing';
   const imageUrl = project.metadata.imageUrl?.trim() || null;
   const storedMetadataUri = project.metadata.metadataUri?.trim() || null;
   const image = imageSource(imageUrl);
@@ -200,7 +214,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
     image: Boolean(imageUrl),
     ipfsMetadataUri: Boolean(metadataUri),
     devWalletPublicKey: Boolean(devWallet?.address),
-    mintPublicKey: Boolean(input.mintPublicKey?.trim()),
+    mintPublicKey: Boolean(rawMintPublicKey && mintPublicKeyValid),
     initialBuySol: amount > 0,
     slippage: slippage > 0,
     priorityFeeCap: priorityFee >= 0,
@@ -213,7 +227,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
     presentInputs.image ? null : 'token-image-missing',
     presentInputs.ipfsMetadataUri ? null : providerConfigured ? 'ipfs-upload-needed' : 'ipfs-provider-required',
     presentInputs.devWalletPublicKey ? null : 'dev-wallet-missing',
-    presentInputs.mintPublicKey ? null : 'client-mint-public-key-required',
+    rawMintPublicKey ? mintPublicKeyValid ? null : 'client-mint-public-key-invalid' : 'client-mint-public-key-required',
     presentInputs.initialBuySol ? null : 'initial-buy-sol-missing',
     activation.deploymentEnabled ? null : 'deployment-gate-closed',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
@@ -274,7 +288,7 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
         symbol: tokenSymbol,
         uri: metadataUri
       },
-      mint: input.mintPublicKey?.trim() || null,
+      mint: rawMintPublicKey,
       denominatedInSol: 'true',
       amount,
       slippage,
@@ -296,6 +310,8 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
     signerPreview: {
       devWalletId: devWallet?.id ?? null,
       devWalletAddress: devWallet?.address ?? null,
+      connectedSigner,
+      signerProofStatus,
       custodyMode: devWallet?.custodyMode ?? 'missing',
       clientMintPublicKeyRequired: true,
       serverCustody: false
@@ -312,14 +328,14 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
 
 export async function buildPumpPortalCreateTransaction(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: PumpPortalBuildCreateInput = {}): Promise<PumpPortalBuildCreateResult> {
   const observedAt = new Date().toISOString();
-  const preview = buildPumpPortalCreatePreview(project, wallets, activation, { mintPublicKey: input.mintPublicKey });
+  const preview = buildPumpPortalCreatePreview(project, wallets, activation, { mintPublicKey: input.mintPublicKey, connectedSigner: input.connectedSigner });
   const structuralBlockers = buildStructuralBlockers(preview);
   const mint = preview.payloadPreview.mint;
   const connectedSigner = input.connectedSigner?.trim() || null;
   const requestBody = preview.payloadPreview;
   const blockers = [
     ...structuralBlockers,
-    mint && validPublicKey(mint) ? null : 'client-mint-public-key-invalid',
+    mint ? validPublicKey(mint) ? null : structuralBlockers.includes('client-mint-public-key-invalid') ? null : 'client-mint-public-key-invalid' : null,
     requestBody.publicKey && validPublicKey(requestBody.publicKey) ? null : 'dev-wallet-public-key-invalid',
     connectedSigner ? null : 'browser-signer-proof-required',
     connectedSigner && requestBody.publicKey && connectedSigner !== requestBody.publicKey ? 'browser-signer-dev-wallet-mismatch' : null
@@ -370,14 +386,24 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
   }
 
   const build = normalizeSerializedTransaction(await response.arrayBuffer());
+  const returnedPolicyBlockers = inspectReturnedCreateTransaction(build, requestBody);
+  const inspectedBuild = {
+    ...build,
+    mint: mint!
+  };
+  if (returnedPolicyBlockers.length) {
+    return {
+      ...base,
+      status: 'blocked',
+      build: inspectedBuild,
+      blockers: returnedPolicyBlockers,
+      execution: 'provider-build-policy-blocked-no-signing-no-broadcast'
+    };
+  }
   return {
     ...base,
     status: 'built',
-    build: {
-      ...build,
-      requiredSigners: Array.from(new Set([...build.requiredSigners, requestBody.publicKey, mint].filter((item): item is string => Boolean(item)))),
-      mint: mint!
-    },
+    build: inspectedBuild,
     execution: 'unsigned-create-transaction-built-no-signing-no-broadcast'
   };
 }
