@@ -4,7 +4,7 @@ import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../ap
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
-import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
+import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
@@ -408,6 +408,30 @@ test('sniper readiness reports trigger, relay, and recovery blockers without exe
   assert.ok(readiness.blockers.includes('broadcast-gate-closed'));
   assert.ok(readiness.blockers.includes('sniper-recovery-engine-missing'));
   assert.equal(readiness.safety.noAutonomousTrading, true);
+});
+
+test('sniper trigger preview blocks missing trigger inputs without building a buy', () => {
+  const preview = buildSniperTriggerPreview(project, [wallet], activation);
+  assert.equal(preview.contract, 'bondr-sniper-trigger-preview-v1');
+  assert.equal(preview.execution, 'sniper-trigger-preview-only-no-buy-no-broadcast');
+  assert.ok(preview.blockers.includes('trigger-source-required'));
+  assert.ok(preview.blockers.includes('token-mint-required'));
+  assert.ok(preview.blockers.includes('connected-browser-signer-proof-required'));
+  assert.equal(preview.safety.noTransactionBuild, true);
+});
+
+test('sniper trigger preview accepts manual trigger shape but keeps live gates closed', () => {
+  const preview = buildSniperTriggerPreview({ ...project, tokenMint: 'Mint111111111111111111111111111111111111111' }, [wallet], activation, {
+    source: 'manual',
+    connectedSigner: wallet.address,
+    amountSol: 0.01,
+    slippageBps: 100,
+    simulationProof: { ok: true }
+  });
+  assert.equal(preview.status, 'preview-ready');
+  assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+  assert.ok(preview.blockers.includes('jito-relay-disabled'));
+  assert.equal(preview.safety.noBroadcast, true);
 });
 
 test('task readiness blocks durable worker and fake-volume policy gaps', () => {

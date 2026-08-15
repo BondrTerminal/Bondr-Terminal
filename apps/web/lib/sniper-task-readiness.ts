@@ -59,6 +59,65 @@ export function buildSniperExecutionReadiness(project: Project | null, wallets: 
   };
 }
 
+export type SniperTriggerPreviewInput = {
+  source?: 'manual' | 'pool-detector' | 'webhook';
+  mint?: string | null;
+  connectedSigner?: string | null;
+  amountSol?: number;
+  slippageBps?: number;
+  simulationProof?: unknown;
+};
+
+export function buildSniperTriggerPreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: SniperTriggerPreviewInput = {}) {
+  const readiness = buildSniperExecutionReadiness(project, wallets, activation);
+  const relay = getJitoRelayReadiness();
+  const mint = input.mint?.trim() || project?.tokenMint || null;
+  const signer = input.connectedSigner?.trim() || null;
+  const amountSol = typeof input.amountSol === 'number' && Number.isFinite(input.amountSol) ? input.amountSol : 0;
+  const slippageBps = typeof input.slippageBps === 'number' && Number.isFinite(input.slippageBps) ? input.slippageBps : project?.launchConfig?.route.slippageBps ?? 100;
+  const maxSolPerSwap = activation.limits?.maxSolPerSwap ?? 0.25;
+  const maxSlippageBps = activation.limits?.maxSlippageBps ?? 250;
+  const walletAddresses = wallets.map((wallet) => wallet.address);
+  const blockers = [
+    input.source ? null : 'trigger-source-required',
+    mint ? null : 'token-mint-required',
+    signer ? null : 'connected-browser-signer-proof-required',
+    signer && walletAddresses.length && !walletAddresses.includes(signer) ? 'connected-signer-not-in-wallet-plan' : null,
+    amountSol > 0 ? null : 'sniper-amount-required',
+    amountSol > maxSolPerSwap ? 'sniper-amount-exceeds-live-cap' : null,
+    slippageBps <= maxSlippageBps ? null : 'sniper-slippage-exceeds-live-cap',
+    activation.requireSimulation && !input.simulationProof ? 'simulation-proof-missing' : null,
+    activation.broadcastEnabled ? null : 'broadcast-gate-closed',
+    relay.relayEnabled ? null : 'jito-relay-disabled'
+  ].filter((item): item is string => Boolean(item));
+  return {
+    contract: 'bondr-sniper-trigger-preview-v1' as const,
+    status: blockers.filter((blocker) => !['broadcast-gate-closed', 'jito-relay-disabled', 'simulation-proof-missing'].includes(blocker)).length ? 'blocked' : 'preview-ready',
+    projectId: project?.id ?? null,
+    trigger: {
+      source: input.source ?? null,
+      mint,
+      amountSol,
+      slippageBps,
+      connectedSigner: signer
+    },
+    readiness,
+    relay: {
+      relayEnabled: relay.relayEnabled,
+      provider: relay.provider,
+      blockEngineRegion: relay.blockEngineRegion
+    },
+    blockers,
+    safety: {
+      noAutonomousTrading: true,
+      noTransactionBuild: true,
+      noSigning: true,
+      noBroadcast: true
+    },
+    execution: 'sniper-trigger-preview-only-no-buy-no-broadcast' as const
+  };
+}
+
 export function buildTaskExecutionReadiness(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus) {
   const relay = getJitoRelayReadiness();
   const signing = project ? buildWalletSigningReadiness(project, wallets) : null;
