@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
-import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
+import { buildIpfsMetadataReadiness, buildTokenMetadataJson, pinataJwt } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
@@ -254,6 +254,25 @@ test('ipfs metadata readiness accepts BONDR_PINATA_API as a Pinata bearer alias'
     assert.equal(readiness.providerConfigured, true);
     assert.equal(readiness.blockers.includes('pinata-jwt-missing'), false);
     assert.deepEqual(readiness.requiredEnv, ['PINATA_JWT', 'BONDR_PINATA_API']);
+  } finally {
+    if (previousJwt === undefined) delete process.env.PINATA_JWT;
+    else process.env.PINATA_JWT = previousJwt;
+    if (previousAlias === undefined) delete process.env.BONDR_PINATA_API;
+    else process.env.BONDR_PINATA_API = previousAlias;
+  }
+});
+
+test('pinata jwt parser extracts JWT from combined Pinata credential blobs', () => {
+  const previousJwt = process.env.PINATA_JWT;
+  const previousAlias = process.env.BONDR_PINATA_API;
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwaW5hdGEifQ.signature';
+  try {
+    delete process.env.PINATA_JWT;
+    process.env.BONDR_PINATA_API = `PINATA_API_KEY=key\nPINATA_API_SECRET=secret\nJWT=${jwt}`;
+    assert.equal(pinataJwt(), jwt);
+
+    process.env.BONDR_PINATA_API = JSON.stringify({ pinata_api_key: 'key', pinata_api_secret: 'secret', JWT: jwt });
+    assert.equal(pinataJwt(), jwt);
   } finally {
     if (previousJwt === undefined) delete process.env.PINATA_JWT;
     else process.env.PINATA_JWT = previousJwt;

@@ -44,8 +44,25 @@ function configured() {
   return Boolean(pinataJwt());
 }
 
+function extractJwt(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return '';
+  const exactJwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed);
+  if (exactJwt) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    for (const key of ['JWT', 'jwt', 'pinata_jwt', 'PINATA_JWT', 'token']) {
+      const candidate = typeof parsed[key] === 'string' ? parsed[key].trim() : '';
+      if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(candidate)) return candidate;
+    }
+  } catch {
+    // Fall through to extracting a JWT from env-file style blobs.
+  }
+  return trimmed.match(/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/)?.[0] ?? trimmed;
+}
+
 export function pinataJwt() {
-  return process.env.PINATA_JWT?.trim() || process.env.BONDR_PINATA_API?.trim() || '';
+  return extractJwt(process.env.PINATA_JWT) || extractJwt(process.env.BONDR_PINATA_API) || '';
 }
 
 export function ipfsUri(cid: string) {
