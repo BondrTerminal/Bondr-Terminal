@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
-type LaunchConfigPatch = Partial<Pick<Project, 'launchPath' | 'tokenMint' | 'pool'>> & {
+type LaunchConfigPatch = Partial<Pick<Project, 'name' | 'launchPath' | 'tokenMint' | 'pool'>> & {
   metadata?: Partial<Project['metadata']>;
   fundingPlan?: Partial<Project['fundingPlan']>;
   launchConfig?: Partial<LaunchConfig> & {
@@ -162,6 +162,7 @@ function mergeLaunchConfig(project: Project, patch?: LaunchConfigPatch['launchCo
 }
 function applyPatch(project: Project, body: LaunchConfigPatch): Project {
   const next: Project = structuredClone(project);
+  if (typeof body.name === 'string') next.name = stringField(body.name, next.name, 120);
   if (typeof body.launchPath === 'string') {
     const launchPath = stringField(body.launchPath, next.launchPath, 80);
     next.launchPath = ['pump.fun', 'raydium', 'meteora', 'bonk'].includes(launchPath) ? launchPath : 'pump.fun';
