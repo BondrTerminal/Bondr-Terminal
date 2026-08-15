@@ -128,6 +128,36 @@ type SignedCreateState = {
   simulationStatus?: string;
 };
 
+type SignedReviewState = {
+  status?: string;
+  execution?: string;
+  broadcast?: string;
+  intentId?: string;
+  blockers?: string[];
+  warnings?: string[];
+  error?: string;
+  review?: {
+    localSignatureReviewPassed?: boolean;
+    safeToBroadcastIfLiveEnabled?: boolean;
+    signerMatched?: boolean;
+    expectedMintReferenced?: boolean;
+    programsAllowed?: boolean;
+    transactionMessageHash?: string | null;
+  };
+};
+
+type BroadcastState = {
+  status?: string;
+  execution?: string;
+  error?: string;
+  signature?: string;
+  explorerUrl?: string;
+  blockers?: string[];
+  warnings?: string[];
+  broadcastEnabled?: boolean;
+  transactionPreview?: { blockers?: string[]; warnings?: string[]; action?: string };
+};
+
 type BrowserSolanaProvider = {
   publicKey?: { toString(): string; toBase58?: () => string };
   connect(): Promise<{ publicKey: { toString(): string; toBase58?: () => string } }>;
@@ -169,6 +199,10 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [signedCreate, setSignedCreate] = useState<SignedCreateState>({ status: 'idle', message: 'Build and simulate an unsigned create transaction before local signing.' });
+  const [signedReview, setSignedReview] = useState<SignedReviewState | null>(null);
+  const [signedReviewLoading, setSignedReviewLoading] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<BroadcastState | null>(null);
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [shadowLoading, setShadowLoading] = useState(false);
   const [shadowPlan, setShadowPlan] = useState<ShadowPlanState | null>(null);
   const [clientMintKeypair, setClientMintKeypair] = useState<Keypair | null>(null);
@@ -223,6 +257,8 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     setPumpPortalBuildLoading(true);
     setPumpPortalBuild(null);
     setSimulation(null);
+    setSignedReview(null);
+    setBroadcastResult(null);
     setSignedCreate({ status: 'idle', message: 'Build and simulate an unsigned create transaction before local signing.' });
     try {
       const response = await fetch('/api/deployment/pumpportal/build-create', {
@@ -304,7 +340,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       tx.sign([clientMintKeypair]);
       const signed = await provider.signTransaction(tx);
       const signedTransaction = bytesToBase64(signed.serialize());
-      setSignedCreate({
+      const signedState = {
         status: 'signed',
         message: 'Signed locally. Broadcast still requires explicit gate and final submit action.',
         signedTransaction,
@@ -313,9 +349,71 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         expectedMint: intent.expectedMint,
         transactionMessageHash: intent.transactionMessageHash,
         simulationStatus: 'ok'
-      });
+      } satisfies SignedCreateState;
+      setSignedCreate(signedState);
+      await reviewSignedCreate(signedState);
     } catch (error) {
       setSignedCreate({ status: 'error', message: error instanceof Error ? error.message : 'Local signing failed.' });
+    }
+  }
+
+  async function reviewSignedCreate(source: SignedCreateState = signedCreate) {
+    if (!source.signedTransaction || !source.intentId) {
+      setSignedReview({ status: 'blocked', error: 'Signed transaction and intent are required before signed review.' });
+      return;
+    }
+    setSignedReviewLoading(true);
+    setSignedReview(null);
+    setBroadcastResult(null);
+    try {
+      const response = await fetch('/api/terminal/signed-review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          signedTransaction: source.signedTransaction,
+          intentId: source.intentId,
+          expectedSigner: source.expectedSigner,
+          expectedMint: source.expectedMint,
+          transactionMessageHash: source.transactionMessageHash,
+          simulationStatus: source.simulationStatus
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as SignedReviewState;
+      setSignedReview(payload);
+    } catch (error) {
+      setSignedReview({ status: 'error', error: error instanceof Error ? error.message : 'Signed review request failed.' });
+    } finally {
+      setSignedReviewLoading(false);
+    }
+  }
+
+  async function broadcastSignedCreate() {
+    if (!signedCreate.signedTransaction || !signedCreate.intentId || signedReview?.status !== 'ok') {
+      setBroadcastResult({ status: 'blocked', error: 'Broadcast requires a signed packet and passed signed review.' });
+      return;
+    }
+    setBroadcastLoading(true);
+    setBroadcastResult(null);
+    try {
+      const response = await fetch('/api/send-signed-transaction', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'launch',
+          signedTransaction: signedCreate.signedTransaction,
+          intentId: signedCreate.intentId,
+          expectedSigner: signedCreate.expectedSigner,
+          expectedMint: signedCreate.expectedMint,
+          transactionMessageHash: signedCreate.transactionMessageHash,
+          simulationStatus: signedCreate.simulationStatus
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as BroadcastState;
+      setBroadcastResult(payload);
+    } catch (error) {
+      setBroadcastResult({ status: 'error', error: error instanceof Error ? error.message : 'Broadcast request failed.' });
+    } finally {
+      setBroadcastLoading(false);
     }
   }
 
@@ -327,6 +425,9 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     setPumpPortalPreview(null);
     setPumpPortalBuild(null);
     setShadowPlan(null);
+    setSignedReview(null);
+    setBroadcastResult(null);
+    setSignedCreate({ status: 'idle', message: 'Build and simulate an unsigned create transaction before local signing.' });
   }
 
   async function connectBrowserSigner() {
@@ -525,15 +626,22 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <button className="button secondary" type="button" onClick={() => void signPumpPortalCreate()} disabled={simulationLoading || simulation?.status !== 'ok' || signedCreate.status === 'signed'}>
             {signedCreate.status === 'signed' ? 'Signed Locally' : 'Sign Locally'}
           </button>
+          <button className="button secondary" type="button" onClick={() => void reviewSignedCreate()} disabled={signedReviewLoading || !signedCreate.signedTransaction}>
+            {signedReviewLoading ? 'Reviewing...' : 'Review Signed'}
+          </button>
+          <button className="button danger" type="button" onClick={() => void broadcastSignedCreate()} disabled={broadcastLoading || signedReview?.status !== 'ok' || !signedCreate.signedTransaction}>
+            {broadcastLoading ? 'Submitting...' : 'Submit Signed'}
+          </button>
         </span>
       </div>
-      {(simulation || signedCreate.status !== 'idle') && (
+      {(simulation || signedCreate.status !== 'idle' || signedReview || broadcastResult) && (
         <div className="pumpPortalPreviewResult">
           <div><span>Simulation</span><strong>{simulation?.status ?? 'not-run'}</strong><small>{simulation?.transactionPreview?.simulationStatus ?? simulation?.execution ?? simulation?.error ?? 'pending'}</small></div>
           <div><span>Signed packet</span><strong>{signedCreate.status}</strong><small>{signedCreate.message}</small></div>
           <div><span>Intent</span><strong>{short(signedCreate.intentId ?? pumpPortalBuild?.result?.intent?.id)}</strong><small>message {short(signedCreate.transactionMessageHash ?? pumpPortalBuild?.result?.intent?.transactionMessageHash)}</small></div>
-          <div><span>Broadcast packet</span><strong>{signedCreate.signedTransaction ? 'ready' : 'not ready'}</strong><small>{signedCreate.signedTransaction ? 'Submit only through /api/send-signed-transaction after final gate approval.' : 'Simulation and local signing required.'}</small></div>
-          <div className="wide"><span>Blockers</span><strong>{simulation?.transactionPreview?.blockers?.length ? simulation.transactionPreview.blockers.join(', ') : signedCreate.status === 'signed' ? 'broadcast gate still controls submit' : signedCreate.message}</strong></div>
+          <div><span>Signed review</span><strong>{signedReview?.status ?? 'not-run'}</strong><small>{signedReview?.review?.safeToBroadcastIfLiveEnabled ? 'policy passed; gate controls submit' : signedReview?.execution ?? signedReview?.error ?? 'review required'}</small></div>
+          <div><span>Broadcast packet</span><strong>{broadcastResult?.signature ? 'sent' : signedReview?.status === 'ok' ? 'ready' : 'not ready'}</strong><small>{broadcastResult?.explorerUrl ?? broadcastResult?.error ?? (signedReview?.status === 'ok' ? 'Submit only through /api/send-signed-transaction after final gate approval.' : 'Simulation, local signing, and signed review required.')}</small></div>
+          <div className="wide"><span>Blockers</span><strong>{broadcastResult?.blockers?.length ? broadcastResult.blockers.join(', ') : broadcastResult?.transactionPreview?.blockers?.length ? broadcastResult.transactionPreview.blockers.join(', ') : signedReview?.blockers?.length ? signedReview.blockers.join(', ') : simulation?.transactionPreview?.blockers?.length ? simulation.transactionPreview.blockers.join(', ') : signedReview?.status === 'ok' ? 'broadcast gate still controls submit' : signedCreate.message}</strong></div>
         </div>
       )}
       <div className="pumpPortalPreviewPanel">

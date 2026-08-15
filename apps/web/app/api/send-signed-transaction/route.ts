@@ -5,6 +5,7 @@ import { decodeTransactionPolicy, decodeTransactionPolicyWithLookupTables, fundi
 import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 import { sameOriginAllowed, mutationBlockedResponse } from '../../../lib/mutation-safety';
 import { liveDisabledPreview } from '../../../lib/transaction-preview';
+import type { TransactionPreviewAction } from '../../../lib/transaction-preview';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 import { getSolanaRpcHealth } from '../../../lib/rpc-health';
 
@@ -37,7 +38,13 @@ function isFundingRequest(body: SendRequest | null | undefined) {
   return body?.operation === 'fund' || body?.operation === 'funding';
 }
 
-function rejectIfLiveDisabled(kind: 'swap' | 'funding' = 'swap') {
+function transactionPreviewKind(body: SendRequest | null | undefined) {
+  if (isFundingRequest(body)) return 'funding';
+  if (body?.operation === 'create' || body?.operation === 'launch' || body?.operation === 'deploy') return 'launch';
+  return 'swap';
+}
+
+function rejectIfLiveDisabled(kind: TransactionPreviewAction = 'swap') {
   const liveActivation = getLiveActivationStatus();
   if (liveActivation.broadcastEnabled) return null;
   if (kind === 'funding' && liveActivation.fundingBroadcastEnabled) return null;
@@ -52,7 +59,7 @@ function rejectIfLiveDisabled(kind: 'swap' | 'funding' = 'swap') {
     signingEnabled: liveActivation.signingEnabled,
     broadcastEnabled: false,
     liveActivation,
-    transactionPreview: liveDisabledPreview(kind === 'funding' ? 'funding' : 'swap', '/api/send-signed-transaction', kind === 'funding' ? ['LIVE_BETA_FUNDING_BROADCAST_ENABLED is false.', 'Funding broadcast requires approved sender, receiver, amount cap, simulation, browser wallet signature, and explicit funding broadcast approval.'] : ['LIVE_TRADING_ENABLED, LIVE_BETA_SIGNING_ENABLED, or LIVE_BETA_BROADCAST_ENABLED is false.', 'Broadcast requires explicit final activation.'])
+    transactionPreview: liveDisabledPreview(kind, '/api/send-signed-transaction', kind === 'funding' ? ['LIVE_BETA_FUNDING_BROADCAST_ENABLED is false.', 'Funding broadcast requires approved sender, receiver, amount cap, simulation, browser wallet signature, and explicit funding broadcast approval.'] : ['LIVE_TRADING_ENABLED, LIVE_BETA_SIGNING_ENABLED, or LIVE_BETA_BROADCAST_ENABLED is false.', 'Broadcast requires explicit final activation.'])
   }, { status: 403 });
 }
 
@@ -97,7 +104,7 @@ export async function POST(request: Request) {
   }
 
   const fundingRequest = isFundingRequest(body);
-  const disabled = rejectIfLiveDisabled(fundingRequest ? 'funding' : 'swap');
+  const disabled = rejectIfLiveDisabled(transactionPreviewKind(body));
   if (disabled) return disabled;
   const authBlocked = await meridianAuthRequiredResponse(request);
   if (authBlocked) return authBlocked;

@@ -626,6 +626,25 @@ test('pumpportal build-create can return explicit unsigned handoff and bound bro
   });
 });
 
+test('deployment launch builder stages signed PumpPortal create packets for signed review and gated broadcast', () => {
+  const source = readFileSync(new URL('../apps/web/app/deployment/components/DeploymentLaunchBuilderPanel.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes("fetch('/api/terminal/signed-review'"));
+  assert.ok(source.includes("fetch('/api/send-signed-transaction'"));
+  assert.ok(source.includes("operation: 'launch'"));
+  assert.ok(source.includes('Review Signed'));
+  assert.ok(source.includes('Submit Signed'));
+  assert.ok(source.includes('safeToBroadcastIfLiveEnabled'));
+});
+
+test('deployment create simulation and broadcast previews use launch semantics', () => {
+  const signerDryRunSource = readFileSync(new URL('../apps/web/app/api/terminal/signer-dry-run/route.ts', import.meta.url), 'utf8');
+  const sendSource = readFileSync(new URL('../apps/web/app/api/send-signed-transaction/route.ts', import.meta.url), 'utf8');
+  assert.ok(signerDryRunSource.includes("action === 'create'"));
+  assert.ok(signerDryRunSource.includes("return 'launch'"));
+  assert.ok(sendSource.includes("body?.operation === 'launch'"));
+  assert.ok(sendSource.includes("return 'launch'"));
+});
+
 test('pumpportal build-create blocks returned transaction missing mint signer', async () => {
   await withProviderBuild(async (calls) => {
     const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address, confirmBuild: true });

@@ -22,6 +22,7 @@ function decodeTransaction(raw: string) {
 }
 
 function previewAction(action: unknown): TransactionPreviewAction {
+  if (action === 'create' || action === 'launch' || action === 'deploy') return 'launch';
   return action === 'fund' || action === 'funding' ? 'funding' : 'swap';
 }
 
