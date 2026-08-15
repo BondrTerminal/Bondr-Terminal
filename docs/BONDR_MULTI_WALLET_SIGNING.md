@@ -9,6 +9,7 @@ This sprint makes BONDR honest about wallet execution. A wallet row is not the s
 ## What This Sprint Added
 
 - Shared signing readiness contract: `bondr-wallet-signing-readiness-v1`.
+- Signing session endpoint: `GET/POST /api/deployment/signing-session`.
 - Deployment readiness now reports per-wallet signing mode:
   - `watch-only`
   - `browser-signer-required`
@@ -16,8 +17,14 @@ This sprint makes BONDR honest about wallet execution. A wallet row is not the s
   - `unavailable`
 - Bundle signing session readiness:
   - required wallet IDs
+  - signing order
+  - signed wallet IDs
+  - missing wallet IDs
+  - next wallet ID
   - signed count
   - missing count
+  - blockhash expiry timestamp
+  - expired/rebuild-required state
   - fresh blockhash requirement
   - rebuild requirement after blockhash expiry
 - Deployment UI now labels watch-only bundle/sniper/task wallets as unable to sign.
@@ -33,11 +40,8 @@ This sprint makes BONDR honest about wallet execution. A wallet row is not the s
 ## Still Blocked Before Real Multi-Wallet Execution
 
 - Connected browser signer binding proof.
-- Multi-wallet signature collection session.
-- Signed transaction count and missing signature tracking.
-- Fresh blockhash clock.
-- Rebuild of every unsigned transaction after expiry.
+- Client UI for walking each required wallet through the signing order.
+- Durable signed transaction storage policy.
 - Policy checks per signed transaction.
 - Jito bundle preview after all signatures are collected.
 - Durable approval and receipt record.
-

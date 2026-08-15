@@ -16,9 +16,16 @@ export type WalletSigningReadinessRow = {
 
 export type BundleSigningSessionReadiness = {
   status: 'ready-to-request-signatures' | 'blocked' | 'not-required';
+  rail: 'bundle';
   requiredWalletIds: string[];
+  signedWalletIds: string[];
+  missingWalletIds: string[];
+  signingOrder: string[];
+  nextWalletId: string | null;
   signedCount: number;
   missingCount: number;
+  blockhashExpiresAt: string | null;
+  expired: boolean;
   blockhashFreshness: 'fresh-required-before-signing';
   expiryRebuildRequirement: 'rebuild-all-unsigned-transactions-after-blockhash-expiry';
   blockers: string[];
@@ -42,6 +49,11 @@ export type WalletSigningReadiness = {
   blockers: string[];
 };
 
+export type WalletSigningSessionInput = {
+  signedWalletIds?: string[];
+  blockhashExpiresAt?: string | null;
+};
+
 function phaseFor(entry: WalletPlanEntry): NonNullable<WalletPlanEntry['executionPhase']> {
   if (entry.executionPhase) return entry.executionPhase;
   const role = entry.role.toLowerCase();
@@ -52,7 +64,7 @@ function phaseFor(entry: WalletPlanEntry): NonNullable<WalletPlanEntry['executio
   return 'observe';
 }
 
-export function buildWalletSigningReadiness(project: Project, wallets: Wallet[]): WalletSigningReadiness {
+export function buildWalletSigningReadiness(project: Project, wallets: Wallet[], session: WalletSigningSessionInput = {}): WalletSigningReadiness {
   const participating = project.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
   const rows = participating.map((entry): WalletSigningReadinessRow => {
     const wallet = wallets.find((item) => item.id === entry.walletId) ?? null;
@@ -89,10 +101,15 @@ export function buildWalletSigningReadiness(project: Project, wallets: Wallet[])
     };
   });
   const bundleRows = rows.filter((row) => row.requiredForBundle);
+  const signedWalletIds = (session.signedWalletIds ?? []).filter((walletId) => bundleRows.some((row) => row.walletId === walletId));
+  const missingWalletIds = bundleRows.map((row) => row.walletId).filter((walletId) => !signedWalletIds.includes(walletId));
+  const blockhashExpiresAt = session.blockhashExpiresAt ?? null;
+  const expired = blockhashExpiresAt ? Date.parse(blockhashExpiresAt) <= Date.now() : false;
   const sessionBlockers = [
     ...bundleRows.flatMap((row) => row.blockers),
-    bundleRows.length ? 'signed-transaction-session-not-started' : null,
-    bundleRows.length ? 'fresh-blockhash-required-before-signing' : null
+    bundleRows.length && signedWalletIds.length === 0 ? 'signed-transaction-session-not-started' : null,
+    bundleRows.length && !blockhashExpiresAt ? 'fresh-blockhash-required-before-signing' : null,
+    expired ? 'blockhash-expired-rebuild-required' : null
   ].filter((item): item is string => Boolean(item));
   const blockers = Array.from(new Set(rows.flatMap((row) => row.blockers)));
   const executableWallets = rows.filter((row) => row.canSignCurrentRail).length;
@@ -109,9 +126,16 @@ export function buildWalletSigningReadiness(project: Project, wallets: Wallet[])
     rows,
     bundleSession: {
       status: bundleRows.length ? sessionBlockers.length ? 'blocked' : 'ready-to-request-signatures' : 'not-required',
+      rail: 'bundle',
       requiredWalletIds: bundleRows.map((row) => row.walletId),
-      signedCount: 0,
-      missingCount: bundleRows.length,
+      signedWalletIds,
+      missingWalletIds,
+      signingOrder: bundleRows.map((row) => row.walletId),
+      nextWalletId: missingWalletIds[0] ?? null,
+      signedCount: signedWalletIds.length,
+      missingCount: missingWalletIds.length,
+      blockhashExpiresAt,
+      expired,
       blockhashFreshness: 'fresh-required-before-signing',
       expiryRebuildRequirement: 'rebuild-all-unsigned-transactions-after-blockhash-expiry',
       blockers: Array.from(new Set(sessionBlockers))

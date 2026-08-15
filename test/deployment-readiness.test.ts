@@ -329,6 +329,20 @@ test('wallet signing readiness does not treat watch-only bundle wallets as execu
   assert.ok(readiness.blockers.includes('wallet-record-missing'));
   assert.equal(readiness.bundleSession.status, 'blocked');
   assert.deepEqual(readiness.bundleSession.requiredWalletIds, ['bundle-wallet']);
+  assert.deepEqual(readiness.bundleSession.missingWalletIds, ['bundle-wallet']);
+  assert.equal(readiness.bundleSession.nextWalletId, 'bundle-wallet');
+});
+
+test('wallet signing readiness tracks sequential bundle session progress and expiry', () => {
+  const future = new Date(Date.now() + 60_000).toISOString();
+  const progress = buildWalletSigningReadiness(project, [wallet], { signedWalletIds: ['bundle-wallet'], blockhashExpiresAt: future });
+  assert.equal(progress.bundleSession.signedCount, 1);
+  assert.equal(progress.bundleSession.missingCount, 0);
+  assert.deepEqual(progress.bundleSession.signingOrder, ['bundle-wallet']);
+  assert.equal(progress.bundleSession.nextWalletId, null);
+  const expired = buildWalletSigningReadiness(project, [wallet], { signedWalletIds: ['bundle-wallet'], blockhashExpiresAt: '2020-01-01T00:00:00.000Z' });
+  assert.equal(expired.bundleSession.expired, true);
+  assert.ok(expired.bundleSession.blockers.includes('blockhash-expired-rebuild-required'));
 });
 
 test('deployment readiness exposes shared wallet signing orchestration contract', () => {
