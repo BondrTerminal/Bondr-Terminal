@@ -13,6 +13,7 @@ import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-read
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
 import { buildLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
+import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
@@ -659,6 +660,36 @@ test('deployment create simulation and broadcast previews use launch semantics',
   assert.ok(signerDryRunSource.includes('Pump.fun create, initial buy, rent, and network fees'));
   assert.ok(sendSource.includes("body?.operation === 'launch'"));
   assert.ok(sendSource.includes("return 'launch'"));
+});
+
+test('broadcast gates keep funding isolated from broad live broadcast', () => {
+  const sendSource = readFileSync(new URL('../apps/web/app/api/send-signed-transaction/route.ts', import.meta.url), 'utf8');
+  const fundingGate = "if (kind === 'funding' && liveActivation.fundingBroadcastEnabled) return null;";
+  const broadGate = "if (kind !== 'funding' && liveActivation.broadcastEnabled) return null;";
+  assert.ok(sendSource.includes(fundingGate));
+  assert.ok(sendSource.includes(broadGate));
+  assert.ok(sendSource.indexOf(fundingGate) < sendSource.indexOf(broadGate));
+});
+
+test('manual launch receipt reconciliation requires Meridian operator auth', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/projects/[id]/launch-receipt/route.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("import { meridianAuthRequiredResponse }"));
+  assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
+  assert.ok(source.indexOf('meridianAuthRequiredResponse(request)') < source.indexOf('sameOriginAllowed(request)'));
+});
+
+test('launch receipt normalization rejects invalid mint public keys', () => {
+  const valid = normalizeLaunchReceipt({
+    signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    tokenMint: 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu'
+  });
+  assert.equal(valid.receipt?.tokenMint, 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu');
+
+  const invalid = normalizeLaunchReceipt({
+    signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    tokenMint: 'bad-mint'
+  });
+  assert.equal(invalid.error, 'Valid launched token mint is required.');
 });
 
 test('pumpportal build-create blocks returned transaction missing mint signer', async () => {

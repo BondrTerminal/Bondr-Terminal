@@ -7,7 +7,7 @@ import { sameOriginAllowed, mutationBlockedResponse } from '../../../lib/mutatio
 import { liveDisabledPreview } from '../../../lib/transaction-preview';
 import type { TransactionPreviewAction } from '../../../lib/transaction-preview';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
-import { getSolanaRpcHealth } from '../../../lib/rpc-health';
+import { persistLaunchReceipt } from '../../../lib/launch-receipts';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,7 @@ const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 type SendRequest = {
   signedTransaction?: string;
+  projectId?: string;
   intentId?: string;
   orderId?: string;
   expectedSigner?: string;
@@ -46,8 +47,8 @@ function transactionPreviewKind(body: SendRequest | null | undefined) {
 
 function rejectIfLiveDisabled(kind: TransactionPreviewAction = 'swap') {
   const liveActivation = getLiveActivationStatus();
-  if (liveActivation.broadcastEnabled) return null;
   if (kind === 'funding' && liveActivation.fundingBroadcastEnabled) return null;
+  if (kind !== 'funding' && liveActivation.broadcastEnabled) return null;
   return Response.json({
     status: 'blocked-by-live-gate',
     observedAt: new Date().toISOString(),
@@ -166,6 +167,20 @@ export async function POST(request: Request) {
       preflightCommitment: 'confirmed'
     });
     if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_sent', note: `Broadcast submitted: ${signature}` });
+    const launchReceiptPersistence = !fundingRequest && transactionPreviewKind(body) === 'launch' && body.projectId && expectedMint
+      ? await persistLaunchReceipt({
+        projectId: body.projectId,
+        signature,
+        tokenMint: expectedMint,
+        deployer: expectedSigner,
+        route: 'pump.fun',
+        provider: rpc.provider,
+        observedAt: new Date().toISOString(),
+        intentId: body.intentId ?? null,
+        transactionMessageHash: intent?.transactionMessageHash ?? body.transactionMessageHash ?? null,
+        simulationStatus: body.simulationStatus ?? null
+      })
+      : null;
 
     return Response.json({
       status: 'sent',
@@ -182,6 +197,7 @@ export async function POST(request: Request) {
       simulationStatus: body.simulationStatus ?? null,
       rpcProvider: rpc.provider,
       signature,
+      launchReceiptPersistence,
       intentPolicy: policy ? { safeToBroadcastIfLiveEnabled: policy.safeToBroadcastIfLiveEnabled, transactionMessageHash: policy.transactionMessageHash, messageHashMatched: policy.messageHashMatched, warnings: policy.warnings } : null,
       fundingPolicy: fundingPolicy ? { safeToBroadcastFunding: fundingPolicy.safeToBroadcastFunding, transfer: fundingPolicy.transfer, maxLamports: fundingPolicy.maxLamports, approvedSource: FUNDING_TEST_SOURCE, approvedDestination: FUNDING_TEST_DESTINATION } : null,
       explorerUrl: `https://solscan.io/tx/${signature}`

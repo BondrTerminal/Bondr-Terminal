@@ -18,7 +18,8 @@ const capabilityMap = [
   ['snipe / protection', 'partial', 'Terminal execution class is proven; deployment-specific rules remain gated.'],
   ['task automation', 'config-only', 'Timed buys/sells, smart sell, TP/SL, caps, and cooldowns are planning rails.'],
   ['liquidity setup', 'partial', 'Liquidity Engine can inspect pools; LP creation builders need adapter work.'],
-  ['deployment broadcast', 'closed', 'Requires LIVE_DEPLOYMENT_ENABLED and explicit approval.']
+  ['deployment broadcast', 'closed', 'Requires LIVE_DEPLOYMENT_ENABLED and explicit approval.'],
+  ['launch receipt', 'real', 'Successful launch broadcasts reconcile signature, mint, project status, and monitor seed data.']
 ];
 
 const routeMap = [
@@ -27,6 +28,7 @@ const routeMap = [
   ['/api/pre-live-dry-run', 'Read-only launch dry-run', 'real'],
   ['/api/deployment-readiness', 'Dev-wallet launch readiness + rail checks', 'real'],
   ['/api/deployment-engine', 'Launch snapshot + gated SPL builder', 'real-gated'],
+  ['/api/projects/[id]/launch-receipt', 'Post-launch receipt reconciliation', 'real'],
   ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
   ['/api/relay/jito/bundle-preview', 'Jito signed-bundle policy preview', 'preview'],
   ['/api/relay/jito/send-bundle', 'Blocked Jito sendBundle stub', 'closed'],
@@ -119,6 +121,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const activeReadiness = activeProject ? readinessScore(activeProject, store) : null;
   const activePreflight = activeProject ? launchPreflight(activeProject, store) : [];
   const activeConfig = activeProject?.launchConfig;
+  const launchReceipt = activeProject?.launchReceipt;
   const participatingPlan = activeConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
   const plannedBuySol = participatingPlan.reduce((sum, entry) => sum + entry.plannedBuySol, 0);
   const maxBuySol = participatingPlan.reduce((sum, entry) => sum + entry.maxBuySol, 0);
@@ -153,7 +156,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
           <div className="deploymentCommandStats">
             <div><span>Wallets</span><strong>{activeWallets.length}</strong></div>
             <div><span>Planned / max</span><strong>{plannedBuySol.toFixed(3)} / {maxBuySol.toFixed(3)} SOL</strong></div>
-            <div><span>Dry-run</span><strong>{dryRun?.status ?? 'not run'}</strong></div>
+            <div><span>Receipt</span><strong>{launchReceipt?.status ?? 'none'}</strong></div>
           </div>
           <div className="deploymentCommandGates">
             <GatePill label="signing" enabled={activation.signingEnabled} />
@@ -250,6 +253,19 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
                   <div className="wide"><span>Blockers</span><strong>{launchReadiness.blockers.length ? launchReadiness.blockers.join(', ') : 'approval-required'}</strong></div>
                 </div>
               ) : <div className="deploymentRailEmpty">Create or select a project to build a launch approval summary.</div>}
+            </section>
+
+            <section className="deploymentRailPanel">
+              <div className="railPanelHeader"><span>Launch receipt</span><strong>{launchReceipt?.status ?? 'missing'}</strong></div>
+              {launchReceipt ? (
+                <div className="deploymentApprovalMini">
+                  <div><span>Mint</span><strong>{formatAddress(launchReceipt.tokenMint)}</strong></div>
+                  <div><span>Signature</span><strong>{formatAddress(launchReceipt.signature)}</strong></div>
+                  <div><span>Route</span><strong>{launchReceipt.route}</strong></div>
+                  <div><span>Provider</span><strong>{launchReceipt.provider ?? 'unknown'}</strong></div>
+                  <div className="wide"><span>Explorer</span><strong><a href={launchReceipt.explorerUrl} target="_blank" rel="noreferrer">Open Solscan</a></strong></div>
+                </div>
+              ) : <div className="deploymentRailEmpty">No launch receipt recorded for this project yet.</div>}
             </section>
 
             <section className="deploymentRailPanel">

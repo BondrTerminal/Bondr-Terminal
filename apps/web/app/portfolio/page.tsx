@@ -232,7 +232,6 @@ export default async function PortfolioPage({ searchParams }: PortfolioPageProps
               archivedCount={walletRows.filter((wallet) => wallet.archived).length}
               hydrationStatus={snapshot.wallets.status}
               hydrationProvider={snapshot.wallets.source}
-              managedLocalEnabled={process.env.WALLET_VAULT_BETA_ENABLED === 'true'}
             />
           </section>
         ) : (

@@ -3,7 +3,7 @@ import { meridianAuthConfig, meridianSessionStatus } from '../../lib/meridian-au
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
 
 type FoundationStatusPanelProps = {
-  surface?: 'profile' | 'wallets' | 'terminal' | 'live-beta-test' | 'portfolio' | 'deployment' | 'liquidity' | 'projects';
+  surface?: 'profile' | 'wallets' | 'terminal' | 'portfolio' | 'deployment' | 'liquidity' | 'projects';
   compact?: boolean;
 };
 
@@ -14,7 +14,7 @@ export async function FoundationStatusPanel({ surface = 'profile', compact = fal
   const auth = meridianAuthConfig();
   const live = getLiveActivationStatus({ rpcHealth, auth, authenticated: session.authenticated, authReason: session.authenticated ? null : session.reason });
   const providerLimited = rpcHealth.status !== 'live' || rpcHealth.quotaLimited;
-  const title = surface === 'terminal' ? 'Terminal foundation status' : surface === 'live-beta-test' ? 'Live Beta foundation status' : surface === 'deployment' ? 'Deployment foundation status' : surface === 'portfolio' ? 'Portfolio data foundation' : surface === 'wallets' ? 'Wallet Ops foundation status' : 'Foundation status';
+  const title = surface === 'terminal' ? 'Terminal foundation status' : surface === 'deployment' ? 'Deployment foundation status' : surface === 'portfolio' ? 'Portfolio data foundation' : surface === 'wallets' ? 'Wallet Ops foundation status' : 'Foundation status';
   const rows = [
     ['wallet identity', 'canonical /api/wallet-rail', 'Connected signer + selected wallet + Wallet Ops inventory are the wallet truth.'],
     ['SOL balance', providerLimited ? 'provider-limited' : 'live/provider checked', providerLimited ? 'Balance provider-limited; wallet may still have funds.' : 'Live RPC/provider status available.'],

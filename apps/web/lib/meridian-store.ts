@@ -86,6 +86,22 @@ export type PreLiveDryRun = {
   execution: 'dry-run-only-no-signing-no-broadcast';
 };
 
+export type LaunchReceipt = {
+  status: 'sent' | 'confirmed';
+  signature: string;
+  explorerUrl: string;
+  tokenMint: string;
+  pool: string | null;
+  deployer: string | null;
+  route: 'pump.fun' | 'raydium' | string;
+  provider: string | null;
+  observedAt: string;
+  confirmedAt?: string;
+  intentId?: string | null;
+  transactionMessageHash?: string | null;
+  simulationStatus?: string | null;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -116,6 +132,7 @@ export type Project = {
     collectionWalletId: string;
   };
   launchConfig?: LaunchConfig;
+  launchReceipt?: LaunchReceipt;
   preLiveDryRun?: PreLiveDryRun;
   deploymentState: {
     stage: string;

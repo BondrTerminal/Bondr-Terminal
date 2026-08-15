@@ -37,9 +37,9 @@ export async function GET() {
     signer: 'browser-wallet',
     liveTradingEnabled: liveEnabled(),
     operations: {
-      create: { status: 'encrypted-local-vault', route: '/api/wallet-vault', note: 'Managed-local wallet creation encrypts key material into the local vault; no signing or broadcast is enabled.' },
-      import: { status: 'encrypted-local-vault', route: '/api/wallet-vault', note: 'Private-key import is accepted only by the encrypted local vault route; seed phrases remain blocked.' },
-      export: { status: 'vault-backup-confirmation-required', route: '/api/wallet-vault', note: 'Private-key backup/export requires vault passphrase plus exact EXPORT PRIVATE KEY confirmation.' },
+      create: { status: 'disabled-server-custody-blocked', route: '/api/wallet-vault', note: 'Server-side wallet creation is disabled; use browser wallet custody or track public addresses only.' },
+      import: { status: 'disabled-server-custody-blocked', route: '/api/wallet-vault', note: 'Private-key import is not accepted by BONDR server routes.' },
+      export: { status: 'disabled-server-custody-blocked', route: '/api/wallet-vault', note: 'Private-key export is not available from BONDR server routes.' },
       fund: { status: liveEnabled() ? 'funding-test-builder-ready' : 'live-disabled', method: 'POST {operation:"fund", from, to, amountSol}', approvedSource: FUNDING_TEST_SOURCE, approvedDestination: FUNDING_TEST_DESTINATION },
       collect: { status: 'disabled', method: 'disabled during funding-only beta test' }
     },

@@ -153,6 +153,7 @@ type BroadcastState = {
   error?: string;
   signature?: string;
   explorerUrl?: string;
+  launchReceiptPersistence?: { status?: string; persisted?: boolean; error?: string; mode?: string } | null;
   blockers?: string[];
   warnings?: string[];
   broadcastEnabled?: boolean;
@@ -401,6 +402,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           operation: 'launch',
+          projectId,
           signedTransaction: signedCreate.signedTransaction,
           intentId: signedCreate.intentId,
           expectedSigner: signedCreate.expectedSigner,
@@ -643,6 +645,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Intent</span><strong>{short(signedCreate.intentId ?? pumpPortalBuild?.result?.intent?.id)}</strong><small>message {short(signedCreate.transactionMessageHash ?? pumpPortalBuild?.result?.intent?.transactionMessageHash)}</small></div>
           <div><span>Signed review</span><strong>{signedReview?.status ?? 'not-run'}</strong><small>{signedReview?.review?.safeToBroadcastIfLiveEnabled ? 'policy passed; gate controls submit' : signedReview?.execution ?? signedReview?.error ?? 'review required'}</small></div>
           <div><span>Broadcast packet</span><strong>{broadcastResult?.signature ? 'sent' : signedReview?.status === 'ok' ? 'ready' : 'not ready'}</strong><small>{broadcastResult?.explorerUrl ?? broadcastResult?.error ?? (signedReview?.status === 'ok' ? 'Submit only through /api/send-signed-transaction after final gate approval.' : 'Simulation, local signing, and signed review required.')}</small></div>
+          <div><span>Project receipt</span><strong>{broadcastResult?.launchReceiptPersistence?.status ?? 'not recorded'}</strong><small>{broadcastResult?.launchReceiptPersistence?.persisted ? `saved via ${broadcastResult.launchReceiptPersistence.mode}` : broadcastResult?.launchReceiptPersistence?.error ?? 'Launch receipt saves after signed submit.'}</small></div>
           <div className="wide"><span>Blockers</span><strong>{broadcastResult?.blockers?.length ? broadcastResult.blockers.join(', ') : broadcastResult?.transactionPreview?.blockers?.length ? broadcastResult.transactionPreview.blockers.join(', ') : signedReview?.blockers?.length ? signedReview.blockers.join(', ') : simulation?.transactionPreview?.blockers?.length ? simulation.transactionPreview.blockers.join(', ') : signedReview?.status === 'ok' ? 'broadcast gate still controls submit' : signedCreate.message}</strong></div>
         </div>
       )}

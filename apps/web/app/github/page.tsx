@@ -12,8 +12,7 @@ const localDocs = [
   ['Portfolio Wallets', '/portfolio?view=wallets'],
   ['Deployment', '/deployment'],
   ['Terminal', '/sniper'],
-  ['Liquidity', '/liquidity'],
-  ['A-profile Manual QA', '/live-beta-test']
+  ['Liquidity', '/liquidity']
 ];
 
 export default function GitHubPage() {

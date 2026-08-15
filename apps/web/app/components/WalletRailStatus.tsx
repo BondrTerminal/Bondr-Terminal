@@ -40,7 +40,7 @@ type WalletRailPayload = {
 };
 
 type WalletRailStatusProps = {
-  surface?: 'profile' | 'wallets' | 'terminal' | 'live-beta-test' | 'portfolio' | 'deployment';
+  surface?: 'profile' | 'wallets' | 'terminal' | 'portfolio' | 'deployment';
   selectedWalletAddress?: string | null;
   activeMint?: string | null;
   compact?: boolean;
@@ -206,9 +206,9 @@ export function WalletRailStatus({ surface = 'profile', selectedWalletAddress = 
     : effectiveSelectedWallet
       ? railLoaded ? 'Selected wallet not matched to inventory. If this is your connected signer, add it as watch-only to save the public record.' : 'Checking selected wallet against Wallet Ops.'
       : 'No selected wallet for this browser/page.';
-  const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'live-beta-test' ? 'Live Beta wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
+  const title = surface === 'terminal' ? 'Terminal wallet rail' : surface === 'deployment' ? 'Deployment wallet rail' : surface === 'portfolio' ? 'Portfolio wallet rail' : surface === 'wallets' ? 'Wallet Ops wallet rail' : 'Profile wallet rail';
   const badge = connectedSigner ? 'Browser wallet connected' : providerReady ? 'Provider ready' : 'Connect browser wallet';
-  const compactRail = compact || surface !== 'live-beta-test';
+  const compactRail = true;
 
   const rows = useMemo(() => [
     ['Connected signer', short(connectedSigner), connectedSigner ? 'Browser wallet connected in this tab.' : 'Browser wallet not connected in this tab.'],

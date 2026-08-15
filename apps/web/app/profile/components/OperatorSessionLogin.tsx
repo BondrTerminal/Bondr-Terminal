@@ -29,7 +29,7 @@ export function OperatorSessionLogin() {
       const response = await fetch('/api/meridian-session', { cache: 'no-store' });
       const payload = await response.json() as SessionPayload;
       setSession(payload);
-      setMessage(payload.auth?.authenticated ? 'Operator session active.' : payload.auth?.configured ? 'Operator session required for build/simulate/sign QA.' : 'Operator auth is not configured.');
+      setMessage(payload.auth?.authenticated ? 'Operator session active.' : payload.auth?.configured ? 'Operator session required for gated build, simulation, and signing workflows.' : 'Operator auth is not configured.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Session status failed.');
     } finally {
@@ -50,7 +50,7 @@ export function OperatorSessionLogin() {
       setSession(payload);
       if (!response.ok) { setMessage(payload.error ?? 'Operator login failed.'); return; }
       setSessionKey('');
-      setMessage('Operator session active. Return to Live Beta Test and refresh capabilities.');
+      setMessage('Operator session active. Return to Deployment or Terminal and refresh capabilities.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Operator login failed.');
     } finally {
@@ -82,7 +82,7 @@ export function OperatorSessionLogin() {
     <section className="documentCard operatorSessionPanel" aria-label="Operator session login">
       <div className="sectionIntro compactIntro">
         <span>Operator session</span>
-        <h2>{authenticated ? 'Session active' : 'Login required for live-beta build/sign QA'}</h2>
+        <h2>{authenticated ? 'Session active' : 'Login required for gated launch workflows'}</h2>
         <p>{message}</p>
       </div>
       <div className="infoGrid">
