@@ -9,8 +9,7 @@ export type DeploymentRouteAdapterId =
   | 'pumpportal-create'
   | 'pumpportal-trade-local'
   | 'pumpportal-jito-bundle'
-  | 'raydium-launchlab'
-  | 'raydium-trade-api';
+  | 'raydium-original-lp-burn';
 
 export type DeploymentRouteAdapter = {
   id: DeploymentRouteAdapterId;
@@ -59,26 +58,15 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     blockedUntil: ['Jito provider configured', 'bundle simulation implemented', 'explicit bundle approval']
   },
   {
-    id: 'raydium-launchlab',
-    label: 'Raydium LaunchLab',
-    route: 'Direct LaunchLab bonding-curve launch',
+    id: 'raydium-original-lp-burn',
+    label: 'Raydium original LP + burn',
+    route: 'SPL token deploy, Raydium LP add, LP-token burn',
     supportLevel: 'mapped',
-    requiredInputs: ['LaunchLab params', 'metadata', 'dev wallet', 'quote token', 'curve config', 'initial buy caps'],
-    apiFlow: ['prepare LaunchLab initialize/buy transaction', 'verify curve/quote params', 'simulate', 'browser wallet sign', 'broadcast only after approval'],
-    signingModel: 'browser wallet; server builds/validates only',
-    safeguards: ['cluster alignment', 'ATA rent accounted', 'fresh LaunchLab state', 'compute fee cap', 'slippage by pool type'],
-    blockedUntil: ['direct SDK builder implemented', 'LaunchLab simulation proof', 'explicit launch approval']
-  },
-  {
-    id: 'raydium-trade-api',
-    label: 'Raydium Trade API',
-    route: 'Post-launch route/transaction build',
-    supportLevel: 'mapped',
-    requiredInputs: ['input mint', 'output mint', 'amount', 'slippage', 'compute unit price', 'wallet public key'],
-    apiFlow: ['compute quote', 'build V0 transaction', 'verify returned transaction', 'simulate', 'browser wallet sign', 'broadcast only after approval'],
-    signingModel: 'browser wallet for returned V0 transaction',
-    safeguards: ['quote freshness', 'pool freshness', 'compute unit price cap', 'slippage cap', 'address lookup table review'],
-    blockedUntil: ['post-launch mint/pool exists', 'secondary wallet approval']
+    requiredInputs: ['mint', 'token metadata', 'deployer wallet', 'SOL liquidity', 'withheld token allocation', 'LP burn policy'],
+    apiFlow: ['build SPL token mint transaction', 'build Raydium pool/liquidity transaction', 'resolve LP mint/account', 'build LP burn transaction', 'simulate all legs', 'browser wallet sign', 'broadcast only after approval'],
+    signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool and burn transactions',
+    safeguards: ['exact deployer signer', 'exact mint binding', 'liquidity SOL cap', 'withheld token cap', 'LP mint/account verification', 'burn destination verification', 'simulation proof'],
+    blockedUntil: ['Raydium original LP builder implemented', 'LP burn transaction builder implemented', 'simulation proof', 'explicit launch approval']
   }
 ];
 
@@ -143,7 +131,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     rehearsalBlockers,
     optionalBlockers,
     intentionalLiveGateBlockers,
-    adapterRecommendation: project.launchPath.toLowerCase().includes('raydium') ? 'raydium-launchlab' : route?.platform === 'bonk' ? 'pumpportal-trade-local' : 'pumpportal-create',
+    adapterRecommendation: project.launchPath.toLowerCase().includes('raydium') || route?.platform === 'raydium' ? 'raydium-original-lp-burn' : 'pumpportal-create',
     devWallet: devWallet ? { id: devWallet.id, role: devWallet.role, address: devWallet.address, shortAddress: short(devWallet.address), custodyMode: devWallet.custodyMode ?? 'watch-only' } : null,
     railCounts: { bundle: bundlePlans.length, sniper: sniperPlans.length, task: taskPlans.length },
     approvalSummary: {

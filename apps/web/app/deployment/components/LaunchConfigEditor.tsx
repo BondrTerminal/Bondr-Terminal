@@ -45,13 +45,22 @@ const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'review', label: 'Review', detail: 'Preflight and gates' }
 ];
 const LAUNCH_PLATFORMS = [
-  { value: 'pump', label: 'Pump', detail: 'Pump.fun launch path' },
-  { value: 'bonk', label: 'Bonk', detail: 'Bonk launch path' },
-  { value: 'bonkers', label: 'Bonkers', detail: 'Bonkers route preview' },
-  { value: 'bags', label: 'Bags', detail: 'Bags route preview' },
-  { value: 'printr', label: 'Printr', detail: 'Printr route preview' }
+  {
+    value: 'pump',
+    label: 'Pump.fun',
+    headline: 'Bonding curve launch',
+    detail: 'Pump.fun/PumpPortal create route. Uses IPFS metadata, client mint, deployer signer proof, and gated unsigned build rehearsal.',
+    status: 'preview-ready'
+  },
+  {
+    value: 'raydium',
+    label: 'Raydium',
+    headline: 'Original LP + burn',
+    detail: 'Original token deployment path with Raydium LP add and automated LP burn. Requires real Raydium builder, LP mint verification, burn tx, and simulation.',
+    status: 'builder-needed'
+  }
 ] as const;
-const PLATFORM_VALUES = ['pump', 'bonk', 'bonkers', 'bags', 'printr'] as const;
+const PLATFORM_VALUES = ['pump', 'raydium'] as const;
 const QUOTE_TOKENS = [
   { value: 'SOL', label: 'SOL', detail: 'Native curve quote' },
   { value: 'USDC', label: 'USDC', detail: 'Amounts convert from SOL' }
@@ -173,7 +182,7 @@ function defaultPlan(wallets: Wallet[]): WalletPlanEntry[] {
 function defaultConfig(project: Project, wallets: Wallet[]): LaunchConfig {
   return {
     route: {
-      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      platform: project.launchPath === 'raydium' ? 'raydium' : 'pump',
       quoteToken: 'SOL',
       tokenMode: 'classic',
       buyMode: 'snipe',
@@ -627,7 +636,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       };
     });
     const body = {
-      launchPath: platform === 'bonk' ? 'bonk' : platform === 'pump' ? 'pump.fun' : project.launchPath,
+      launchPath: platform === 'raydium' ? 'raydium' : 'pump.fun',
       tokenMint: stringFrom(form, 'tokenMint', project.tokenMint ?? ''),
       pool: stringFrom(form, 'pool', project.pool ?? ''),
         metadata: {
@@ -729,6 +738,24 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <div><span>Max exposure</span><strong>{maxSol.toFixed(4)} SOL</strong><small>{plannedSol.toFixed(4)} planned</small></div>
           <div><span>Review</span><strong>{blockedCount ? `${blockedCount} blocked` : 'ready to dry-run'}</strong><small>{dryRunReady ? 'dry-run pass' : 'dry-run needed'}</small></div>
         </div>
+        <section className="launchRouteChoicePanel" aria-label="Deployment route choice">
+          <div className="launchRouteChoiceIntro">
+            <span>Launch route</span>
+            <strong>Choose one deployment path</strong>
+            <small>This choice controls which builder/readiness contract BONDR evaluates. Gates remain closed.</small>
+          </div>
+          <div className="launchRouteChoiceGrid">
+            {LAUNCH_PLATFORMS.map((platform) => (
+              <label className="launchRouteChoiceButton" key={platform.value}>
+                <input name="route.platform" type="radio" value={platform.value} defaultChecked={(initial.route.platform ?? 'pump') === platform.value} />
+                <span>{platform.label}</span>
+                <strong>{platform.headline}</strong>
+                <small>{platform.detail}</small>
+                <em>{platform.status}</em>
+              </label>
+            ))}
+          </div>
+        </section>
 
         <div className="launchWizardViewport">
       <section aria-labelledby="launch-tab-button-token" className="launchConfigPanel launchWizardPanel" hidden={activeTab !== 'token'} id="launch-tab-token" role="tabpanel">
@@ -776,16 +803,6 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
         <div className="launchSegmentStack">
           <div>
-            <span>Platform</span>
-            <div className="launchSegmentGrid five">
-              {LAUNCH_PLATFORMS.map((platform) => <label className="launchSegmentOption" key={platform.value}>
-                <input name="route.platform" type="radio" value={platform.value} defaultChecked={(initial.route.platform ?? 'pump') === platform.value} />
-                <strong>{platform.label}</strong>
-                <small>{platform.detail}</small>
-              </label>)}
-            </div>
-          </div>
-          <div>
             <span>Quote Token</span>
             <div className="launchSegmentGrid two">
               {QUOTE_TOKENS.map((quote) => <label className="launchSegmentOption" key={quote.value}>
@@ -826,10 +843,25 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         <div className="launchSegmentStack routeOnlySegmentStack">
           <div>
             <span>Route Adapter</span>
-            <div className="launchSegmentGrid three">
+            <div className="launchSegmentGrid two">
               <div className="launchAdapterReadinessCard"><strong>Pump.fun / PumpPortal</strong><small>IPFS metadata, trade-local create/dev buy, local signing, explicit broadcast.</small><em>mapped</em></div>
-              <div className="launchAdapterReadinessCard"><strong>Bonk / LaunchLab</strong><small>PumpPortal bonk pool or direct LaunchLab candidate. Simulation proof required.</small><em>research</em></div>
-              <div className="launchAdapterReadinessCard"><strong>Raydium LaunchLab</strong><small>Bonding-curve launch, graduation tracking, V0 transactions, compute-fee controls.</small><em>mapped</em></div>
+              <div className="launchAdapterReadinessCard"><strong>Raydium original LP + burn</strong><small>SPL token deploy, Raydium LP add, LP mint/account verification, burn transaction, simulation proof.</small><em>mapped</em></div>
+            </div>
+          </div>
+          <div>
+            <span>Pump.fun launch options</span>
+            <div className="launchConfigEditorGrid compact">
+              <label><span>Initial buy SOL</span><input name="route.initialBuySol" type="number" min="0" step="0.001" defaultValue={initial.route.initialBuySol} /></label>
+              <label><span>Slippage bps</span><input name="route.slippageBps" type="number" min="1" max="2000" step="1" defaultValue={initial.route.slippageBps} /></label>
+              <label>
+                <span>Priority fee mode</span>
+                <select name="route.priorityFeeMode" defaultValue={initial.route.priorityFeeMode}>
+                  <option value="auto capped">auto capped</option>
+                  <option value="manual">manual</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </label>
+              <label><span>Graduation monitor</span><input name="route.graduationMonitor" defaultValue={initial.route.graduationMonitor} placeholder="PumpSwap graduation / Raydium pool handoff" /></label>
             </div>
           </div>
         </div>

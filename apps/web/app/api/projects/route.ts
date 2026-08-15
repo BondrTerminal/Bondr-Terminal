@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { getMeridianStorePath, type LaunchConfig, type MeridianStore, type Project } from '../../../lib/meridian-store';
 import { getMeridianWalletStore, insertDurableProject, walletStoreMode } from '../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../lib/mutation-safety';
+import { normalizeDeploymentLaunchPath, routePlatformForLaunchPath } from '../../../lib/deployment-launch-path';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,8 +99,7 @@ export async function POST(request: Request) {
     }, { status: 503 });
   }
 
-  const allowedLaunchPaths = new Set(['pump.fun', 'raydium', 'meteora', 'bonk', 'custom']);
-  const launchPath = allowedLaunchPaths.has(String(body.launchPath)) ? String(body.launchPath) : 'pump.fun';
+  const launchPath = normalizeDeploymentLaunchPath(body.launchPath);
   const quoteToken = body.quoteToken === 'USDC' ? 'USDC' : 'SOL';
   const group = firstUsableWalletGroup(store, body.walletGroupId);
   const metadata = objectInput<MetadataInput>(body.metadata);
@@ -118,6 +118,7 @@ export async function POST(request: Request) {
 
   const launchConfig: LaunchConfig = {
     route: {
+      platform: routePlatformForLaunchPath(launchPath),
       initialBuySol: devBuySol,
       slippageBps,
       priorityFeeMode: 'manual',

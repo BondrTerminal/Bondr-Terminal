@@ -138,7 +138,7 @@ function defaultWalletPlan(wallets: Wallet[]): WalletPlanEntry[] {
 function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchConfig {
   return {
     route: {
-      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      platform: project.launchPath === 'raydium' ? 'raydium' : 'pump',
       quoteToken: 'SOL',
       tokenMode: 'classic',
       buyMode: 'snipe',

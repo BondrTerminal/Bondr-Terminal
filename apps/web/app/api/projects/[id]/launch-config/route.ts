@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { getMeridianStore, getMeridianStorePath, type LaunchConfig, type MeridianStore, type WalletPlanEntry, type Project } from '../../../../../lib/meridian-store';
 import { getMeridianWalletStore, updateDurableProject, walletStoreMode } from '../../../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../../../lib/mutation-safety';
+import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../../../../../lib/deployment-launch-path';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,7 @@ function stringField(value: unknown, fallback = '', max = 500) {
 function defaultLaunchConfig(project: Project): LaunchConfig {
   return {
     route: {
-      platform: project.launchPath === 'bonk' ? 'bonk' : 'pump',
+      platform: routePlatformForLaunchPath(project.launchPath),
       quoteToken: 'SOL',
       tokenMode: 'classic',
       buyMode: 'snipe',
@@ -119,7 +120,7 @@ function walletPlanEntry(value: unknown, fallbackRole = 'wallet'): WalletPlanEnt
 
 function mergeLaunchConfig(project: Project, patch?: LaunchConfigPatch['launchConfig']): LaunchConfig {
   const base = normalizedLaunchConfig(project);
-  const platform = ['pump', 'bonk', 'bonkers', 'bags', 'printr'].includes(String(patch?.route?.platform)) ? patch?.route?.platform : base.route.platform;
+  const platform = normalizeDeploymentRoutePlatform(patch?.route?.platform, base.route.platform ?? routePlatformForLaunchPath(project.launchPath));
   const quoteToken = ['SOL', 'USDC'].includes(String(patch?.route?.quoteToken)) ? patch?.route?.quoteToken : base.route.quoteToken;
   const tokenMode = ['classic', 'mayhem'].includes(String(patch?.route?.tokenMode)) ? patch?.route?.tokenMode : base.route.tokenMode;
   const buyMode = ['snipe', 'bundle', 'launch-bundle-snipe', 'dev-buy-only'].includes(String(patch?.route?.buyMode)) ? patch?.route?.buyMode : base.route.buyMode;
@@ -165,7 +166,7 @@ function applyPatch(project: Project, body: LaunchConfigPatch): Project {
   if (typeof body.name === 'string') next.name = stringField(body.name, next.name, 120);
   if (typeof body.launchPath === 'string') {
     const launchPath = stringField(body.launchPath, next.launchPath, 80);
-    next.launchPath = ['pump.fun', 'raydium', 'meteora', 'bonk'].includes(launchPath) ? launchPath : 'pump.fun';
+    next.launchPath = normalizeDeploymentLaunchPath(launchPath);
   }
   if (Object.prototype.hasOwnProperty.call(body, 'tokenMint')) next.tokenMint = body.tokenMint ? stringField(body.tokenMint, '', 64) : null;
   if (Object.prototype.hasOwnProperty.call(body, 'pool')) next.pool = body.pool ? stringField(body.pool, '', 120) : null;
@@ -189,6 +190,7 @@ function applyPatch(project: Project, body: LaunchConfigPatch): Project {
     collectionWalletId: stringField(body.fundingPlan.collectionWalletId, next.fundingPlan.collectionWalletId, 80)
   };
   next.launchConfig = mergeLaunchConfig(next, body.launchConfig);
+  next.launchPath = next.launchConfig.route.platform === 'raydium' ? 'raydium' : 'pump.fun';
   next.deploymentState = { ...next.deploymentState, stage: next.deploymentState.stage === 'draft' ? 'configuration' : next.deploymentState.stage };
   return next;
 }

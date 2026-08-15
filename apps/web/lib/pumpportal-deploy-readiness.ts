@@ -202,10 +202,10 @@ export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[]
   const description = project.metadata.description;
   const route = project.launchConfig?.route;
   const rules = project.launchConfig?.devWalletRules;
-  const amount = numberValue(devPlan?.plannedBuySol, project.fundingPlan.devBuySol);
+  const amount = numberValue(devPlan?.plannedBuySol, numberValue(route?.initialBuySol, project.fundingPlan.devBuySol));
   const slippage = Math.max(0, (route?.slippageBps ?? rules?.maxSlippageBps ?? 100) / 100);
   const priorityFee = numberValue(rules?.maxPriorityFeeSol, 0);
-  const pool = route?.platform === 'bonk' ? 'bonk' : 'pump';
+  const pool = 'pump';
 
   const presentInputs = {
     name: isPresent(tokenName),

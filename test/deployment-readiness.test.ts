@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engine-readiness.js';
@@ -9,6 +10,7 @@ import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
+import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
@@ -165,10 +167,39 @@ test('deployment route adapters keep live launch rails explicit', () => {
     'pumpportal-create',
     'pumpportal-trade-local',
     'pumpportal-jito-bundle',
-    'raydium-launchlab',
-    'raydium-trade-api'
+    'raydium-original-lp-burn'
   ]);
   assert.ok(DEPLOYMENT_ROUTE_ADAPTERS.every((adapter) => adapter.blockedUntil.length > 0));
+});
+
+test('deployment launch path normalization only allows Pump.fun and Raydium', () => {
+  assert.equal(normalizeDeploymentLaunchPath('pump.fun'), 'pump.fun');
+  assert.equal(normalizeDeploymentLaunchPath('raydium'), 'raydium');
+  assert.equal(normalizeDeploymentLaunchPath('bonk'), 'pump.fun');
+  assert.equal(normalizeDeploymentLaunchPath('meteora'), 'pump.fun');
+  assert.equal(normalizeDeploymentLaunchPath('custom'), 'pump.fun');
+  assert.equal(normalizeDeploymentRoutePlatform('pump'), 'pump');
+  assert.equal(normalizeDeploymentRoutePlatform('raydium'), 'raydium');
+  assert.equal(normalizeDeploymentRoutePlatform('bonk'), 'pump');
+  assert.equal(routePlatformForLaunchPath('raydium'), 'raydium');
+  assert.equal(routePlatformForLaunchPath('meteora'), 'pump');
+});
+
+test('deployment editor exposes Pump.fun route options as saveable form controls', () => {
+  const source = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
+  for (const control of [
+    'name="route.platform"',
+    'value={platform.value}',
+    'name="route.quoteToken"',
+    'name="route.tokenMode"',
+    'name="route.buyMode"',
+    'name="route.initialBuySol"',
+    'name="route.slippageBps"',
+    'name="route.priorityFeeMode"',
+    'name="route.graduationMonitor"'
+  ]) {
+    assert.ok(source.includes(control), `missing launch option control ${control}`);
+  }
 });
 
 test('dev-wallet-only readiness blocks broadcast and exposes approval summary', () => {
@@ -185,6 +216,18 @@ test('dev-wallet-only readiness blocks broadcast and exposes approval summary', 
   assert.ok(readiness.rehearsalBlockers.includes('ipfs-metadata-uri-missing'));
   assert.equal(readiness.rehearsalStatus, 'blocked');
   assert.equal(readiness.postLaunchRailVerification.every((rail) => rail.broadcastReady === false), true);
+});
+
+test('raydium route readiness recommends original LP burn adapter', () => {
+  const raydiumProject = structuredClone(project);
+  raydiumProject.launchPath = 'raydium';
+  raydiumProject.launchConfig = {
+    ...raydiumProject.launchConfig!,
+    route: { ...raydiumProject.launchConfig!.route, platform: 'raydium', burnLiquidity: true, raydiumLiquiditySol: 1 }
+  };
+  const readiness = buildDeploymentLaunchReadiness(raydiumProject, [wallet], activation);
+  assert.equal(readiness.adapterRecommendation, 'raydium-original-lp-burn');
+  assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
 test('deployment engine readiness exposes token mint builder as implemented but gate-closed', () => {
@@ -239,24 +282,23 @@ test('deployment engine launch bundle readiness models legs, caps, signing order
   assert.equal(engines.launchBundle.safety.noRelaySubmit, true);
 });
 
-test('deployment engine LP readiness maps real protocol adapters and blocks fake LP creation', () => {
+test('deployment engine LP readiness stays scoped to Pump.fun and Raydium original LP burn', () => {
   const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
   assert.equal(engines.createLp.contract, 'bondr-create-lp-engine-readiness-v1');
   assert.equal(engines.createLp.status, 'protocol-sdk-required');
   assert.equal(engines.createLp.implementationStatus, 'adapter-missing');
   assert.deepEqual(engines.createLp.adapters.map((adapter) => adapter.id), [
-    'raydium-launchlab',
-    'raydium-cpmm',
-    'orca-whirlpool',
-    'meteora-dlmm'
+    'pumpfun-pumpportal-launch',
+    'raydium-original-lp-burn'
   ]);
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredSdkOrApi.length > 0));
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredInputs.length > 0));
   assert.ok(engines.createLp.adapters.every((adapter) => adapter.simulationRequirement.includes('simulate')));
-  assert.ok(engines.createLp.blockers.includes('raydium-launchlab-builder-missing'));
-  assert.ok(engines.createLp.blockers.includes('meteora-dlmm-builder-missing'));
+  assert.ok(engines.createLp.blockers.includes('pumpportal-provider-build-gated'));
+  assert.ok(engines.createLp.blockers.includes('raydium-original-lp-builder-missing'));
+  assert.ok(engines.createLp.blockers.includes('lp-burn-transaction-builder-missing'));
   assert.equal(engines.createLp.safety.noFakeLpCreation, true);
-  assert.equal(engines.createLp.execution, 'readiness-map-only-no-lp-transaction');
+  assert.equal(engines.createLp.execution, 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction');
 });
 
 test('pumpportal create preview names IPFS and mint blockers without calling provider', () => {
@@ -291,6 +333,18 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.presentInputs.mintPublicKey, true);
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('pumpportal create preview uses route initial buy when no dev plan overrides it', () => {
+  const routeOnlyProject = structuredClone(project);
+  routeOnlyProject.launchConfig = {
+    ...routeOnlyProject.launchConfig!,
+    route: { ...routeOnlyProject.launchConfig!.route, initialBuySol: 0.123 },
+    walletPlan: []
+  };
+  routeOnlyProject.metadata = { ...routeOnlyProject.metadata, imageUrl: 'ipfs://image-cid', metadataUri: 'ipfs://metadata-cid' };
+  const preview = buildPumpPortalCreatePreview(routeOnlyProject, [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address });
+  assert.equal(preview.payloadPreview.amount, 0.123);
 });
 
 test('pumpportal create preview blocks invalid client mint before provider build', () => {

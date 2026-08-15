@@ -42,7 +42,7 @@ export type WalletPlanEntry = {
 
 export type LaunchConfig = {
   route: {
-    platform?: 'pump' | 'bonk' | 'bonkers' | 'bags' | 'printr';
+    platform?: 'pump' | 'raydium';
     quoteToken?: 'SOL' | 'USDC';
     tokenMode?: 'classic' | 'mayhem';
     buyMode?: 'snipe' | 'bundle' | 'launch-bundle-snipe' | 'dev-buy-only';

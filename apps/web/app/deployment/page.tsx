@@ -36,11 +36,10 @@ const routeMap = [
   ['/sniper', 'Terminal quote/build/simulate/sign/broadcast class', 'proven']
 ];
 
-const launchPathLabels = ['pump.fun', 'raydium', 'meteora', 'bonk'];
+const launchPathLabels = ['pump.fun', 'raydium'];
 const routeAdapters = [
   ['Pump.fun', 'PumpPortal create/trade-local', 'ready', 'IPFS metadata, dev buy, local signing, dry-run first.'],
-  ['Bonk', 'LaunchLab candidate', 'research', 'PumpPortal bonk pool or direct LaunchLab adapter; prove in simulation first.'],
-  ['Raydium', 'LaunchLab / Trade API', 'mapped', 'Bonding curve launch, graduation tracking, V0 tx build, explicit CU fees.']
+  ['Raydium', 'Original LP + burn', 'mapped', 'SPL token deploy, Raydium LP add, LP-token burn, simulation first.']
 ];
 
 function formatAddress(address?: string | null) {
@@ -69,7 +68,7 @@ function StagePill({ label, status, detail }: { label: string; status: 'ready' |
 
 function RouteAdapterStrip({ activePath }: { activePath?: string }) {
   return (
-    <section className="routeAdapterStrip" aria-label="Launch route adapters">
+    <section className="routeAdapterStrip two" aria-label="Launch route adapters">
       {routeAdapters.map(([venue, adapter, status, detail]) => (
         <div className={activePath?.toLowerCase().includes(venue.toLowerCase().split('.')[0] ?? venue.toLowerCase()) ? 'routeAdapterCard active' : 'routeAdapterCard'} key={venue}>
           <span>{venue}</span>

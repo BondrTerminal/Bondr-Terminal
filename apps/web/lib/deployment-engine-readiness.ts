@@ -126,44 +126,26 @@ export function buildLaunchBundleEngineReadiness(project: Project | null, wallet
 
 export const LP_ADAPTER_READINESS = [
   {
-    id: 'raydium-launchlab',
-    label: 'Raydium LaunchLab',
-    implementationStatus: 'adapter-missing' as ImplementationStatus,
-    requiredSdkOrApi: '@raydium-io/raydium-sdk-v2 LaunchLab builder or verified Raydium API flow',
-    requiredInputs: ['base token mint', 'quote token', 'curve config', 'metadata', 'dev wallet', 'initial buy caps'],
-    signingModel: 'browser wallet signs reviewed unsigned transaction',
-    simulationRequirement: 'simulate LaunchLab initialize/buy transaction before signature',
-    blockers: ['raydium-launchlab-builder-missing', 'launchlab-simulation-proof-missing']
+    id: 'pumpfun-pumpportal-launch',
+    label: 'Pump.fun / PumpPortal bonding curve',
+    implementationStatus: 'rehearsal-contract-only' as ImplementationStatus,
+    requiredSdkOrApi: 'PumpPortal trade-local create for unsigned launch transaction',
+    requiredInputs: ['IPFS metadata URI', 'dev wallet', 'client mint keypair public key', 'initial buy SOL', 'slippage cap', 'priority fee cap'],
+    signingModel: 'browser dev wallet plus client-created mint keypair; server never signs',
+    simulationRequirement: 'deserialize, policy-check, then simulate returned unsigned create transaction before signature',
+    blockers: ['pumpportal-provider-build-gated', 'deployment-gate-closed', 'broadcast-gate-closed'],
+    lpPolicy: 'BONDR does not create a Raydium LP in the Pump.fun route; launch liquidity is bonding-curve/migration governed.'
   },
   {
-    id: 'raydium-cpmm',
-    label: 'Raydium CPMM / Trade API',
+    id: 'raydium-original-lp-burn',
+    label: 'Raydium original LP + burn on launch',
     implementationStatus: 'adapter-missing' as ImplementationStatus,
-    requiredSdkOrApi: '@raydium-io/raydium-sdk-v2 CPMM pool builder or Raydium transaction API',
-    requiredInputs: ['base mint', 'quote mint', 'initial liquidity', 'fee tier/pool config', 'owner wallet', 'LP burn/lock policy'],
-    signingModel: 'browser wallet signs reviewed unsigned pool transaction',
-    simulationRequirement: 'simulate pool create/add-liquidity transaction and verify pool accounts',
-    blockers: ['raydium-cpmm-builder-missing', 'lp-lock-or-burn-policy-unverified']
-  },
-  {
-    id: 'orca-whirlpool',
-    label: 'Orca Whirlpool',
-    implementationStatus: 'adapter-missing' as ImplementationStatus,
-    requiredSdkOrApi: '@orca-so/whirlpools position/pool builder',
-    requiredInputs: ['token A/B mints', 'tick spacing', 'price range', 'liquidity amount', 'owner wallet'],
-    signingModel: 'browser wallet signs reviewed unsigned pool/position transaction',
-    simulationRequirement: 'simulate whirlpool initialize/open-position/add-liquidity path',
-    blockers: ['orca-whirlpool-builder-missing', 'whirlpool-price-range-policy-missing']
-  },
-  {
-    id: 'meteora-dlmm',
-    label: 'Meteora DLMM',
-    implementationStatus: 'adapter-missing' as ImplementationStatus,
-    requiredSdkOrApi: '@meteora-ag/dlmm pool/position builder',
-    requiredInputs: ['token X/Y mints', 'bin step', 'active bin/price', 'liquidity distribution', 'owner wallet'],
-    signingModel: 'browser wallet signs reviewed unsigned pool/position transaction',
-    simulationRequirement: 'simulate DLMM pool/position transaction and verify bins',
-    blockers: ['meteora-dlmm-builder-missing', 'dlmm-bin-policy-missing']
+    requiredSdkOrApi: '@raydium-io/raydium-sdk-v2 or verified Raydium pool transaction API for original LP creation and LP-token burn',
+    requiredInputs: ['base token mint', 'quote/SOL mint', 'initial token liquidity', 'initial SOL/quote liquidity', 'deployer wallet', 'pool config', 'LP token destination', 'burn authority/policy'],
+    signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool + burn transactions',
+    simulationRequirement: 'simulate pool create/add-liquidity transaction, verify LP token mint/account, then simulate LP burn before signature/broadcast',
+    blockers: ['raydium-original-lp-builder-missing', 'lp-token-account-derivation-missing', 'lp-burn-transaction-builder-missing', 'lp-burn-simulation-proof-missing'],
+    lpPolicy: 'Automated LP burn is in-scope only after BONDR can build and verify the real Raydium LP token account and burn transaction.'
   }
 ] as const;
 
@@ -172,7 +154,7 @@ export function buildCreateLpEngineReadiness() {
     contract: 'bondr-create-lp-engine-readiness-v1' as const,
     status: 'protocol-sdk-required' as EngineStatus,
     implementationStatus: 'adapter-missing' as ImplementationStatus,
-    execution: 'readiness-map-only-no-lp-transaction' as const,
+    execution: 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction' as const,
     adapters: LP_ADAPTER_READINESS,
     blockers: Array.from(new Set(LP_ADAPTER_READINESS.flatMap((adapter) => adapter.blockers))),
     safety: {
