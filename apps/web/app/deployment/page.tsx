@@ -126,10 +126,11 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const dryRun = activeProject?.preLiveDryRun;
   const eventRows = activeProject ? eventsForProject(activeProject.id, store).slice(0, 6) : [];
   const launchBlockers = launchReadiness?.blockers ?? [];
-  const primaryBlocker = launchBlockers.find((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker)) ?? launchBlockers[0] ?? activePreflight.find((check) => check.status === 'blocked')?.detail ?? 'Save configuration, run dry-run, then compile shadow plan.';
+  const rehearsalBlockers = launchReadiness?.rehearsalBlockers ?? launchBlockers.filter((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed', 'jito-relay-disabled-for-bundle'].includes(blocker));
+  const primaryBlocker = rehearsalBlockers[0] ?? activePreflight.find((check) => check.status === 'blocked')?.detail ?? 'Save configuration, run dry-run, then compile shadow plan.';
   const commandVerdict = !activeProject
     ? 'Project required'
-    : dryRun?.status === 'pass' && !launchBlockers.filter((blocker) => !['deployment-gate-closed', 'broadcast-gate-closed'].includes(blocker)).length
+    : dryRun?.status === 'pass' && !rehearsalBlockers.length
       ? 'Rehearsal ready'
       : 'Rehearsal blocked';
   const stagePills = activeProject ? [
@@ -137,8 +138,8 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
     { label: 'IPFS', status: launchReadiness?.ipfsMetadataReadiness.status === 'ready' ? 'ready' as const : 'blocked' as const, detail: launchReadiness?.ipfsMetadataReadiness.status ?? 'missing' },
     { label: 'Signer', status: launchReadiness?.signingOrchestration.blockers.length ? 'review' as const : 'ready' as const, detail: launchReadiness?.devWallet?.shortAddress ?? 'wallet missing' },
     { label: 'Shadow', status: 'review' as const, detail: 'compile packet' },
-    { label: 'Relay', status: launchReadiness?.relayReadiness.relayEnabled ? 'ready' as const : 'blocked' as const, detail: launchReadiness?.relayReadiness.status ?? 'Jito disabled' },
-    { label: 'Gates', status: activation.deploymentEnabled && activation.broadcastEnabled ? 'ready' as const : 'blocked' as const, detail: activation.readinessLevel }
+    { label: 'Relay', status: launchReadiness?.relayReadiness.relayEnabled ? 'ready' as const : launchReadiness?.railCounts.bundle ? 'blocked' as const : 'review' as const, detail: launchReadiness?.railCounts.bundle ? launchReadiness?.relayReadiness.status ?? 'Jito disabled' : 'optional for single dev rehearsal' },
+    { label: 'Gates', status: activation.deploymentEnabled && activation.broadcastEnabled ? 'ready' as const : 'review' as const, detail: activation.deploymentEnabled && activation.broadcastEnabled ? 'armed' : 'intentionally closed' }
   ] : [];
 
   return (

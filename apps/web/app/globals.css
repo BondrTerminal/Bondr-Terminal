@@ -16543,7 +16543,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .launchFinalActionPanel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(260px, 1fr) repeat(auto-fit, minmax(140px, auto));
   gap: 10px;
   align-items: stretch;
   padding: 10px;
@@ -16582,6 +16582,105 @@ body > .createProjectModal .professionalCreateProjectShell {
 .launchFinalActionPanel .preLiveDryRunAction button {
   border-color: rgba(249, 235, 224, 0.12);
   background: rgba(255, 255, 255, 0.04);
+}
+.deploymentHarnessActionPanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.14);
+  border-radius: 12px;
+  padding: 13px;
+  background: rgba(7, 6, 5, 0.68);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+.deploymentHarnessActionPanel.ipfs {
+  margin: 12px 0;
+  border-color: rgba(255, 127, 17, 0.22);
+  background: linear-gradient(135deg, rgba(255, 127, 17, 0.08), rgba(0, 0, 0, 0.2));
+}
+.deploymentHarnessActionPanel.signer,
+.deploymentHarnessActionPanel.shadow {
+  margin: 12px 0;
+}
+.deploymentHarnessActionPanel.signer.ready {
+  border-color: rgba(85, 240, 168, 0.3);
+  background: rgba(85, 240, 168, 0.07);
+}
+.deploymentHarnessActionPanel > div:first-child span,
+.deploymentHarnessStatusGrid span {
+  display: block;
+  color: var(--bondr-tangerine, #ff7f11);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.deploymentHarnessActionPanel > div:first-child strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+.deploymentHarnessActionPanel > div:first-child small {
+  display: block;
+  margin-top: 5px;
+  color: rgba(249, 235, 224, 0.62);
+  overflow-wrap: anywhere;
+}
+.deploymentHarnessStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.deploymentHarnessStatusGrid > div {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.deploymentHarnessStatusGrid strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--bondr-linen, #f9ebe0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deploymentHarnessStatusGrid small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deploymentHarnessActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.deploymentHarnessActions button,
+.deploymentHarnessActions a {
+  border: 1px solid rgba(249, 235, 224, 0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+.deploymentHarnessActions button:first-child {
+  border-color: rgba(255, 127, 17, 0.36);
+  background: rgba(255, 127, 17, 0.1);
+}
+.deploymentHarnessActions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 @media (max-width: 1120px) {
   .deploymentOpsConsole,

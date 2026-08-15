@@ -9,6 +9,31 @@ type Props = { project: Project; wallets: Wallet[] };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type LaunchTab = 'token' | 'route' | 'wallets' | 'task' | 'risk' | 'review';
 type TruthRail = { rail: string; label?: string; status: string; selected: boolean; summary?: string; nextAction?: string; blockers?: string[] };
+type IpfsPanelState = {
+  status?: string;
+  readiness?: {
+    status?: string;
+    providerConfigured?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+    metadataUri?: string | null;
+    image?: { source?: string; bytesKnown?: boolean; url?: string | null };
+  };
+  metadataUri?: string;
+  error?: string;
+  execution?: string;
+};
+type ShadowPanelState = {
+  status?: string;
+  packet?: {
+    status?: string;
+    packetHash?: string;
+    completeness?: { backendScore?: number; shadowExecutableScore?: number; missingStages?: string[] };
+    blockers?: string[];
+    warnings?: string[];
+  };
+  error?: string;
+};
 
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
@@ -242,6 +267,12 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState(project.metadata.imageUrl);
   const [relayStatus, setRelayStatus] = useState<{ status: string; relayEnabled: boolean; maxTipSol: number; blockers: string[] } | null>(null);
   const [truthRails, setTruthRails] = useState<TruthRail[]>([]);
+  const [ipfsState, setIpfsState] = useState<IpfsPanelState | null>(null);
+  const [ipfsLoading, setIpfsLoading] = useState(false);
+  const [connectedSigner, setConnectedSigner] = useState('');
+  const [signerMessage, setSignerMessage] = useState('Connect the dev browser wallet to prove signer alignment.');
+  const [shadowState, setShadowState] = useState<ShadowPanelState | null>(null);
+  const [shadowLoading, setShadowLoading] = useState(false);
   const defaultDevWalletId = initial.walletPlan.find((entry) => entry.executionPhase === 'dev' || entry.role.toLowerCase().includes('dev') || entry.role.toLowerCase().includes('creator'))?.walletId ?? wallets[0]?.id ?? '';
   const taskPlans = initial.walletPlan.filter((entry) => entry.executionPhase === 'task' || entry.role.toLowerCase().includes('task'));
   const taskDefaults = taskPlans[0] ?? initial.walletPlan[0] ?? defaultPlan(wallets)[0];
@@ -268,6 +299,10 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
   const nonDevParticipating = participatingPlans.filter((entry) => entry.walletId !== defaultDevWalletId);
   const multiWalletSigningReady = false;
   const signingBlockedCount = nonDevParticipating.length + (selectedDevWallet ? 1 : 0);
+  const signerMatchesDev = Boolean(selectedDevWallet?.address && connectedSigner && selectedDevWallet.address === connectedSigner);
+  const currentIpfsStatus = ipfsState?.readiness?.status ?? (ipfsReady ? 'pinned' : 'not checked');
+  const currentIpfsBlockers = ipfsState?.readiness?.blockers ?? (ipfsReady ? [] : ['metadata-not-pinned-to-ipfs']);
+  const shadowPacket = shadowState?.packet;
   const dryRunReady = project.preLiveDryRun?.status === 'pass';
   const launchReviewItems = [
     { label: 'Token package', status: tokenReady ? 'pass' : 'review', detail: tokenReady ? `${project.metadata.symbol || project.ticker} metadata and image ready` : 'Name, symbol, description, and token image need review' },
@@ -275,9 +310,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     { label: 'Dev wallet', status: selectedDevWallet ? 'pass' : 'blocked', detail: selectedDevWallet ? `${selectedDevWallet.role} · ${short(selectedDevWallet.address)}` : 'No deployer wallet selected' },
     { label: 'Execution wallets', status: walletReady ? 'pass' : 'review', detail: `${participatingPlans.length} active · ${bundleCount} bundle · ${sniperCount} sniper · ${selectedTaskCount} task` },
     { label: 'Risk rails', status: riskReady ? 'pass' : 'blocked', detail: `SL ${initial.devWalletRules.stopLossPct}% · TP ${formatPctList(initial.devWalletRules.takeProfitPercents)} · cap ${initial.devWalletRules.perTxSellCapPct}%` },
-    { label: 'IPFS metadata', status: ipfsReady ? 'pass' : 'review', detail: ipfsReady ? 'metadata image is IPFS-shaped' : 'PumpPortal create needs IPFS-pinned metadata before live launch' },
+    { label: 'IPFS metadata', status: ipfsReady ? 'pass' : 'review', detail: ipfsReady ? 'metadata URI is pinned' : `${currentIpfsStatus} · ${currentIpfsBlockers[0] ?? 'pin metadata'}` },
     { label: 'Jito relay', status: relayStatus?.relayEnabled ? 'pass' : (bundleCount ? 'blocked' : 'review'), detail: relayStatus ? `${relayStatus.status} · tip cap ${relayStatus.maxTipSol.toFixed(6)} SOL` : 'checking relay status' },
-    { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : 'single dev wallet still needs connected browser signer proof' },
+    { label: 'Multi-wallet signing', status: nonDevParticipating.length ? multiWalletSigningReady ? 'pass' : 'blocked' : signerMatchesDev ? 'pass' : 'review', detail: nonDevParticipating.length ? multiWalletSigningReady ? 'all non-dev rails can sign' : 'watch-only wallets cannot sign bundle/sniper/task legs' : signerMatchesDev ? 'connected browser signer matches dev wallet' : 'single dev wallet still needs connected browser signer proof' },
     { label: 'Dry-run', status: dryRunReady ? 'pass' : 'review', detail: project.preLiveDryRun?.status ? `${project.preLiveDryRun.status} · ${(project.preLiveDryRun.totalMaxBuySol ?? maxSol).toFixed(4)} max SOL` : 'Run pre-live dry-run after saving' },
     { label: 'Deploy gate', status: 'blocked', detail: 'Closed until explicit deployment approval' }
   ];
@@ -337,6 +372,113 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       });
     return () => { active = false; };
   }, [project.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('bondr.activeWallet') ?? '';
+    setConnectedSigner(stored);
+    if (stored) setSignerMessage(stored === selectedDevWallet?.address ? 'Stored active wallet matches the selected dev wallet.' : 'Stored active wallet does not match the selected dev wallet.');
+  }, [selectedDevWallet?.address]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/deployment/ipfs/metadata?project=${encodeURIComponent(project.id)}`, { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload) => { if (active) setIpfsState(payload); })
+      .catch((error) => { if (active) setIpfsState({ status: 'error', error: error instanceof Error ? error.message : 'IPFS readiness fetch failed.' }); });
+    return () => { active = false; };
+  }, [project.id]);
+
+  async function refreshIpfsReadiness() {
+    setIpfsLoading(true);
+    try {
+      const response = await fetch(`/api/deployment/ipfs/metadata?project=${encodeURIComponent(project.id)}`, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      setIpfsState(payload);
+      setMessage(`IPFS readiness: ${payload?.readiness?.status ?? payload?.status ?? 'unknown'}.`);
+    } catch (error) {
+      setIpfsState({ status: 'error', error: error instanceof Error ? error.message : 'IPFS readiness fetch failed.' });
+      setMessage('IPFS readiness fetch failed.');
+    } finally {
+      setIpfsLoading(false);
+    }
+  }
+
+  async function pinIpfsMetadata() {
+    setIpfsLoading(true);
+    setMessage('Requesting IPFS metadata pin. No token launch, signing, or broadcast.');
+    try {
+      const response = await fetch('/api/deployment/ipfs/metadata', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, confirmPin: true })
+      });
+      const payload = await response.json().catch(() => ({}));
+      setIpfsState(payload);
+      if (!response.ok) {
+        setMessage(payload?.error ?? payload?.blockers?.join(', ') ?? payload?.readiness?.blockers?.join(', ') ?? 'IPFS pin blocked.');
+        return;
+      }
+      setMessage(`IPFS metadata pinned and saved: ${payload.metadataUri ?? 'metadata URI saved'}.`);
+      router.refresh();
+    } catch (error) {
+      setIpfsState({ status: 'error', error: error instanceof Error ? error.message : 'IPFS pin failed.' });
+      setMessage(error instanceof Error ? error.message : 'IPFS pin failed.');
+    } finally {
+      setIpfsLoading(false);
+    }
+  }
+
+  async function connectDevSigner() {
+    const solana = typeof window !== 'undefined' ? (window as unknown as { solana?: { isPhantom?: boolean; connect?: () => Promise<{ publicKey?: { toBase58?: () => string } }>; publicKey?: { toBase58?: () => string } } }).solana : undefined;
+    if (!solana?.isPhantom || !solana.connect) {
+      setSignerMessage('Phantom is not detected in this browser.');
+      setMessage('Phantom is not detected. Open/install Phantom, then try again.');
+      return;
+    }
+    try {
+      const result = await solana.connect();
+      const address = result.publicKey?.toBase58?.() ?? solana.publicKey?.toBase58?.() ?? '';
+      setConnectedSigner(address);
+      if (address && typeof window !== 'undefined') {
+        window.localStorage.setItem('bondr.activeWallet', address);
+        window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address } }));
+      }
+      const matches = Boolean(address && selectedDevWallet?.address === address);
+      setSignerMessage(matches ? 'Connected browser wallet matches the selected dev wallet.' : `Connected signer ${short(address)} does not match dev wallet ${selectedDevWallet ? short(selectedDevWallet.address) : 'missing'}.`);
+      setMessage(matches ? 'Dev signer proven in browser state. No transaction signature requested.' : 'Signer connected, but it does not match the selected dev wallet.');
+    } catch (error) {
+      setSignerMessage(error instanceof Error ? error.message : 'Browser wallet connection rejected.');
+      setMessage(error instanceof Error ? error.message : 'Browser wallet connection rejected.');
+    }
+  }
+
+  async function compileShadowPacket() {
+    setShadowLoading(true);
+    setMessage('Compiling shadow packet. No signing, deployment, or broadcast.');
+    try {
+      const response = await fetch('/api/execution/shadow-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          connectedSigner: connectedSigner || null,
+          expectedSigners: signerMatchesDev && selectedDevWallet ? [selectedDevWallet.id] : [],
+          simulationProof: dryRunReady ? { source: 'pre-live-dry-run', status: project.preLiveDryRun?.status, observedAt: project.preLiveDryRun?.observedAt } : null,
+          persistAudit: false
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      setShadowState(payload);
+      const packet = payload?.packet;
+      setMessage(packet?.status === 'shadow-ready' ? 'Shadow packet ready. Live gates remain closed.' : `Shadow packet compiled with blockers: ${(packet?.blockers ?? payload?.blockers ?? []).join(', ') || 'review required'}.`);
+    } catch (error) {
+      setShadowState({ status: 'error', error: error instanceof Error ? error.message : 'Shadow packet compile failed.' });
+      setMessage(error instanceof Error ? error.message : 'Shadow packet compile failed.');
+    } finally {
+      setShadowLoading(false);
+    }
+  }
 
   function applyRiskPreset(presetId: keyof typeof RISK_PRESETS) {
     const preset = RISK_PRESETS[presetId];
@@ -575,6 +717,22 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <label><span>Pool</span><input name="pool" defaultValue={project.pool ?? ''} placeholder="not created" /></label>
           </div>
         </div>
+        <div className="deploymentHarnessActionPanel ipfs">
+          <div>
+            <span>IPFS metadata</span>
+            <strong>{currentIpfsStatus}</strong>
+            <small>{ipfsState?.readiness?.metadataUri ?? project.metadata.metadataUri ?? (currentIpfsBlockers.join(' · ') || 'Pin token image and metadata before PumpPortal create.')}</small>
+          </div>
+          <div className="deploymentHarnessStatusGrid">
+            <div><span>Provider</span><strong>{ipfsState?.readiness?.providerConfigured ? 'configured' : 'missing'}</strong><small>PINATA_JWT</small></div>
+            <div><span>Image source</span><strong>{ipfsState?.readiness?.image?.source ?? 'unknown'}</strong><small>{ipfsState?.readiness?.image?.bytesKnown ? 'bytes known' : 'bytes unavailable'}</small></div>
+            <div><span>Metadata URI</span><strong>{project.metadata.metadataUri ? 'saved' : 'missing'}</strong><small>{project.metadata.metadataUri ?? 'ipfs:// required'}</small></div>
+          </div>
+          <div className="deploymentHarnessActions">
+            <button type="button" onClick={refreshIpfsReadiness} disabled={ipfsLoading}>{ipfsLoading ? 'Checking...' : 'Refresh IPFS'}</button>
+            <button type="button" onClick={pinIpfsMetadata} disabled={ipfsLoading || Boolean(project.metadata.metadataUri)}>{ipfsLoading ? 'Pinning...' : project.metadata.metadataUri ? 'Metadata pinned' : 'Pin Metadata'}</button>
+          </div>
+        </div>
         <div className="launchSegmentStack">
           <div>
             <span>Platform</span>
@@ -689,6 +847,22 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <span>Total SOL Balance</span>
             <strong>{totalWalletBalance.toFixed(4)} SOL</strong>
             <small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small>
+          </div>
+        </div>
+        <div className={`deploymentHarnessActionPanel signer ${signerMatchesDev ? 'ready' : 'review'}`}>
+          <div>
+            <span>Dev signer proof</span>
+            <strong>{signerMatchesDev ? 'matched' : 'review'}</strong>
+            <small>{signerMessage}</small>
+          </div>
+          <div className="deploymentHarnessStatusGrid">
+            <div><span>Required dev wallet</span><strong>{selectedDevWallet ? short(selectedDevWallet.address) : 'missing'}</strong><small>{selectedDevWallet?.role ?? 'select a dev wallet'}</small></div>
+            <div><span>Connected signer</span><strong>{connectedSigner ? short(connectedSigner) : 'none'}</strong><small>{connectedSigner || 'browser wallet not connected here'}</small></div>
+            <div><span>Proof type</span><strong>public key</strong><small>No transaction signature requested</small></div>
+          </div>
+          <div className="deploymentHarnessActions">
+            <button type="button" onClick={connectDevSigner}>{connectedSigner ? 'Reconnect signer' : 'Connect signer'}</button>
+            <a href={`/portfolio?view=wallets&project=${project.id}`}>Wallet Center</a>
           </div>
         </div>
         <div className="launchWalletListPanel">
@@ -920,12 +1094,12 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div>
               <span>PumpPortal Create</span>
               <strong>{ipfsReady ? 'metadata pinned' : 'IPFS required'}</strong>
-              <small>Token create needs IPFS metadata URI, mint keypair, dev wallet, priority fee, slippage, and simulation.</small>
+              <small>{currentIpfsStatus} · {project.metadata.metadataUri ?? currentIpfsBlockers[0] ?? 'pin metadata'}</small>
             </div>
             <div>
               <span>Signing</span>
-              <strong>{multiWalletSigningReady ? 'rail signers aligned' : 'signing proof blocked'}</strong>
-              <small>{nonDevParticipating.length ? `${nonDevParticipating.length} non-dev rail wallet(s) cannot sign from watch-only records.` : `${signingBlockedCount} wallet signer proof required before launch.`}</small>
+              <strong>{nonDevParticipating.length ? multiWalletSigningReady ? 'rail signers aligned' : 'signing proof blocked' : signerMatchesDev ? 'dev signer matched' : 'signing proof needed'}</strong>
+              <small>{nonDevParticipating.length ? `${nonDevParticipating.length} non-dev rail wallet(s) cannot sign from watch-only records.` : signerMessage}</small>
             </div>
             <div>
               <span>Tasks</span>
@@ -953,8 +1127,23 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
           <section className="launchFinalActionPanel">
             <div><span>Execution gate</span><strong>Deploy disabled</strong><small>No token launch, signature request, SOL movement, or broadcast from this screen while gates are closed.</small></div>
             <button type="submit" disabled={saveState === 'saving'}>{saveState === 'saving' ? 'Saving...' : 'Save Launch Plan'}</button>
+            <button type="button" onClick={pinIpfsMetadata} disabled={ipfsLoading || Boolean(project.metadata.metadataUri)}>{ipfsLoading ? 'Pinning...' : project.metadata.metadataUri ? 'IPFS Ready' : 'Pin IPFS'}</button>
+            <button type="button" onClick={connectDevSigner}>{signerMatchesDev ? 'Signer Proven' : 'Prove Signer'}</button>
+            <button type="button" onClick={compileShadowPacket} disabled={shadowLoading}>{shadowLoading ? 'Compiling...' : 'Compile Shadow'}</button>
             <PreLiveDryRunAction projectId={project.id} />
             <button type="button" onClick={() => setActiveTab('risk')}>Review Risk</button>
+          </section>
+          <section className="deploymentHarnessActionPanel shadow">
+            <div>
+              <span>Shadow packet</span>
+              <strong>{shadowPacket?.status ?? shadowState?.status ?? 'not compiled'}</strong>
+              <small>{shadowPacket?.packetHash ? `hash ${shadowPacket.packetHash.slice(0, 12)}...` : shadowState?.error ?? 'Compile after IPFS, signer proof, and dry-run.'}</small>
+            </div>
+            <div className="deploymentHarnessStatusGrid">
+              <div><span>Backend</span><strong>{shadowPacket?.completeness?.backendScore ?? 0}%</strong><small>shadow spine</small></div>
+              <div><span>Executable</span><strong>{shadowPacket?.completeness?.shadowExecutableScore ?? 0}%</strong><small>ready stages only</small></div>
+              <div><span>Missing</span><strong>{shadowPacket?.completeness?.missingStages?.length ?? 0}</strong><small>{shadowPacket?.completeness?.missingStages?.join(', ') || shadowPacket?.blockers?.join(', ') || 'not compiled'}</small></div>
+            </div>
           </section>
         </div>
       </section>

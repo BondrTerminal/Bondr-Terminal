@@ -127,12 +127,21 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
     activation.deploymentEnabled ? null : 'deployment-gate-closed',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
   ].filter((item): item is string => Boolean(item));
+  const intentionalLiveGateIds = ['deployment-gate-closed', 'broadcast-gate-closed'];
+  const optionalBlockerIds = ['jito-relay-disabled-for-bundle'];
+  const intentionalLiveGateBlockers = blockers.filter((blocker) => intentionalLiveGateIds.includes(blocker));
+  const optionalBlockers = blockers.filter((blocker) => optionalBlockerIds.includes(blocker));
+  const rehearsalBlockers = blockers.filter((blocker) => !intentionalLiveGateBlockers.includes(blocker) && !optionalBlockers.includes(blocker));
 
   return {
     status: blockers.length ? 'blocked' : 'ready-for-approval',
     mode: 'dev-wallet-only',
     broadcastReady: false,
     blockers,
+    rehearsalStatus: rehearsalBlockers.length ? 'blocked' : 'ready-for-dry-run-rehearsal',
+    rehearsalBlockers,
+    optionalBlockers,
+    intentionalLiveGateBlockers,
     adapterRecommendation: project.launchPath.toLowerCase().includes('raydium') ? 'raydium-launchlab' : route?.platform === 'bonk' ? 'pumpportal-trade-local' : 'pumpportal-create',
     devWallet: devWallet ? { id: devWallet.id, role: devWallet.role, address: devWallet.address, shortAddress: short(devWallet.address), custodyMode: devWallet.custodyMode ?? 'watch-only' } : null,
     railCounts: { bundle: bundlePlans.length, sniper: sniperPlans.length, task: taskPlans.length },

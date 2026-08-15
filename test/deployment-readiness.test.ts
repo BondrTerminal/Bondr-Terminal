@@ -123,6 +123,10 @@ test('dev-wallet-only readiness blocks broadcast and exposes approval summary', 
   assert.equal(readiness.approvalSummary.maxDevBuySol, 0.01);
   assert.ok(readiness.blockers.includes('deployment-gate-closed'));
   assert.ok(readiness.blockers.includes('broadcast-gate-closed'));
+  assert.ok(readiness.intentionalLiveGateBlockers.includes('deployment-gate-closed'));
+  assert.ok(readiness.intentionalLiveGateBlockers.includes('broadcast-gate-closed'));
+  assert.ok(readiness.rehearsalBlockers.includes('ipfs-metadata-uri-missing'));
+  assert.equal(readiness.rehearsalStatus, 'blocked');
   assert.equal(readiness.postLaunchRailVerification.every((rail) => rail.broadcastReady === false), true);
 });
 
@@ -156,6 +160,29 @@ test('pumpportal create preview becomes structurally ready when IPFS URI and min
   assert.equal(preview.payloadPreview.mint, 'Mint111111111111111111111111111111111111111');
   assert.ok(preview.blockers.includes('deployment-gate-closed'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
+});
+
+test('deployment readiness separates rehearsal blockers from intentional live gates', () => {
+  const ipfsProject = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageUrl: 'ipfs://bafybeigdyrztkexample/image.png',
+      metadataUri: 'ipfs://bafybeigdyrztkexample/metadata.json'
+    },
+    launchConfig: {
+      ...project.launchConfig!,
+      walletPlan: [
+        { walletId: 'dev-wallet', role: 'dev wallet', participate: true, executionPhase: 'dev' as const, plannedBuySol: 0.01, maxBuySol: 0.01, maxSlippageBps: 100, takeProfitPercents: [35, 75, 150], stopLossPct: -18, trailingStopPct: 22, perTxSellCapPct: 25, cooldownSeconds: 60 }
+      ]
+    }
+  };
+  const readiness = buildDeploymentLaunchReadiness(ipfsProject, [wallet], activation);
+  assert.equal(readiness.rehearsalStatus, 'ready-for-dry-run-rehearsal');
+  assert.deepEqual(readiness.rehearsalBlockers, []);
+  assert.deepEqual(readiness.optionalBlockers, []);
+  assert.deepEqual(readiness.intentionalLiveGateBlockers, ['deployment-gate-closed', 'broadcast-gate-closed']);
+  assert.equal(readiness.broadcastReady, false);
 });
 
 test('pumpportal build-create stays provider-disabled without signing or broadcast', async () => {
