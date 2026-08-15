@@ -67,7 +67,19 @@ export async function POST(request: Request) {
     return Response.json({ status: 'blocked', observedAt, projectId: active.project.id, readiness, blockers: readiness.blockers, execution: 'blocked-no-ipfs-write' }, { status: 409 });
   }
 
-  const pinned = await pinProjectMetadata(active.project);
+  let pinned: Awaited<ReturnType<typeof pinProjectMetadata>>;
+  try {
+    pinned = await pinProjectMetadata(active.project);
+  } catch (error) {
+    return Response.json({
+      status: 'error',
+      observedAt,
+      projectId: active.project.id,
+      readiness,
+      error: error instanceof Error ? error.message : 'IPFS metadata pin failed.',
+      execution: 'ipfs-pin-failed-no-launch-no-signing-no-broadcast'
+    }, { status: 502, headers: { 'cache-control': 'no-store' } });
+  }
   const mode = walletStoreMode();
   if (mode === 'disabled') return mutationBlockedResponse('Mutations are disabled by wallet store mode.');
   const store = mode === 'postgres' ? await getMeridianWalletStore() : JSON.parse(readFileSync(getMeridianStorePath(), 'utf8')) as MeridianStore;
