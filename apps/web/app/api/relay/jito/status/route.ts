@@ -26,7 +26,8 @@ export async function GET() {
     endpoints: {
       status: '/api/relay/jito/status',
       bundlePreview: '/api/relay/jito/bundle-preview',
-      sendBundle: '/api/relay/jito/send-bundle'
+      sendBundle: '/api/relay/jito/send-bundle',
+      bundleStatus: '/api/relay/jito/bundle-status'
     },
     execution: 'jito-relay-status-only-no-submit'
   }, { headers: { 'cache-control': 'no-store' } });

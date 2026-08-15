@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
-import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
+import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
@@ -315,6 +315,53 @@ test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () 
     assert.equal(result.relayResponse?.bundleId, 'bundle-test-id');
     assert.equal(requests.length, 1);
     assert.equal(JSON.parse(requests[0].body).method, 'sendBundle');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('jito bundle status stays blocked when relay is disabled', async () => {
+  const result = await getJitoBundleStatus({ bundleIds: ['bundle-test-id'] });
+  assert.equal(result.status, 'blocked');
+  assert.ok(result.blockers.includes('jito-relay-disabled'));
+  assert.equal(result.execution, 'bundle-status-read-only-no-submit');
+});
+
+test('jito bundle status builds receipt records from relay responses', async () => {
+  const previousFetch = globalThis.fetch;
+  const methods: string[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    methods.push(body.method);
+    const result = body.method === 'getInflightBundleStatuses'
+      ? { value: [{ bundle_id: 'bundle-test-id', status: 'Pending' }] }
+      : { value: [{ bundle_id: 'bundle-test-id', confirmation_status: 'finalized' }] };
+    return new Response(JSON.stringify({ jsonrpc: '2.0', result }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const result = await getJitoBundleStatus({ bundleIds: ['bundle-test-id'], projectId: 'sda', rail: 'deployment' }, {
+      contract: 'bondr-jito-relay-readiness-v1',
+      status: 'relay-ready',
+      relayEnabled: true,
+      provider: 'jito-block-engine',
+      blockEngineUrl: 'https://jito.test',
+      blockEngineRegion: 'test',
+      authConfigured: false,
+      tip: { minLamports: 1000, maxLamports: 100000, minSol: 0.000001, maxSol: 0.0001, tipAccountsEndpoint: 'https://jito.test/api/v1/getTipAccounts' },
+      limits: { maxTransactionsPerBundle: 5, maxWalletsPerBundle: 5, maxTotalSol: 0.25 },
+      methods: { sendBundle: 'sendBundle', getBundleStatuses: 'getBundleStatuses', getInflightBundleStatuses: 'getInflightBundleStatuses', getTipAccounts: 'getTipAccounts', sendTransaction: 'sendTransaction' },
+      requiredEnv: [],
+      optionalEnv: [],
+      blockers: [],
+      warnings: [],
+      execution: 'relay-ready-gated-submit'
+    });
+    assert.equal(result.status, 'ok');
+    assert.deepEqual(methods.sort(), ['getBundleStatuses', 'getInflightBundleStatuses']);
+    assert.equal(result.receipts[0].contract, 'bondr-bundle-receipt-v1');
+    assert.equal(result.receipts[0].bundleId, 'bundle-test-id');
+    assert.equal(result.receipts[0].rail, 'deployment');
+    assert.equal(result.receipts[0].status, 'finalized');
   } finally {
     globalThis.fetch = previousFetch;
   }

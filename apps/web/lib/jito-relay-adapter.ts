@@ -85,6 +85,33 @@ export type JitoSendBundleResult = {
   execution: 'blocked-no-jito-relay-submit' | 'jito-send-bundle-submitted';
 };
 
+export type BundleReceiptRecord = {
+  contract: 'bondr-bundle-receipt-v1';
+  bundleId: string;
+  rail: 'deployment' | 'bundle' | 'sniper' | 'task';
+  status: 'submitted' | 'inflight' | 'landed' | 'dropped' | 'failed' | 'finalized' | 'unknown';
+  txSignatures: string[];
+  observedAt: string;
+  provider: 'jito-block-engine';
+  projectId?: string | null;
+  relayResponse?: unknown;
+};
+
+export type JitoBundleStatusResult = {
+  status: 'blocked' | 'ok' | 'relay-error';
+  observedAt: string;
+  relay: JitoRelayReadiness;
+  bundleIds: string[];
+  receipts: BundleReceiptRecord[];
+  raw?: {
+    inflight?: unknown;
+    final?: unknown;
+  };
+  blockers: string[];
+  normalizedError?: NormalizedJitoRelayError;
+  execution: 'bundle-status-read-only-no-submit';
+};
+
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()) : [];
 }
@@ -100,6 +127,24 @@ function asNumber(value: unknown, fallback = 0) {
 
 function signedTransactionsFrom(payload: JitoBundlePayload) {
   return asStringArray(payload.signedTransactions);
+}
+
+function bundleIdsFrom(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()).slice(0, 20)
+    : typeof value === 'string' && value.trim()
+      ? [value.trim()]
+      : [];
+}
+
+function statusFromRaw(raw: unknown): BundleReceiptRecord['status'] {
+  const text = JSON.stringify(raw ?? {}).toLowerCase();
+  if (text.includes('landed')) return 'landed';
+  if (text.includes('finalized')) return 'finalized';
+  if (text.includes('dropped')) return 'dropped';
+  if (text.includes('failed') || text.includes('invalid')) return 'failed';
+  if (text.includes('pending') || text.includes('inflight')) return 'inflight';
+  return 'unknown';
 }
 
 export function normalizeJitoRelayError(error: unknown): NormalizedJitoRelayError {
@@ -247,6 +292,51 @@ export async function sendJitoBundle(payload: JitoBundlePayload, activation: Liv
       normalizedError: normalizeJitoRelayError(error),
       execution: 'blocked-no-jito-relay-submit'
     };
+  }
+}
+
+async function jitoRpc(relay: JitoRelayReadiness, method: string, params: unknown[]) {
+  const endpoint = `${relay.blockEngineUrl.replace(/\/$/, '')}/api/v1/bundles`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: `bondr-${method}-${Date.now()}`, method, params }),
+    cache: 'no-store'
+  });
+  const raw = await response.json().catch(() => null) as null | { result?: unknown; error?: unknown };
+  if (!response.ok || raw?.error) throw new Error(typeof raw?.error === 'string' ? raw.error : JSON.stringify(raw?.error ?? { status: response.status }));
+  return raw?.result ?? raw;
+}
+
+export async function getJitoBundleStatus(input: { bundleIds?: unknown; projectId?: string | null; rail?: BundleReceiptRecord['rail'] }, relay = getJitoRelayReadiness()): Promise<JitoBundleStatusResult> {
+  const observedAt = new Date().toISOString();
+  const bundleIds = bundleIdsFrom(input.bundleIds);
+  const blockers = [
+    bundleIds.length ? null : 'bundle-id-required',
+    relay.relayEnabled ? null : 'jito-relay-disabled'
+  ].filter((item): item is string => Boolean(item));
+  if (blockers.length) {
+    return { status: 'blocked', observedAt, relay, bundleIds, receipts: [], blockers, execution: 'bundle-status-read-only-no-submit' };
+  }
+  try {
+    const [inflight, final] = await Promise.all([
+      jitoRpc(relay, 'getInflightBundleStatuses', [bundleIds]),
+      jitoRpc(relay, 'getBundleStatuses', [bundleIds])
+    ]);
+    const receipts = bundleIds.map((bundleId): BundleReceiptRecord => ({
+      contract: 'bondr-bundle-receipt-v1',
+      bundleId,
+      rail: input.rail ?? 'bundle',
+      status: statusFromRaw({ inflight, final, bundleId }),
+      txSignatures: [],
+      observedAt,
+      provider: 'jito-block-engine',
+      projectId: input.projectId ?? null,
+      relayResponse: { inflight, final }
+    }));
+    return { status: 'ok', observedAt, relay, bundleIds, receipts, raw: { inflight, final }, blockers: [], execution: 'bundle-status-read-only-no-submit' };
+  } catch (error) {
+    return { status: 'relay-error', observedAt, relay, bundleIds, receipts: [], blockers: ['jito-bundle-status-request-failed'], normalizedError: normalizeJitoRelayError(error), execution: 'bundle-status-read-only-no-submit' };
   }
 }
 
