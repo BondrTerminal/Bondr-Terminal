@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
+import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engine-readiness.js';
 import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson, pinataJwt } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
@@ -10,6 +11,7 @@ import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-read
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -183,6 +185,78 @@ test('dev-wallet-only readiness blocks broadcast and exposes approval summary', 
   assert.ok(readiness.rehearsalBlockers.includes('ipfs-metadata-uri-missing'));
   assert.equal(readiness.rehearsalStatus, 'blocked');
   assert.equal(readiness.postLaunchRailVerification.every((rail) => rail.broadcastReady === false), true);
+});
+
+test('deployment engine readiness exposes token mint builder as implemented but gate-closed', () => {
+  const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
+  assert.equal(engines.contract, 'bondr-deployment-engine-readiness-v1');
+  assert.equal(engines.tokenMint.contract, 'bondr-token-mint-engine-readiness-v1');
+  assert.equal(engines.tokenMint.status, 'deployment-disabled');
+  assert.equal(engines.tokenMint.implementationStatus, 'builder-implemented');
+  assert.deepEqual(engines.tokenMint.requiredInputs, ['payer', 'mint', 'decimals', 'initialSupply', 'freezeAuthority?']);
+  assert.equal(engines.tokenMint.requiredSigners.payer, wallet.address);
+  assert.equal(engines.tokenMint.requiredSigners.clientMintKeypair, 'required-client-side');
+  assert.equal(engines.tokenMint.requiredSigners.serverSigner, false);
+  assert.equal(engines.tokenMint.unsignedBuild.availableNow, false);
+  assert.ok(engines.tokenMint.blockers.includes('deployment-gate-closed'));
+  assert.equal(engines.tokenMint.safety.noPrivateKeys, true);
+});
+
+test('deployment engine POST does not build a mint transaction while deployment gate is closed', async () => {
+  const response = await deploymentEnginePost(new Request('https://bondr.test/api/deployment-engine', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      operation: 'create-spl-token',
+      payer: wallet.address,
+      mint: validMintPublicKey,
+      decimals: 6,
+      initialSupply: 1000
+    })
+  }));
+  const payload = await response.json() as { status: string; execution: string; transactionBase64?: string; readiness?: { implementationStatus?: string; status?: string } };
+  assert.equal(response.status, 403);
+  assert.equal(payload.status, 'blocked');
+  assert.equal(payload.execution, 'deployment-disabled-no-transaction-built');
+  assert.equal(payload.transactionBase64, undefined);
+  assert.equal(payload.readiness?.implementationStatus, 'builder-implemented');
+  assert.equal(payload.readiness?.status, 'deployment-disabled');
+});
+
+test('deployment engine launch bundle readiness models legs, caps, signing order, and anti-abuse checks', () => {
+  const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
+  assert.equal(engines.launchBundle.contract, 'bondr-launch-bundle-engine-readiness-v1');
+  assert.equal(engines.launchBundle.status, 'rehearsal-contract-ready');
+  assert.equal(engines.launchBundle.implementationStatus, 'rehearsal-contract-only');
+  assert.equal(engines.launchBundle.execution, 'preflight-only-no-jito-submit-no-broadcast');
+  assert.deepEqual(engines.launchBundle.legs.map((leg) => leg.id), ['create', 'dev-buy', 'bundle-buys', 'sniper-rails', 'task-rails']);
+  assert.ok(engines.launchBundle.signingOrder.includes(wallet.address));
+  assert.equal(engines.launchBundle.caps.maxTotalSol, 0.01);
+  assert.ok(engines.launchBundle.antiAbuseChecks.includes('no-self-trade-loop'));
+  assert.ok(engines.launchBundle.antiAbuseChecks.includes('no-wash-trading'));
+  assert.ok(engines.launchBundle.blockers.includes('broadcast-gate-closed'));
+  assert.ok(engines.launchBundle.blockers.includes('bundle-simulation-proof-required'));
+  assert.equal(engines.launchBundle.safety.noRelaySubmit, true);
+});
+
+test('deployment engine LP readiness maps real protocol adapters and blocks fake LP creation', () => {
+  const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
+  assert.equal(engines.createLp.contract, 'bondr-create-lp-engine-readiness-v1');
+  assert.equal(engines.createLp.status, 'protocol-sdk-required');
+  assert.equal(engines.createLp.implementationStatus, 'adapter-missing');
+  assert.deepEqual(engines.createLp.adapters.map((adapter) => adapter.id), [
+    'raydium-launchlab',
+    'raydium-cpmm',
+    'orca-whirlpool',
+    'meteora-dlmm'
+  ]);
+  assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredSdkOrApi.length > 0));
+  assert.ok(engines.createLp.adapters.every((adapter) => adapter.requiredInputs.length > 0));
+  assert.ok(engines.createLp.adapters.every((adapter) => adapter.simulationRequirement.includes('simulate')));
+  assert.ok(engines.createLp.blockers.includes('raydium-launchlab-builder-missing'));
+  assert.ok(engines.createLp.blockers.includes('meteora-dlmm-builder-missing'));
+  assert.equal(engines.createLp.safety.noFakeLpCreation, true);
+  assert.equal(engines.createLp.execution, 'readiness-map-only-no-lp-transaction');
 });
 
 test('pumpportal create preview names IPFS and mint blockers without calling provider', () => {

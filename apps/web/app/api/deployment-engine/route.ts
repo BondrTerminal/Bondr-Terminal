@@ -3,6 +3,7 @@ import { buildMeridianHubContext, resolveMeridianProjectContextId } from '../../
 import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
+import { buildDeploymentEngineReadiness } from '../../../lib/deployment-engine-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
   const activeProject = context.projects[0] ?? null;
 
   const activation = getLiveActivationStatus();
+  const engineReadiness = buildDeploymentEngineReadiness(activeProject?.project ?? null, activeProject?.wallets ?? [], activation);
 
   return Response.json({
     status: 'ok', observedAt, signer: 'browser-wallet+client-mint-keypair', liveTradingEnabled: activation.liveTradingEnabled, deploymentEnabled: activation.deploymentEnabled,
@@ -84,11 +86,7 @@ export async function GET(request: Request) {
       nextActions: activeProject.nextActions,
       sourceStatus: activeProject.sourceStatus
     } : null,
-    engines: {
-      tokenMint: { status: activation.deploymentEnabled ? 'transaction-builder-ready' : 'deployment-disabled', method: 'POST {operation:"create-spl-token", payer, mint, decimals, initialSupply, freezeAuthority?}' },
-      launchBundle: { status: 'preflight-only', note: 'Bundle execution requires funded wallet set, signing order, and anti-self-trade checks.' },
-      createLp: { status: 'protocol-sdk-required', note: 'Raydium/Orca/Meteora LP creation needs protocol-specific builders and pool config; not faked.' }
-    },
+    engines: engineReadiness,
     execution: activation.deploymentEnabled ? 'browser-signing-required' : 'deployment-disabled-preflight-only'
   });
 }
@@ -97,7 +95,13 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as null | { operation?: string; payer?: string; mint?: string; decimals?: number; initialSupply?: number; freezeAuthority?: string | null };
   if (!body?.operation) return Response.json({ error: 'Missing operation.' }, { status: 400 });
   if (body.operation !== 'create-spl-token') return Response.json({ status: 'preflight-only', operation: body.operation, reason: 'Only SPL token mint transaction building is implemented here; LP/bundle routes require protocol-specific builders.', execution: 'builder-not-available' }, { status: 501 });
-  if (!liveEnabled()) return Response.json({ status: 'blocked', operation: body.operation, reason: 'LIVE_DEPLOYMENT_ENABLED is false.', execution: 'deployment-disabled' }, { status: 403 });
+  if (!liveEnabled()) return Response.json({
+    status: 'blocked',
+    operation: body.operation,
+    reason: 'LIVE_DEPLOYMENT_ENABLED is false.',
+    readiness: buildDeploymentEngineReadiness(null, [], getLiveActivationStatus()).tokenMint,
+    execution: 'deployment-disabled-no-transaction-built'
+  }, { status: 403 });
   try {
     const payer = parsePk(body.payer, 'payer');
     const mint = parsePk(body.mint, 'mint');
