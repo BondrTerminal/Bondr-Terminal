@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
+import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
@@ -470,4 +471,14 @@ test('task queue preview accepts safe task shape but keeps worker and broadcast 
   assert.ok(preview.blockers.includes('task-queue-persistence-missing'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
   assert.equal(preview.task.paused, true);
+});
+
+test('execution recovery readiness reports monitor gaps and no-blind-retry policy', () => {
+  const readiness = buildExecutionRecoveryReadiness();
+  assert.equal(readiness.contract, 'bondr-execution-recovery-readiness-v1');
+  assert.equal(readiness.execution, 'recovery-readiness-only-no-monitor-no-retry-no-broadcast');
+  assert.ok(readiness.recoveryPolicy.retryable.includes('blockhash-expired-rebuild'));
+  assert.ok(readiness.recoveryPolicy.noRetry.includes('slippage-or-stale-market'));
+  assert.equal(readiness.recoveryPolicy.noBlindRetry, true);
+  assert.ok(readiness.blockers.includes('durable-monitor-worker-missing'));
 });
