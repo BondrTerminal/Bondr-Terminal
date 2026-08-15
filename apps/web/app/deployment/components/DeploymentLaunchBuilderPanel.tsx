@@ -76,6 +76,34 @@ type IpfsMetadataState = {
   error?: string;
 };
 
+type ShadowPlanState = {
+  status?: string;
+  packet?: {
+    status: string;
+    packetHash: string;
+    completeness: {
+      backendScore: number;
+      shadowExecutableScore: number;
+      readyStages: number;
+      totalStages: number;
+      missingStages: string[];
+    };
+    spine: Array<{ step: string; status: string; blockers: string[]; detail: string }>;
+    blockers: string[];
+    warnings: string[];
+    audit: { persisted: boolean; storage: string; auditId: string; error?: string };
+    gates: {
+      signingEnabled: boolean;
+      broadcastEnabled: boolean;
+      fundingBroadcastEnabled: boolean;
+      deploymentEnabled: boolean;
+      jitoRelayEnabled: boolean;
+    };
+    execution: string;
+  };
+  error?: string;
+};
+
 type BrowserSolanaProvider = {
   publicKey?: { toString(): string; toBase58?: () => string };
   connect(): Promise<{ publicKey: { toString(): string; toBase58?: () => string } }>;
@@ -100,6 +128,8 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [pumpPortalBuildLoading, setPumpPortalBuildLoading] = useState(false);
   const [ipfsLoading, setIpfsLoading] = useState(false);
   const [ipfsResult, setIpfsResult] = useState<IpfsMetadataState | null>(null);
+  const [shadowLoading, setShadowLoading] = useState(false);
+  const [shadowPlan, setShadowPlan] = useState<ShadowPlanState | null>(null);
   const [clientMintKeypair, setClientMintKeypair] = useState<Keypair | null>(null);
   const [connectedSigner, setConnectedSigner] = useState('');
   const [signerProofMessage, setSignerProofMessage] = useState('Connect browser wallet to prove the deployer signer before building.');
@@ -173,6 +203,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     setResult(null);
     setPumpPortalPreview(null);
     setPumpPortalBuild(null);
+    setShadowPlan(null);
   }
 
   async function connectBrowserSigner() {
@@ -209,6 +240,32 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
       setIpfsResult({ status: 'error', error: error instanceof Error ? error.message : 'IPFS metadata request failed.' });
     } finally {
       setIpfsLoading(false);
+    }
+  }
+
+  async function buildShadowPlan(persistAudit: boolean) {
+    setShadowLoading(true);
+    setShadowPlan(null);
+    try {
+      const response = await fetch('/api/execution/shadow-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          mintPublicKey: mint.trim() || null,
+          connectedSigner: connectedSigner.trim() || null,
+          expectedSigners: connectedSigner ? [connectedSigner] : [],
+          simulationProof: result?.transactionBase64 || pumpPortalBuild?.result?.build?.transactionHash ? { source: 'local-shadow-build-preview' } : null,
+          approvalId: null,
+          persistAudit
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as ShadowPlanState;
+      setShadowPlan(payload);
+    } catch (error) {
+      setShadowPlan({ status: 'error', error: error instanceof Error ? error.message : 'Shadow execution packet request failed.' });
+    } finally {
+      setShadowLoading(false);
     }
   }
 
@@ -324,6 +381,38 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           <div><span>Mint</span><strong>{short(pumpPortalBuild.result?.requestBody.mint)}</strong><small>fee payer {short(pumpPortalBuild.result?.build?.feePayer)}</small></div>
           <div><span>Unsigned bytes</span><strong>{pumpPortalBuild.result?.build ? `${pumpPortalBuild.result.build.transactionBytes} bytes` : 'not built'}</strong><small>{short(pumpPortalBuild.result?.build?.transactionHash)}</small></div>
           <div className="wide"><span>Blockers</span><strong>{pumpPortalBuild.result?.blockers.length ? pumpPortalBuild.result.blockers.join(', ') : pumpPortalBuild.error ?? 'build-ready'}</strong></div>
+        </div>
+      )}
+      <div className="pumpPortalPreviewPanel">
+        <div>
+          <span>Shadow execution packet</span>
+          <strong>Compile full backend plan</strong>
+          <small>Builds one policy packet across metadata, builder, signer, simulation, Jito, receipts, monitoring, recovery, and gates. No signing or broadcast.</small>
+        </div>
+        <span className="deploymentBuilderActionRow">
+          <button className="button secondary" type="button" onClick={() => void buildShadowPlan(false)} disabled={shadowLoading}>
+            {shadowLoading ? 'Compiling...' : 'Compile Shadow Plan'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => void buildShadowPlan(true)} disabled={shadowLoading}>
+            Audit Snapshot
+          </button>
+        </span>
+      </div>
+      {shadowPlan && (
+        <div className="pumpPortalPreviewResult">
+          <div><span>Packet</span><strong>{shadowPlan.packet?.status ?? shadowPlan.status ?? 'unknown'}</strong><small>{short(shadowPlan.packet?.packetHash)}</small></div>
+          <div><span>Backend score</span><strong>{shadowPlan.packet ? `${shadowPlan.packet.completeness.backendScore}%` : 'unknown'}</strong><small>{shadowPlan.packet ? `${shadowPlan.packet.completeness.readyStages}/${shadowPlan.packet.completeness.totalStages} shadow stages` : shadowPlan.error}</small></div>
+          <div><span>Executable shadow</span><strong>{shadowPlan.packet ? `${shadowPlan.packet.completeness.shadowExecutableScore}%` : 'unknown'}</strong><small>{shadowPlan.packet?.completeness.missingStages.join(', ') || 'no missing hard stages'}</small></div>
+          <div><span>Audit</span><strong>{shadowPlan.packet?.audit.persisted ? 'stored' : shadowPlan.packet?.audit.storage ?? 'not stored'}</strong><small>{shadowPlan.packet?.audit.auditId ?? 'preview only'}</small></div>
+          <div className="wide"><span>Gates</span><strong>{shadowPlan.packet ? `deploy ${shadowPlan.packet.gates.deploymentEnabled ? 'on' : 'off'} · broadcast ${shadowPlan.packet.gates.broadcastEnabled ? 'on' : 'off'} · jito ${shadowPlan.packet.gates.jitoRelayEnabled ? 'on' : 'off'}` : 'unknown'}</strong></div>
+          <div className="wide"><span>Blockers</span><strong>{shadowPlan.packet?.blockers.length ? shadowPlan.packet.blockers.join(', ') : shadowPlan.error ?? 'shadow-ready'}</strong></div>
+          {shadowPlan.packet?.spine.map((item) => (
+            <div key={item.step}>
+              <span>{item.step}</span>
+              <strong>{item.status}</strong>
+              <small>{item.blockers.length ? item.blockers.join(', ') : item.detail}</small>
+            </div>
+          ))}
         </div>
       )}
     </section>

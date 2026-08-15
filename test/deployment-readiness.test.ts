@@ -7,6 +7,7 @@ import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBund
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
+import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 
 const wallet: Wallet = {
@@ -481,4 +482,23 @@ test('execution recovery readiness reports monitor gaps and no-blind-retry polic
   assert.ok(readiness.recoveryPolicy.noRetry.includes('slippage-or-stale-market'));
   assert.equal(readiness.recoveryPolicy.noBlindRetry, true);
   assert.ok(readiness.blockers.includes('durable-monitor-worker-missing'));
+});
+
+test('shadow execution packet compiles execution spine without enabling live movement', async () => {
+  const packet = await buildShadowExecutionPacket(project, [wallet], activation, {
+    mintPublicKey: 'Mint111111111111111111111111111111111111111',
+    connectedSigner: wallet.address,
+    expectedSigners: [wallet.address],
+    simulationProof: { source: 'unit-test' },
+    persistAudit: false
+  });
+  assert.equal(packet.contract, 'bondr-shadow-execution-packet-v1');
+  assert.equal(packet.execution, 'shadow-plan-only-no-signing-no-broadcast');
+  assert.equal(packet.safety.noSigning, true);
+  assert.equal(packet.safety.noBroadcast, true);
+  assert.equal(packet.safety.noDeployment, true);
+  assert.equal(packet.audit.persisted, false);
+  assert.equal(packet.gates.broadcastEnabled, false);
+  assert.ok(packet.packetHash.length >= 32);
+  assert.ok(packet.spine.some((item) => item.step === 'relay'));
 });
