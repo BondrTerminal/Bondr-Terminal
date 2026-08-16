@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { LiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
@@ -174,6 +175,8 @@ export type TaskLifecyclePreview = {
   status: 'ready' | 'waiting' | 'blocked';
   execution: 'task-lifecycle-preview-only-no-worker-no-trading';
   rows: Array<{
+    taskId: string;
+    idempotencyKey: string;
     walletId: string;
     taskType: WalletPlanEntry['taskType'] | 'timed-buy';
     state: TaskLifecycleState;
@@ -183,6 +186,11 @@ export type TaskLifecyclePreview = {
     sellPct: number;
     blockers: string[];
     nextAction: 'wait' | 'build-unsigned-transaction-after-policy' | 'operator-review-required';
+    controls: {
+      pause: true;
+      resume: true;
+      cancel: true;
+    };
   }>;
   blockers: string[];
   safety: {
@@ -193,6 +201,10 @@ export type TaskLifecyclePreview = {
     noFakeVolume: true;
   };
 };
+
+function hash(value: unknown) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
 
 function selectedTaskPlans(project: Project | null, walletIds: string[]) {
   const ids = new Set(walletIds);
@@ -247,6 +259,18 @@ export function buildTaskLifecyclePreview(project: Project | null, wallets: Wall
       cooldownActive ? 'task-cooldown-active' : null
     ].filter((item): item is string => Boolean(item));
     const side: 'buy' | 'sell' | 'observe' = entry.taskType?.includes('sell') || entry.taskType === 'stop-loss' || entry.taskType === 'trailing-stop' || entry.taskType === 'auto-take-profit' ? 'sell' : 'buy';
+    const taskId = `task_${hash({ projectId: project?.id ?? null, walletId: entry.walletId, taskType: entry.taskType ?? 'timed-buy', side }).slice(0, 16)}`;
+    const idempotencyKey = hash({
+      contract: 'bondr-task-lifecycle-preview-v1',
+      projectId: project?.id ?? null,
+      walletId: entry.walletId,
+      taskType: entry.taskType ?? 'timed-buy',
+      side,
+      completedRuns,
+      maxRuns,
+      cooldownSeconds,
+      trigger: trigger.label
+    });
     const nonWaitingBlockers = blockers.filter((blocker) => ![
       'broadcast-gate-closed',
       'task-wallet-signing-session-missing',
@@ -262,6 +286,8 @@ export function buildTaskLifecyclePreview(project: Project | null, wallets: Wall
             ? 'signed-required'
             : 'ready';
     return {
+      taskId,
+      idempotencyKey,
       walletId: entry.walletId,
       taskType: entry.taskType ?? 'timed-buy',
       state,
@@ -270,7 +296,12 @@ export function buildTaskLifecyclePreview(project: Project | null, wallets: Wall
       maxSol: Math.max(entry.taskAmountSol ?? 0, entry.taskBuyMaxSol ?? 0, entry.maxBuySol ?? 0),
       sellPct: entry.taskSellPercent ?? entry.taskSellMaxPct ?? 0,
       blockers: Array.from(new Set(blockers)),
-      nextAction: state === 'ready' || state === 'signed-required' ? 'build-unsigned-transaction-after-policy' as const : blockers.length ? 'operator-review-required' as const : 'wait' as const
+      nextAction: state === 'ready' || state === 'signed-required' ? 'build-unsigned-transaction-after-policy' as const : blockers.length ? 'operator-review-required' as const : 'wait' as const,
+      controls: {
+        pause: true,
+        resume: true,
+        cancel: true
+      } as const
     };
   });
   const blockers = Array.from(new Set([...baseBlockers, ...rows.flatMap((row) => row.blockers)]));
@@ -324,9 +355,10 @@ export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[]
     },
     lifecycle: {
       create: 'preview-only',
-      pause: 'required-before-live-worker',
-      resume: 'required-before-live-worker',
-      cancel: 'required-before-live-worker'
+      pause: 'modeled-by-task-id',
+      resume: 'modeled-by-task-id',
+      cancel: 'modeled-by-task-id',
+      idempotency: 'modeled-before-worker'
     },
     readiness,
     lifecyclePreview: buildTaskLifecyclePreview(project, wallets, activation, { ...input, walletIds }),

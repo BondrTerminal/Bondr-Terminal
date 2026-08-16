@@ -1410,6 +1410,7 @@ test('task queue preview models queue records without worker execution', () => {
   assert.ok(preview.blockers.includes('task-wallet-allowlist-required'));
   assert.ok(preview.blockers.includes('durable-task-worker-missing'));
   assert.equal(preview.lifecyclePreview.contract, 'bondr-task-lifecycle-preview-v1');
+  assert.equal(preview.lifecycle.idempotency, 'modeled-before-worker');
   assert.equal(preview.lifecyclePreview.safety.noTransactionBuild, true);
   assert.equal(preview.safety.noAutonomousTrading, true);
 });
@@ -1438,6 +1439,9 @@ test('task queue preview accepts safe task shape but keeps worker and broadcast 
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
   assert.equal(preview.task.paused, false);
   assert.equal(preview.lifecyclePreview.rows[0]?.state, 'ready');
+  assert.match(preview.lifecyclePreview.rows[0]?.taskId ?? '', /^task_[a-f0-9]{16}$/);
+  assert.equal(preview.lifecyclePreview.rows[0]?.idempotencyKey.length, 64);
+  assert.equal(preview.lifecyclePreview.rows[0]?.controls.cancel, true);
   assert.equal(preview.lifecyclePreview.rows[0]?.nextAction, 'build-unsigned-transaction-after-policy');
   assert.equal(preview.lifecyclePreview.safety.noBroadcast, true);
 });
@@ -1450,8 +1454,10 @@ test('task lifecycle preview waits during cooldown and completes at max runs', (
   const waiting = buildTaskLifecyclePreview(taskProject, [wallet], activation, { walletIds: ['dev-wallet'], paused: false, maxRuns: 2, cooldownSeconds: 60, lastRunSecondsAgo: 10, priceChangePct: -20 });
   assert.equal(waiting.rows[0]?.state, 'waiting');
   assert.ok(waiting.rows[0]?.blockers.includes('task-cooldown-active'));
+  assert.equal(waiting.rows[0]?.idempotencyKey.length, 64);
   const completed = buildTaskLifecyclePreview(taskProject, [wallet], activation, { walletIds: ['dev-wallet'], paused: false, maxRuns: 2, completedRuns: 2, cooldownSeconds: 60, priceChangePct: -20 });
   assert.equal(completed.rows[0]?.state, 'completed');
+  assert.equal(completed.rows[0]?.taskId, waiting.rows[0]?.taskId);
   assert.ok(completed.rows[0]?.blockers.includes('task-max-runs-complete'));
   assert.equal(completed.safety.noAutonomousTrading, true);
 });
