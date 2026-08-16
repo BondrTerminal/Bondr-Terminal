@@ -22,6 +22,14 @@ export type JitoLaunchBundlePlanLeg = {
   blockers: string[];
 };
 
+export type JitoPreparedLaunchTransaction = {
+  id: string;
+  transactionBase64: string;
+  expectedSigners: string[];
+  messageHash: string | null;
+  simulationPolicyStatus: 'passed' | 'blocked' | string;
+};
+
 export type JitoLaunchBundlePlan = {
   contract: 'bondr-jito-launch-bundle-plan-v1';
   status: 'preflight-ready' | 'blocked';
@@ -31,6 +39,13 @@ export type JitoLaunchBundlePlan = {
   bundleHash: string;
   legHashes: Array<{ id: string; hash: string }>;
   legs: JitoLaunchBundlePlanLeg[];
+  preparedTransactions: {
+    count: number;
+    ids: string[];
+    messageHashes: string[];
+    allSimulationPoliciesPassed: boolean;
+    blockers: string[];
+  };
   signingOrder: string[];
   signingSession: ReturnType<typeof buildWalletSigningReadiness>['bundleSession'];
   policy: {
@@ -114,7 +129,7 @@ export function buildJitoLaunchBundlePlan(
   project: Project | null,
   wallets: Wallet[],
   activation: LiveActivationStatus,
-  options: { session?: WalletSigningSessionInput; relay?: JitoRelayReadiness; expectedMint?: string | null; tipLamports?: number } = {}
+  options: { session?: WalletSigningSessionInput; relay?: JitoRelayReadiness; expectedMint?: string | null; tipLamports?: number; preparedTransactions?: JitoPreparedLaunchTransaction[] } = {}
 ): JitoLaunchBundlePlan {
   const relay = options.relay ?? getJitoRelayReadiness();
   const walletPlans = project?.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
@@ -142,26 +157,40 @@ export function buildJitoLaunchBundlePlan(
     ].filter((item): item is string => Boolean(item))
   };
   const allLegs = [...legs, tipLeg];
+  const preparedTransactions = options.preparedTransactions ?? [];
+  const preparedTransactionBlockers = preparedTransactions.flatMap((tx) => [
+    tx.id ? null : 'prepared-transaction-id-missing',
+    tx.transactionBase64 ? null : `prepared-transaction-${tx.id || 'unknown'}-base64-missing`,
+    tx.expectedSigners.length ? null : `prepared-transaction-${tx.id || 'unknown'}-signers-missing`,
+    tx.simulationPolicyStatus === 'passed' ? null : `prepared-transaction-${tx.id || 'unknown'}-simulation-policy-not-passed`
+  ].filter((item): item is string => Boolean(item)));
+  const allPreparedPoliciesPassed = preparedTransactions.length > 0 && preparedTransactionBlockers.length === 0;
   const signing = project ? buildWalletSigningReadiness(project, wallets, options.session ?? {}) : null;
-  const signingOrder = Array.from(new Set(allLegs.map((leg) => leg.signer).filter((item): item is string => Boolean(item))));
+  const signingOrder = Array.from(new Set([
+    ...allLegs.map((leg) => leg.signer).filter((item): item is string => Boolean(item)),
+    ...preparedTransactions.flatMap((tx) => tx.expectedSigners)
+  ]));
   const plannedMaxSol = allLegs.reduce((sum, leg) => sum + leg.maxSol, 0);
   const maxTotalSol = Math.max(project?.fundingPlan.budgetSol ?? 0, plannedMaxSol);
+  const plannedTransactionCount = Math.max(allLegs.length, preparedTransactions.length ? preparedTransactions.length + 1 : allLegs.length);
   const controlledWalletSellLegsBlocked = allLegs.some((leg) => leg.side === 'sell' && (leg.rail === 'bundle' || leg.rail === 'sniper'));
   const blockers = [
     project ? null : 'project-required',
     options.expectedMint ?? project?.tokenMint ?? project?.launchReceipt?.tokenMint ? null : 'expected-mint-missing',
     dev?.address ? null : 'dev-wallet-missing',
-    allLegs.length <= relay.limits.maxTransactionsPerBundle ? null : `bundle-exceeds-${relay.limits.maxTransactionsPerBundle}-transaction-limit`,
+    plannedTransactionCount <= relay.limits.maxTransactionsPerBundle ? null : `bundle-exceeds-${relay.limits.maxTransactionsPerBundle}-transaction-limit`,
     tipLamports <= relay.tip.maxLamports ? null : 'jito-tip-exceeds-cap',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed',
     relay.relayEnabled ? null : 'jito-relay-disabled',
     'simulation-proof-required',
     'signed-bundle-review-required',
     controlledWalletSellLegsBlocked ? 'controlled-wallet-sell-leg-requires-extra-review' : null,
+    ...preparedTransactionBlockers,
     ...(signing?.bundleSession.blockers ?? []),
     ...allLegs.flatMap((leg) => leg.blockers)
   ].filter((item): item is string => Boolean(item));
   const legHashes = allLegs.map((leg) => ({ id: leg.id, hash: hash({ ...leg, blockers: leg.blockers.sort() }) }));
+  const preparedHashes = preparedTransactions.map((tx) => ({ id: tx.id, hash: hash({ id: tx.id, messageHash: tx.messageHash, signers: tx.expectedSigners, simulationPolicyStatus: tx.simulationPolicyStatus }) }));
 
   return {
     contract: 'bondr-jito-launch-bundle-plan-v1',
@@ -169,9 +198,16 @@ export function buildJitoLaunchBundlePlan(
     execution: 'launch-bundle-plan-only-no-signing-no-relay-submit',
     projectId: project?.id ?? null,
     expectedMint: options.expectedMint ?? project?.tokenMint ?? project?.launchReceipt?.tokenMint ?? null,
-    bundleHash: hash(legHashes),
+    bundleHash: hash([...legHashes, ...preparedHashes]),
     legHashes,
     legs: allLegs,
+    preparedTransactions: {
+      count: preparedTransactions.length,
+      ids: preparedTransactions.map((tx) => tx.id),
+      messageHashes: preparedTransactions.map((tx) => tx.messageHash).filter((item): item is string => Boolean(item)),
+      allSimulationPoliciesPassed: allPreparedPoliciesPassed,
+      blockers: preparedTransactionBlockers
+    },
     signingOrder,
     signingSession: signing?.bundleSession ?? {
       status: 'not-required',
@@ -191,7 +227,7 @@ export function buildJitoLaunchBundlePlan(
     },
     policy: {
       maxTransactions: relay.limits.maxTransactionsPerBundle,
-      plannedTransactions: allLegs.length,
+      plannedTransactions: plannedTransactionCount,
       maxTotalSol,
       plannedMaxSol,
       maxSlippageBps: project?.launchConfig?.route.slippageBps ?? null,

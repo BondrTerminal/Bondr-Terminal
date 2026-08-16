@@ -12,6 +12,7 @@ import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '
 import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-plan.js';
 import { buildRaydiumLpTokenAccountProof, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
 import { buildRaydiumCpmmCreatePoolTransaction } from '../apps/web/lib/raydium-cpmm-create-pool-adapter.js';
+import { buildRaydiumLpSimulationPolicy } from '../apps/web/lib/raydium-lp-simulation-policy.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskLifecyclePreview, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
@@ -329,17 +330,17 @@ test('raydium route readiness recommends original LP burn adapter', () => {
   assert.equal(readiness.raydiumLaunchReadiness.developed, false);
   assert.equal(readiness.raydiumLaunchReadiness.lpPlan.contract, 'bondr-raydium-original-lp-plan-v1');
   assert.ok(readiness.raydiumLaunchReadiness.lpPlan.blockers.includes('raydium-cpmm-config-id-required'));
-  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-lp-simulation-policy'));
+  assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-lp-simulation-policy'));
   assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('lp-burn-transaction-builder'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-cpmm-create-pool-adapter'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-lp-simulation-policy'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-original-lp-plan'));
   assert.ok(readiness.raydiumLaunchReadiness.blockers.includes('verified-lp-token-account-required'));
   assert.deepEqual(readiness.routeCompleteness.missingBuilders, [
-    'raydium-lp-simulation-policy',
     'post-broadcast-lp-account-proof',
     'lp-burn-simulation-proof'
   ]);
-  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder']);
+  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder']);
   assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
@@ -505,6 +506,70 @@ test('raydium CPMM adapter derives unsigned pool build contract without signing'
   assert.deepEqual(build.policyReview?.blockers, []);
   assert.equal(build.safety.noSigning, true);
   assert.equal(build.safety.requiresSimulationBeforeSigning, true);
+});
+
+test('raydium LP simulation policy binds unsigned pool transaction to proof before signing', () => {
+  const build = buildRaydiumCpmmCreatePoolTransaction({
+    creator: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    baseDecimals: 6,
+    quoteDecimals: 9,
+    baseAmountRaw: '1000000000',
+    quoteAmountRaw: '100000000',
+    configId: SystemProgram.programId.toBase58(),
+    recentBlockhash: '11111111111111111111111111111111',
+    includeUnsignedTransaction: true
+  });
+  const policy = buildRaydiumLpSimulationPolicy({
+    transactionBase64: build.transactionBase64,
+    expectedSigner: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    requiredAccounts: build.policyReview?.requiredAccounts,
+    transactionMessageHash: build.messageHash,
+    simulationProof: { err: null, logs: ['Program log: raydium simulation ok'], unitsConsumed: 123456, provider: 'quicknode' }
+  });
+
+  assert.equal(policy.contract, 'bondr-raydium-lp-simulation-policy-v1');
+  assert.equal(policy.status, 'passed');
+  assert.equal(policy.execution, 'raydium-lp-policy-and-simulation-review-no-signing-no-broadcast');
+  assert.equal(policy.policyReview.signerMatched, true);
+  assert.equal(policy.policyReview.baseMintReferenced, true);
+  assert.equal(policy.policyReview.quoteMintReferenced, true);
+  assert.equal(policy.policyReview.programsAllowed, true);
+  assert.equal(policy.simulationReview.passed, true);
+  assert.equal(policy.safeToRequestSignature, true);
+  assert.deepEqual(policy.blockers, []);
+  assert.equal(policy.safety.noSigning, true);
+  assert.equal(policy.safety.noBroadcast, true);
+});
+
+test('raydium LP simulation policy blocks signing without simulation proof', () => {
+  const build = buildRaydiumCpmmCreatePoolTransaction({
+    creator: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    baseDecimals: 6,
+    quoteDecimals: 9,
+    baseAmountRaw: '1000000000',
+    quoteAmountRaw: '100000000',
+    configId: SystemProgram.programId.toBase58(),
+    recentBlockhash: '11111111111111111111111111111111',
+    includeUnsignedTransaction: true
+  });
+  const policy = buildRaydiumLpSimulationPolicy({
+    transactionBase64: build.transactionBase64,
+    expectedSigner: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    requiredAccounts: build.policyReview?.requiredAccounts,
+    transactionMessageHash: build.messageHash
+  });
+
+  assert.equal(policy.status, 'blocked');
+  assert.ok(policy.blockers.includes('simulation-proof-required'));
+  assert.equal(policy.safeToRequestSignature, false);
 });
 
 test('raydium CPMM adapter previews missing inputs without unsigned transaction', () => {
@@ -1179,6 +1244,7 @@ test('jito launch bundle plan models legs, hashes, signing, and closed relay gat
   assert.equal(plan.execution, 'launch-bundle-plan-only-no-signing-no-relay-submit');
   assert.ok(plan.legs.some((leg) => leg.rail === 'deployment'));
   assert.ok(plan.legs.some((leg) => leg.id === 'jito-tip'));
+  assert.equal(plan.preparedTransactions.count, 0);
   assert.equal(plan.legHashes.length, plan.legs.length);
   assert.equal(plan.bundleHash.length, 64);
   assert.ok(plan.signingOrder.includes(wallet.address));
@@ -1188,6 +1254,47 @@ test('jito launch bundle plan models legs, hashes, signing, and closed relay gat
   assert.equal(plan.safety.noSigning, true);
   assert.equal(plan.safety.noRelaySubmit, true);
   assert.equal(plan.antiAbuse.noWashTrading, true);
+});
+
+test('jito launch bundle plan accepts Raydium prepared legs only after policy simulation passes', () => {
+  const build = buildRaydiumCpmmCreatePoolTransaction({
+    creator: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    baseDecimals: 6,
+    quoteDecimals: 9,
+    baseAmountRaw: '1000000000',
+    quoteAmountRaw: '100000000',
+    configId: SystemProgram.programId.toBase58(),
+    recentBlockhash: '11111111111111111111111111111111',
+    includeUnsignedTransaction: true
+  });
+  const policy = buildRaydiumLpSimulationPolicy({
+    transactionBase64: build.transactionBase64,
+    expectedSigner: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    requiredAccounts: build.policyReview?.requiredAccounts,
+    transactionMessageHash: build.messageHash,
+    simulationProof: { err: null, logs: [], unitsConsumed: 123456, provider: 'quicknode' }
+  });
+  const plan = buildJitoLaunchBundlePlan(project, [wallet], activation, {
+    expectedMint: validMintPublicKey,
+    preparedTransactions: [{
+      id: 'raydium-create-lp',
+      transactionBase64: build.transactionBase64!,
+      expectedSigners: build.requiredSigners,
+      messageHash: policy.decoded.messageHash,
+      simulationPolicyStatus: policy.status
+    }]
+  });
+
+  assert.equal(plan.preparedTransactions.count, 1);
+  assert.deepEqual(plan.preparedTransactions.ids, ['raydium-create-lp']);
+  assert.equal(plan.preparedTransactions.allSimulationPoliciesPassed, true);
+  assert.deepEqual(plan.preparedTransactions.blockers, []);
+  assert.ok(plan.signingOrder.includes(wallet.address));
+  assert.ok(plan.bundleHash.length === 64);
 });
 
 test('jito launch bundle plan blocks over-cap tips before relay submit', () => {

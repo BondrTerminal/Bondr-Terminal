@@ -26,11 +26,10 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     route?.burnLiquidity ? null : 'lp-burn-policy-required'
   ].filter((item): item is string => Boolean(item));
   const missingBuilderIds = [
-    'raydium-lp-simulation-policy',
     'post-broadcast-lp-account-proof',
     'raydium-lp-burn-simulation-proof'
   ];
-  const gatedBuilderIds = ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder'];
+  const gatedBuilderIds = ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder'];
 
   return {
     contract: 'bondr-raydium-launch-readiness-v1' as const,
@@ -87,8 +86,8 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
       {
         id: 'simulate-and-review',
         label: 'Simulation and review',
-        status: 'builder-missing' as RaydiumStageStatus,
-        builder: 'multi-leg simulation harness',
+        status: 'config-ready' as RaydiumStageStatus,
+        builder: '/api/transaction-policy/simulate-or-provider-simulate',
         requiredInputs: ['SPL mint tx', 'Raydium LP tx', 'LP burn tx', 'fresh blockhashes'],
         outputProof: ['simulation success for each leg', 'account delta review', 'no hidden signer/program injection']
       }

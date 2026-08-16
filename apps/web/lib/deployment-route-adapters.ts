@@ -147,10 +147,10 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       developed: false,
       adapterId: selectedRouteAdapter.id,
       builderStatus: 'lp-plan-ready-sdk-adapter-present' as const,
-      missingBuilders: ['raydium-lp-simulation-policy', 'post-broadcast-lp-account-proof', 'lp-burn-simulation-proof'],
-      gatedBuilders: ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder'],
+      missingBuilders: ['post-broadcast-lp-account-proof', 'lp-burn-simulation-proof'],
+      gatedBuilders: ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder'],
       blockers: raydiumLaunchReadiness.lpPlan.blockers,
-      summary: 'Raydium is selectable and has a gated unsigned CPMM pool builder, but it is not launch-developed until config discovery, simulation, LP account proof, and LP burn simulation are implemented.'
+      summary: 'Raydium is selectable and has a gated unsigned CPMM pool builder plus simulation policy, but it is not launch-developed until config discovery, LP account proof, and LP burn simulation are complete.'
     }
     : {
       platform: 'pump' as const,

@@ -179,7 +179,7 @@ test('deployment context normalizes wallet links and launch route defaults', () 
   assert.equal(context.launchConfig.route.buyMode, 'snipe');
 });
 
-test('raydium pre-live dry-run stays blocked while LP and burn builders are missing', () => {
+test('raydium pre-live dry-run stays blocked until config, LP proof, and burn simulation exist', () => {
   const raydiumProject = structuredClone(project);
   raydiumProject.launchPath = 'raydium';
   raydiumProject.launchConfig = {
@@ -197,8 +197,10 @@ test('raydium pre-live dry-run stays blocked while LP and burn builders are miss
   const result = buildPreLiveDryRun(raydiumProject, { ...store, projects: [raydiumProject] });
   assert.equal(result.status, 'fail');
   assert.equal(result.routeSummary.path, 'raydium');
-  assert.ok(result.blockers.includes('raydium-original-lp-builder-missing'));
+  assert.ok(result.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.ok(result.blockers.includes('raydium-lp-simulation-proof-required'));
   assert.ok(result.blockers.includes('verified-lp-token-account-required'));
+  assert.ok(!result.blockers.includes('raydium-original-lp-builder-missing'));
   assert.ok(!result.blockers.includes('lp-burn-transaction-builder-missing'));
   assert.ok(result.blockers.includes('raydium-lp-burn-simulation-proof-missing'));
 });
