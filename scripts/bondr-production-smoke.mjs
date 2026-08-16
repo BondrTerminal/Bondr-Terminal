@@ -6,7 +6,24 @@ const base = (process.env.BONDR_BASE_URL ?? process.env.TERMINAL_BASE_URL ?? 'ht
 const timeoutMs = Number(process.env.BONDR_SMOKE_TIMEOUT_MS ?? 15_000);
 const startedAt = new Date().toISOString();
 
-const pageRoutes = ['/', '/sniper', '/wallets', '/deployment', '/projects', '/portfolio', '/live-beta-test'];
+const pageRoutes = [
+  '/',
+  '/profile',
+  '/portfolio',
+  '/portfolio?view=wallets',
+  '/sniper',
+  '/sniper?project=sda',
+  '/deployment',
+  '/deployment?project=sda',
+  '/projects',
+  '/projects/sda',
+  '/wallets',
+  '/liquidity',
+  '/token-analyzer',
+  '/project-dashboard',
+  '/github',
+  '/whitepaper'
+];
 const apiRoutes = [
   '/api/execution-capabilities',
   '/api/wallets',
@@ -100,6 +117,8 @@ async function main() {
     assert(response?.status === 200, `GET ${route} expected 200, got ${response?.status ?? 0}`);
     assert(/text\/html/i.test(response?.headers.get('content-type') ?? ''), `GET ${route} expected HTML content-type`);
     assert(text.length > 500, `GET ${route} returned unexpectedly small HTML body`);
+    assert(!/This view failed closed/i.test(text), `GET ${route} rendered failed-closed route guard`);
+    assert(!/:E\{"digest"|"digest":"[0-9]+"/.test(text), `GET ${route} contained embedded RSC route error digest`);
   }
 
   const apiPayloads = new Map();

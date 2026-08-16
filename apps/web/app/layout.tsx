@@ -6,7 +6,10 @@ import { BondrPlatformShell } from './components/BondrPlatformShell';
 
 export const metadata: Metadata = {
   title: 'Bond.Terminal',
-  description: 'Bond.Terminal is a secured Solana operator command hub for autonomous liquidity, market making, scalper workflows, launch operations, wallet operations, portfolio reads, and gated browser-wallet execution.'
+  description: 'Bond.Terminal is a secured Solana operator command hub for autonomous liquidity, market making, scalper workflows, launch operations, wallet operations, portfolio reads, and gated browser-wallet execution.',
+  icons: {
+    icon: '/favicon.svg'
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
