@@ -10,6 +10,7 @@ import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBund
 import { buildJitoLaunchBundlePlan } from '../apps/web/lib/jito-launch-bundle-plan.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-plan.js';
+import { buildRaydiumLpTokenAccountProof, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskLifecyclePreview, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
@@ -467,6 +468,54 @@ test('raydium original LP plan validates route inputs without provider calls', (
   assert.ok(plan.blockers.includes('deployment-gate-closed'));
   assert.equal(plan.safety.noProviderCall, true);
   assert.equal(plan.safety.requiresVerifiedLpAccountBeforeBurn, true);
+});
+
+test('raydium LP proof decodes AMM v4 LP mint and blocks unsupported owners', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const proof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  assert.equal(proof.contract, 'bondr-raydium-lp-mint-proof-v1');
+  assert.equal(proof.status, 'resolved');
+  assert.equal(proof.lpMint, lpMint.toBase58());
+  assert.equal(proof.offset, RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  assert.deepEqual(proof.blockers, []);
+
+  const blocked = resolveRaydiumAmmV4LpMintProof(SystemProgram.programId.toBase58(), data);
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes('raydium-amm-v4-owner-required'));
+});
+
+test('raydium LP token account proof verifies owner, mint, and positive balance before burn', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const mintProof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  const proof = buildRaydiumLpTokenAccountProof({
+    expectedOwner: wallet.address,
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    lpTokenOwner: wallet.address,
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '1000000000',
+    mintProof
+  });
+  assert.equal(proof.contract, 'bondr-raydium-lp-token-account-proof-v1');
+  assert.equal(proof.status, 'verified');
+  assert.equal(proof.lpMint, lpMint.toBase58());
+  assert.deepEqual(proof.blockers, []);
+  assert.equal(proof.safety.proofRequiredBeforeBurn, true);
+
+  const blocked = buildRaydiumLpTokenAccountProof({
+    expectedOwner: wallet.address,
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    lpTokenOwner: SystemProgram.programId.toBase58(),
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '0',
+    mintProof
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes('lp-token-account-owner-mismatch'));
+  assert.ok(blocked.blockers.includes('lp-token-balance-required'));
 });
 
 test('LP burn builder creates unsigned transaction only from verified LP inputs', () => {

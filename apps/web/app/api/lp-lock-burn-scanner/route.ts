@@ -1,16 +1,15 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { configuredSolanaRpc } from '../../../lib/solana-rpc';
+import { RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../../../lib/raydium-lp-proof';
 
 export const dynamic = 'force-dynamic';
 
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const RAYDIUM_AMM_V4 = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
 const RAYDIUM_CLMM = 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK';
 const ORCA_WHIRLPOOL = 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
 const ORCA_SWAP_V2 = '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP';
 const PUMPSWAP_AMM = 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA';
 const METEORA_DLMM_PROGRAMS = new Set(['LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo']);
-const LP_MINT_OFFSET_RAYDIUM_V4 = 464;
 const BURN_ADDRESSES = new Set([
   '1nc1nerator11111111111111111111111111111111',
   '11111111111111111111111111111111'
@@ -31,21 +30,14 @@ type LpModel = 'fungible-lp' | 'nft-position' | 'bin-liquidity' | 'unknown';
 type LockBurnApplicability = 'applicable' | 'not-applicable-position-model' | 'unsupported-layout' | 'unresolved' | 'manual-lp-mint';
 type LpResolution = { status: string; ownerProgram: string | null; lpMint: string | null; lpModel: LpModel; lockBurnApplicability: LockBurnApplicability; reason: string; nextCredentialNeeded: string | null };
 
-function publicKeyFromData(data: Buffer, offset: number) {
-  if (data.length < offset + 32) return null;
-  const bytes = data.subarray(offset, offset + 32);
-  if (bytes.every((byte) => byte === 0)) return null;
-  try { return new PublicKey(bytes).toBase58(); } catch { return null; }
-}
-
 async function resolveLpMint(connection: Connection, poolAddress: string, dex?: string | null, kind?: string | null): Promise<LpResolution> {
   const info = await connection.getAccountInfo(new PublicKey(poolAddress), 'confirmed');
   const lowerDex = `${dex ?? ''} ${kind ?? ''}`.toLowerCase();
   if (!info) return { status: 'missing', ownerProgram: null, lpMint: null, lpModel: lowerDex.includes('meteora') ? 'bin-liquidity' : 'unknown', lockBurnApplicability: 'unresolved', reason: 'Pool account not found on RPC.', nextCredentialNeeded: 'A reachable RPC/indexer that can read the pool account.' };
   const ownerProgram = info.owner.toBase58();
-  if (ownerProgram === RAYDIUM_AMM_V4) {
-    const lpMint = publicKeyFromData(Buffer.from(info.data), LP_MINT_OFFSET_RAYDIUM_V4);
-    return { status: lpMint ? 'resolved' : 'unresolved', ownerProgram, lpMint, lpModel: 'fungible-lp', lockBurnApplicability: lpMint ? 'applicable' : 'unresolved', reason: lpMint ? 'Resolved fungible LP mint from Raydium AMM v4 layout.' : 'Raydium AMM v4 pool detected but LP mint offset was empty/unreadable.', nextCredentialNeeded: lpMint ? null : 'Raydium AMM v4 layout verification for this pool account.' };
+  if (ownerProgram === RAYDIUM_AMM_V4_PROGRAM_ID) {
+    const proof = resolveRaydiumAmmV4LpMintProof(ownerProgram, Buffer.from(info.data));
+    return { status: proof.status === 'resolved' ? 'resolved' : 'unresolved', ownerProgram, lpMint: proof.lpMint, lpModel: 'fungible-lp', lockBurnApplicability: proof.lpMint ? 'applicable' : 'unresolved', reason: proof.lpMint ? proof.evidence.join(' ') : proof.blockers.join(', '), nextCredentialNeeded: proof.lpMint ? null : 'Raydium AMM v4 layout verification for this pool account.' };
   }
   if (ownerProgram === RAYDIUM_CLMM) return { status: 'position-model', ownerProgram, lpMint: null, lpModel: 'nft-position', lockBurnApplicability: 'not-applicable-position-model', reason: 'Raydium CLMM uses position accounts/NFT-style liquidity, so fungible LP burned percentage is not applicable.', nextCredentialNeeded: 'Raydium CLMM position indexer to inspect position ownership/lock status.' };
   if (ownerProgram === ORCA_WHIRLPOOL) return { status: 'position-model', ownerProgram, lpMint: null, lpModel: 'nft-position', lockBurnApplicability: 'not-applicable-position-model', reason: 'Orca Whirlpool uses position accounts/NFT-style liquidity, so fungible LP burned percentage is not applicable.', nextCredentialNeeded: 'Orca Whirlpool position indexer to inspect position ownership/lock status.' };
