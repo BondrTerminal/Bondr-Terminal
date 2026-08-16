@@ -58,6 +58,11 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /const hasTurnkeySession = Boolean\(sessionUserId && sessionOrganizationId\)/);
   assert.match(providerSource, /const hasRestoredVerifiedSession = clientReady && Boolean\(verifiedSession\)/);
   assert.match(providerSource, /hasTurnkeySession \|\| hasRestoredVerifiedSession/);
+  assert.match(providerSource, /AUTH_RESET_STORAGE_KEY/);
+  assert.match(providerSource, /function authResetRequested/);
+  assert.match(providerSource, /function clearBrowserAuthStorage/);
+  assert.match(providerSource, /window\.history\.replaceState\(null, '', '\/profile'\)/);
+  assert.match(providerSource, /resetRequested \? null : readStoredVerifiedSession\(\)/);
   assert.match(providerSource, /token:\s*session\.token/);
   assert.match(providerSource, /activateVerifiedSubject\(verified,\s*result\.address \?\? nextAuthMethod\.identifier\)/);
   assert.match(providerSource, /externalWalletAddress/);

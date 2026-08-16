@@ -20,6 +20,7 @@ const VERIFIED_AUTH_SESSION_KEY = 'bondr_verified_auth_session';
 const VERIFIED_AUTH_METHOD_KEY = 'bondr_verified_auth_method';
 const PENDING_LOGIN_KEY = 'bondr_pending_login';
 const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
+const AUTH_RESET_STORAGE_KEY = /^bondr[._]|^@turnkey\//i;
 
 export type BondrTurnkeyAccount = {
   configured: boolean;
@@ -249,6 +250,20 @@ function clearStoredVerifiedSession() {
   sessionStorage.removeItem(VERIFIED_AUTH_SESSION_KEY);
   sessionStorage.removeItem(VERIFIED_AUTH_METHOD_KEY);
   sessionStorage.removeItem(PENDING_LOGIN_KEY);
+}
+
+function authResetRequested() {
+  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('resetAuth') === '1';
+}
+
+function clearBrowserAuthStorage() {
+  if (typeof window === 'undefined') return;
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && AUTH_RESET_STORAGE_KEY.test(key)) storage.removeItem(key);
+    }
+  }
 }
 
 function sessionExpiryIso(expiry: unknown) {
@@ -595,9 +610,24 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
 
 export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
   const turnkeyConfig = useMemo(() => configured ? configuredTurnkeyConfig() : null, []);
-  const [verifiedSession, setVerifiedSession] = useState<VerifiedTurnkeySession | null>(() => readStoredVerifiedSession());
-  const [verifiedAuthMethod, setVerifiedAuthMethod] = useState<VerifiedAuthMethod | null>(() => readStoredVerifiedAuthMethod());
+  const [resetRequested] = useState(() => {
+    const requested = authResetRequested();
+    if (requested) clearBrowserAuthStorage();
+    return requested;
+  });
+  const [verifiedSession, setVerifiedSession] = useState<VerifiedTurnkeySession | null>(() => resetRequested ? null : readStoredVerifiedSession());
+  const [verifiedAuthMethod, setVerifiedAuthMethod] = useState<VerifiedAuthMethod | null>(() => resetRequested ? null : readStoredVerifiedAuthMethod());
   const [debug, setDebug] = useState<AuthDebugState>(defaultDebugState);
+
+  useEffect(() => {
+    if (!resetRequested) return;
+    clearBrowserAuthStorage();
+    setVerifiedSession(null);
+    setVerifiedAuthMethod(null);
+    setActiveProfileSubject(null);
+    setDebug(() => ({ ...defaultDebugState, lastEvent: 'browser-auth-reset', timeline: ['browser auth storage reset'] }));
+    window.history.replaceState(null, '', '/profile');
+  }, [resetRequested]);
 
   if (!configured) {
     return <TurnkeyAccountContext.Provider value={defaultAccount}>{children}</TurnkeyAccountContext.Provider>;
