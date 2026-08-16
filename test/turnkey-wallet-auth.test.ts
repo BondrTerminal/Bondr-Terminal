@@ -8,6 +8,7 @@ const profileRouteSource = readFileSync(new URL('../apps/web/app/api/account/pro
 const profileStoreSource = readFileSync(new URL('../apps/web/lib/bondr-profile-store.ts', import.meta.url), 'utf8');
 const profileUiSource = readFileSync(new URL('../apps/web/app/profile/components/TurnkeyProfileLogin.tsx', import.meta.url), 'utf8');
 const appErrorSource = readFileSync(new URL('../apps/web/app/error.tsx', import.meta.url), 'utf8');
+const clientErrorReportSource = readFileSync(new URL('../apps/web/app/api/client-error-report/route.ts', import.meta.url), 'utf8');
 const landingSource = readFileSync(new URL('../apps/web/app/components/BondrLandingPage.tsx', import.meta.url), 'utf8');
 const readinessSource = readFileSync(new URL('../apps/web/app/api/account/readiness/route.ts', import.meta.url), 'utf8');
 const envExampleSource = readFileSync(new URL('../apps/web/.env.example', import.meta.url), 'utf8');
@@ -136,8 +137,14 @@ test('route error boundary fails closed with profile audit recovery', () => {
   assert.match(appErrorSource, /This view failed closed/);
   assert.match(appErrorSource, /Your identity and wallet state were not changed by this screen/);
   assert.match(appErrorSource, /Error digest/);
+  assert.match(appErrorSource, /Route/);
+  assert.match(appErrorSource, /Error type/);
+  assert.match(appErrorSource, /\/api\/client-error-report/);
   assert.match(appErrorSource, /Open Profile Audit/);
   assert.match(appErrorSource, /href="\/profile"/);
+  assert.match(clientErrorReportSource, /BONDR client route error report/);
+  assert.match(clientErrorReportSource, /Bearer \[redacted\]/);
+  assert.match(clientErrorReportSource, /invalid-error-report/);
 });
 
 test('authenticated shell navigation uses document loads after Turnkey subject changes', () => {

@@ -6,7 +6,20 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
   const digest = error.digest ?? 'no-digest';
 
   useEffect(() => {
-    console.error('BONDR route error', { digest, message: error.message });
+    const path = window.location.pathname + window.location.search;
+    const report = {
+      digest,
+      name: error.name,
+      message: error.message,
+      path,
+      userAgent: window.navigator.userAgent
+    };
+    console.error('BONDR route error', report);
+    void fetch('/api/client-error-report', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(report)
+    }).catch(() => undefined);
   }, [digest, error.message]);
 
   return (
@@ -16,7 +29,9 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         <h1>This view failed closed.</h1>
         <p>BONDR blocked this route from continuing after a client or server render error. Your identity and wallet state were not changed by this screen.</p>
         <div className="infoGrid">
+          <div className="sideRow"><span>Route</span><strong>{typeof window === 'undefined' ? 'unknown' : window.location.pathname}</strong></div>
           <div className="sideRow"><span>Error digest</span><strong>{digest}</strong></div>
+          <div className="sideRow"><span>Error type</span><strong>{error.name || 'Error'}</strong></div>
           <div className="sideRow"><span>Recovery</span><strong>reload or return to Hub</strong></div>
         </div>
         <div className="profileActions">
