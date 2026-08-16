@@ -1,15 +1,15 @@
 import type { LiveActivationStatus } from './live-activation';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { buildRaydiumOriginalLpPlan } from './raydium-original-lp-plan';
 
 type RaydiumStageStatus = 'implemented' | 'config-ready' | 'builder-missing' | 'blocked';
 
 function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
-  return project.launchConfig?.walletPlan.find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
+  return walletPlanEntries(project).find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
 }
 
 function devWallet(project: Project, wallets: Wallet[]) {
-  const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const devPlan = planByPhase(project, 'dev') ?? walletPlanEntries(project).find((entry) => entry.participate) ?? null;
   return wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
 }
 

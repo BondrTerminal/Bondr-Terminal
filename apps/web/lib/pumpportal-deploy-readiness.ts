@@ -1,5 +1,5 @@
 import type { LiveActivationStatus } from './live-activation';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { pinataJwt } from './ipfs-metadata-readiness';
 import { createIntentAsync, hashBase64Transaction, type TerminalIntent } from './live-store';
 import { buildPumpFunDirectCreateTransaction, pumpFunDirectBuildEnabled, type PumpFunDirectCreateBuild } from './pumpfun-direct-create-builder';
@@ -163,7 +163,7 @@ function isIpfsUri(value?: string | null) {
 }
 
 function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
-  return project.launchConfig?.walletPlan.find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
+  return walletPlanEntries(project).find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -225,7 +225,7 @@ function inspectReturnedCreateTransaction(build: {
 }
 
 export function buildPumpPortalCreatePreview(project: Project, wallets: Wallet[], activation: LiveActivationStatus, input: { mintPublicKey?: string | null; connectedSigner?: string | null } = {}): PumpPortalCreatePreview {
-  const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const devPlan = planByPhase(project, 'dev') ?? walletPlanEntries(project).find((entry) => entry.participate) ?? null;
   const devWallet = wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
   const rawMintPublicKey = input.mintPublicKey?.trim() || null;
   const mintPublicKeyValid = rawMintPublicKey ? validPublicKey(rawMintPublicKey) : false;
@@ -430,7 +430,7 @@ export async function buildPumpPortalCreateTransaction(project: Project, wallets
         tokenMetadata: requestBody.tokenMetadata,
         mint,
         amount: requestBody.amount,
-        tokenMode: project.launchConfig?.route.tokenMode ?? 'classic'
+        tokenMode: project.launchConfig?.route?.tokenMode ?? 'classic'
       });
       const returnedPolicyBlockers = inspectReturnedCreateTransaction(build, requestBody);
       const inspectedBuild = {

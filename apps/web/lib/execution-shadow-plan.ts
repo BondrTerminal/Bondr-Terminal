@@ -7,7 +7,7 @@ import { buildPumpPortalCreatePreview } from './pumpportal-deploy-readiness';
 import { buildSniperTriggerPreview, buildTaskQueuePreview } from './sniper-task-readiness';
 import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 import { buildExecutionRecoveryReadiness } from './execution-recovery-readiness';
-import type { Project, Wallet } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet } from './meridian-store';
 
 const globalForShadowPlan = globalThis as typeof globalThis & {
   __bondrShadowPlanPool?: Pool;
@@ -173,18 +173,18 @@ export async function buildShadowExecutionPacket(project: Project, wallets: Wall
     source: 'manual',
     mint: project.tokenMint ?? input.mintPublicKey,
     connectedSigner: input.connectedSigner,
-    amountSol: project.launchConfig?.route.initialBuySol ?? project.fundingPlan.devBuySol,
-    slippageBps: project.launchConfig?.route.slippageBps,
+    amountSol: project.launchConfig?.route?.initialBuySol ?? project.fundingPlan.devBuySol,
+    slippageBps: project.launchConfig?.route?.slippageBps,
     simulationProof: input.simulationProof
   });
-  const taskWalletIds = project.launchConfig?.walletPlan.filter((entry) => entry.participate && entry.executionPhase === 'task').map((entry) => entry.walletId) ?? [];
+  const taskWalletIds = walletPlanEntries(project).filter((entry) => entry.participate && entry.executionPhase === 'task').map((entry) => entry.walletId);
   const task = buildTaskQueuePreview(project, wallets, activation, {
     taskName: 'shadow-launch-task',
     walletIds: taskWalletIds,
     schedule: 'manual',
     maxRuns: 1,
-    cooldownSeconds: Math.max(project.launchConfig?.devWalletRules.cooldownSeconds ?? 0, 1),
-    riskRuleId: project.launchConfig?.devWalletRules.takeProfitPercents.length ? 'launch-config-risk-rules' : null,
+    cooldownSeconds: Math.max(project.launchConfig?.devWalletRules?.cooldownSeconds ?? 0, 1),
+    riskRuleId: project.launchConfig?.devWalletRules?.takeProfitPercents?.length ? 'launch-config-risk-rules' : null,
     paused: true
   });
   const recovery = buildExecutionRecoveryReadiness();

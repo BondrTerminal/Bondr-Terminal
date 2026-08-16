@@ -22,11 +22,13 @@ import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routeP
 import { buildLpBurnTransaction, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
-import { stripMeridianInlineAssetData, stripProjectInlineAssetData, type MeridianStore, type Project, type Wallet } from '../apps/web/lib/meridian-store.js';
+import { stripMeridianInlineAssetData, stripProjectInlineAssetData, walletPlanEntries, type MeridianStore, type Project, type Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
 import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pumpportal/build-create/route.js';
 import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydium/build-lp/route.js';
+
+const durableWalletStoreSource = readFileSync(new URL('../apps/web/lib/durable-wallet-store.ts', import.meta.url), 'utf8');
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -39,6 +41,13 @@ const wallet: Wallet = {
   purpose: 'launch dev wallet',
   custodyMode: 'watch-only'
 };
+
+test('durable meridian store uses postgres without requiring local JSON seed', () => {
+  assert.match(durableWalletStoreSource, /function emptyMeridianStore/);
+  assert.match(durableWalletStoreSource, /function baseMeridianStoreForMode/);
+  assert.match(durableWalletStoreSource, /if \(mode === 'postgres'\) return emptyMeridianStore\(\)/);
+  assert.match(durableWalletStoreSource, /const db = pool\(\);\s+const base = baseMeridianStoreForMode\(db \? 'postgres' : 'local'\)/);
+});
 
 const project: Project = {
   id: 'sda',
@@ -120,6 +129,21 @@ const activation = {
   disabledReason: 'deployment gate closed',
   warnings: []
 };
+
+test('deployment readiness tolerates partial launch config rows without wallet plans', () => {
+  const partialConfigProject: Project = {
+    ...project,
+    launchConfig: { route: project.launchConfig!.route } as Project['launchConfig']
+  };
+  assert.deepEqual(walletPlanEntries(partialConfigProject), []);
+  assert.doesNotThrow(() => buildDeploymentLaunchReadiness(partialConfigProject, [wallet], activation));
+  assert.doesNotThrow(() => buildDeploymentEngineReadiness(partialConfigProject, [wallet], activation));
+  assert.doesNotThrow(() => buildPumpPortalCreatePreview(partialConfigProject, [wallet], activation));
+  assert.doesNotThrow(() => buildRaydiumOriginalLpPlan(partialConfigProject, [wallet], activation));
+  assert.doesNotThrow(() => buildRaydiumRouteConfig(partialConfigProject, [wallet]));
+  assert.doesNotThrow(() => buildWalletSigningReadiness(partialConfigProject, [wallet]));
+  assert.doesNotThrow(() => buildJitoLaunchBundlePlan(partialConfigProject, [wallet], activation));
+});
 
 test('Meridian view payloads strip inline project asset data', () => {
   const projectWithInlineAsset: Project = {

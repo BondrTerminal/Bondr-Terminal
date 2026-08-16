@@ -1,4 +1,4 @@
-import type { MeridianStore, Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type MeridianStore, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 
@@ -54,11 +54,11 @@ function worstStatus(statuses: ExecutionTruthStatus[]): ExecutionTruthStatus {
 }
 
 function selectedPlans(project: Project | null, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
-  return project?.launchConfig?.walletPlan.filter((entry) => entry.participate && entry.executionPhase === phase) ?? [];
+  return walletPlanEntries(project).filter((entry) => entry.participate && entry.executionPhase === phase);
 }
 
 function nonDevPlans(project: Project | null) {
-  return project?.launchConfig?.walletPlan.filter((entry) => entry.participate && entry.executionPhase !== 'dev') ?? [];
+  return walletPlanEntries(project).filter((entry) => entry.participate && entry.executionPhase !== 'dev');
 }
 
 function walletById(wallets: Wallet[]) {
@@ -90,7 +90,7 @@ export function buildExecutionTruthMap(input: {
   const watchOnlyNonDev = nonDev.filter((entry) => (walletMap.get(entry.walletId)?.custodyMode ?? 'watch-only') !== 'managed-local');
   const imageUrl = project?.metadata.imageUrl ?? '';
   const ipfsReady = /^ipfs:\/\//i.test(imageUrl) || /\/ipfs\//i.test(imageUrl);
-  const riskReady = Boolean(project?.launchConfig?.walletPlan.filter((entry) => entry.participate).every((entry) => entry.stopLossPct < 0 && entry.takeProfitPercents.length && entry.perTxSellCapPct > 0 && entry.cooldownSeconds > 0));
+  const riskReady = Boolean(project && walletPlanEntries(project).filter((entry) => entry.participate).every((entry) => entry.stopLossPct < 0 && entry.takeProfitPercents.length && entry.perTxSellCapPct > 0 && entry.cooldownSeconds > 0));
   const hasProject = Boolean(project);
 
   const deployment = buildRail({

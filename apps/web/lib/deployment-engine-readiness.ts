@@ -1,5 +1,5 @@
 import type { LiveActivationStatus } from './live-activation';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import { buildJitoLaunchBundlePlan } from './jito-launch-bundle-plan';
 import { buildRaydiumOriginalLpPlan } from './raydium-original-lp-plan';
@@ -8,11 +8,11 @@ type EngineStatus = 'transaction-builder-ready' | 'deployment-disabled' | 'rehea
 type ImplementationStatus = 'builder-implemented' | 'rehearsal-contract-only' | 'adapter-missing' | 'not-required';
 
 function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
-  return project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === phase) ?? [];
+  return walletPlanEntries(project).filter((entry) => entry.executionPhase === phase);
 }
 
 function devWallet(project: Project, wallets: Wallet[]) {
-  const devPlan = planByPhase(project, 'dev')[0] ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const devPlan = planByPhase(project, 'dev')[0] ?? walletPlanEntries(project).find((entry) => entry.participate) ?? null;
   return wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
 }
 
@@ -59,7 +59,7 @@ export function buildLaunchBundleEngineReadiness(project: Project | null, wallet
   const bundlePlans = project ? planByPhase(project, 'bundle') : [];
   const sniperPlans = project ? planByPhase(project, 'sniper') : [];
   const taskPlans = project ? planByPhase(project, 'task') : [];
-  const walletPlans = project?.launchConfig?.walletPlan ?? [];
+  const walletPlans = walletPlanEntries(project);
   const participatingPlans = walletPlans.filter((entry) => entry.participate);
   const totalMaxSol = participatingPlans.reduce((sum, entry) => sum + entry.maxBuySol, 0);
   const signingOrder = [
@@ -84,8 +84,8 @@ export function buildLaunchBundleEngineReadiness(project: Project | null, wallet
     signingOrder,
     caps: {
       maxTotalSol: totalMaxSol,
-      maxSlippageBps: project?.launchConfig?.route.slippageBps ?? null,
-      maxPriorityFeeSol: project?.launchConfig?.devWalletRules.maxPriorityFeeSol ?? null,
+      maxSlippageBps: project?.launchConfig?.route?.slippageBps ?? null,
+      maxPriorityFeeSol: project?.launchConfig?.devWalletRules?.maxPriorityFeeSol ?? null,
       maxJitoTipSol: relay.tip.maxSol
     },
     antiAbuseChecks: [
@@ -154,7 +154,7 @@ export const LP_ADAPTER_READINESS = [
 ] as const;
 
 export function buildCreateLpEngineReadiness(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus) {
-  const routePlatform = project?.launchPath === 'raydium' || project?.launchConfig?.route.platform === 'raydium' ? 'raydium' : 'pump';
+  const routePlatform = project?.launchPath === 'raydium' || project?.launchConfig?.route?.platform === 'raydium' ? 'raydium' : 'pump';
   const raydiumPlan = buildRaydiumOriginalLpPlan(project, wallets, activation);
   const selectedAdapter = routePlatform === 'raydium'
     ? LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!

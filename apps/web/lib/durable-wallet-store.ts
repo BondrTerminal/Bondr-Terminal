@@ -32,6 +32,26 @@ function pool() {
   return globalForWalletStore.__bondrWalletPool;
 }
 
+function emptyMeridianStore(): MeridianStore {
+  return {
+    projects: [],
+    wallets: [],
+    walletGroups: [],
+    flowEvents: [],
+    eventLog: [],
+    walletActivity: []
+  };
+}
+
+function baseMeridianStoreForMode(mode: 'postgres' | 'local'): MeridianStore {
+  try {
+    return getMeridianStore();
+  } catch (error) {
+    if (mode === 'postgres') return emptyMeridianStore();
+    throw error;
+  }
+}
+
 async function ensureSchema() {
   const db = pool();
   if (!db) return;
@@ -184,8 +204,8 @@ function normalizeWalletGroupRecord(group: WalletGroup, index = 0): WalletGroup 
 }
 
 export async function getMeridianWalletStore(): Promise<MeridianStore> {
-  const base = getMeridianStore();
   const db = pool();
+  const base = baseMeridianStoreForMode(db ? 'postgres' : 'local');
   if (!db) return {
     ...base,
     projects: base.projects.map(normalizeProjectRecord),

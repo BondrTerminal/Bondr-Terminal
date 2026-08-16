@@ -1,4 +1,4 @@
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 
 export type WalletSigningReadinessRow = {
   walletId: string;
@@ -65,7 +65,7 @@ function phaseFor(entry: WalletPlanEntry): NonNullable<WalletPlanEntry['executio
 }
 
 export function buildWalletSigningReadiness(project: Project, wallets: Wallet[], session: WalletSigningSessionInput = {}): WalletSigningReadiness {
-  const participating = project.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
+  const participating = walletPlanEntries(project).filter((entry) => entry.participate);
   const rows = participating.map((entry): WalletSigningReadinessRow => {
     const wallet = wallets.find((item) => item.id === entry.walletId) ?? null;
     const phase = phaseFor(entry);

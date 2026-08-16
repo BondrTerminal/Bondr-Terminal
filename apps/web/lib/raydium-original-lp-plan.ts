@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PublicKey } from '@solana/web3.js';
 import type { LiveActivationStatus } from './live-activation';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { buildRaydiumRouteConfig, type RaydiumRouteConfigContract } from './raydium-route-config';
 
 const WSOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -69,7 +69,7 @@ function phaseFor(entry: WalletPlanEntry) {
 }
 
 function deployerWallet(project: Project | null, wallets: Wallet[]) {
-  const plan = project?.launchConfig?.walletPlan.find((entry) => phaseFor(entry) === 'dev') ?? project?.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const plan = walletPlanEntries(project).find((entry) => phaseFor(entry) === 'dev') ?? walletPlanEntries(project).find((entry) => entry.participate) ?? null;
   return wallets.find((wallet) => wallet.id === plan?.walletId) ?? wallets[0] ?? null;
 }
 

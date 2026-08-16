@@ -1,4 +1,4 @@
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import { pinataJwt } from './ipfs-metadata-readiness';
@@ -94,17 +94,18 @@ function short(address?: string | null) {
 }
 
 function planByPhase(project: Project, phase: NonNullable<WalletPlanEntry['executionPhase']>) {
-  return project.launchConfig?.walletPlan.find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
+  return walletPlanEntries(project).find((entry) => entry.executionPhase === phase || entry.role.toLowerCase().includes(phase));
 }
 
 export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet[], activation: ReturnType<typeof getLiveActivationStatus>) {
   const relay = getJitoRelayReadiness();
-  const devPlan = planByPhase(project, 'dev') ?? project.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const walletPlan = walletPlanEntries(project);
+  const devPlan = planByPhase(project, 'dev') ?? walletPlan.find((entry) => entry.participate) ?? null;
   const devWallet = wallets.find((wallet) => wallet.id === devPlan?.walletId) ?? wallets[0] ?? null;
-  const bundlePlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'bundle') ?? [];
-  const sniperPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'sniper') ?? [];
-  const taskPlans = project.launchConfig?.walletPlan.filter((entry) => entry.executionPhase === 'task') ?? [];
-  const participatingPlans = project.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
+  const bundlePlans = walletPlan.filter((entry) => entry.executionPhase === 'bundle');
+  const sniperPlans = walletPlan.filter((entry) => entry.executionPhase === 'sniper');
+  const taskPlans = walletPlan.filter((entry) => entry.executionPhase === 'task');
+  const participatingPlans = walletPlan.filter((entry) => entry.participate);
   const signingReadiness = buildWalletSigningReadiness(project, wallets);
   const maxDevBuySol = devPlan?.maxBuySol || devPlan?.plannedBuySol || project.fundingPlan.devBuySol || 0;
   const route = project.launchConfig?.route;
@@ -114,7 +115,7 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
   const pumpPortalCreatePreview = buildPumpPortalCreatePreview(project, wallets, activation);
   const raydiumLaunchReadiness = buildRaydiumLaunchReadiness(project, wallets, activation);
   const jitoTipCapSol = relay.tip.maxSol;
-  const maxPriorityFeeSol = project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0;
+  const maxPriorityFeeSol = project.launchConfig?.devWalletRules?.maxPriorityFeeSol ?? 0;
   const estimatedCreateFeeSol = Number(process.env.DEPLOYMENT_ESTIMATED_CREATE_FEE_SOL ?? '0.005');
   const requiredBufferSol = Number(process.env.DEPLOYMENT_REQUIRED_BUFFER_SOL ?? '0.01');
   const modeledRequiredSol = Math.max(project.fundingPlan.budgetSol, maxDevBuySol) + maxPriorityFeeSol + jitoTipCapSol + estimatedCreateFeeSol + requiredBufferSol;
@@ -193,8 +194,8 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       mintKeypairHandling: 'client-created mint keypair; server never stores private key',
       maxDevBuySol,
       maxTotalSolAtRisk: Math.max(project.fundingPlan.budgetSol, maxDevBuySol),
-      slippageCapBps: route?.slippageBps ?? project.launchConfig?.devWalletRules.maxSlippageBps ?? 100,
-      priorityFeeCapSol: project.launchConfig?.devWalletRules.maxPriorityFeeSol ?? 0,
+      slippageCapBps: route?.slippageBps ?? project.launchConfig?.devWalletRules?.maxSlippageBps ?? 100,
+      priorityFeeCapSol: project.launchConfig?.devWalletRules?.maxPriorityFeeSol ?? 0,
       jitoTipCapSol,
       estimatedCreateFeeSol,
       requiredBufferSol,

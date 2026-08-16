@@ -374,6 +374,10 @@ export function walletsForGroup(groupId: string, store = getMeridianStore()): Wa
   return group.walletIds.map((walletId) => store.wallets.find((wallet) => wallet.id === walletId)).filter(Boolean) as Wallet[];
 }
 
+export function walletPlanEntries(project?: Pick<Project, 'launchConfig'> | null): WalletPlanEntry[] {
+  return Array.isArray(project?.launchConfig?.walletPlan) ? project.launchConfig.walletPlan : [];
+}
+
 export function walletBalanceSummary(store = getMeridianStore()) {
   const activeWallets = store.wallets.filter((wallet) => !wallet.archived);
   const archivedWallets = store.wallets.filter((wallet) => wallet.archived);

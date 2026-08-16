@@ -1,6 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { buildRaydiumCpmmCreatePoolTransaction } from './raydium-cpmm-create-pool-adapter';
 
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
@@ -116,7 +116,7 @@ function phaseFor(entry: WalletPlanEntry) {
 }
 
 function deployerWallet(project: Project | null, wallets: Wallet[]) {
-  const plan = project?.launchConfig?.walletPlan.find((entry) => phaseFor(entry) === 'dev') ?? project?.launchConfig?.walletPlan.find((entry) => entry.participate) ?? null;
+  const plan = walletPlanEntries(project).find((entry) => phaseFor(entry) === 'dev') ?? walletPlanEntries(project).find((entry) => entry.participate) ?? null;
   return wallets.find((wallet) => wallet.id === plan?.walletId) ?? wallets[0] ?? null;
 }
 

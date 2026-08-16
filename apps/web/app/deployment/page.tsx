@@ -1,4 +1,4 @@
-import { eventsForProject, launchPreflight, readinessScore, stripMeridianInlineAssetData, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
+import { eventsForProject, launchPreflight, readinessScore, stripMeridianInlineAssetData, walletPlanEntries, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { buildMeridianHubContext } from '../../lib/meridian-context';
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
@@ -123,7 +123,8 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const activePreflight = activeProject ? launchPreflight(activeProject, store) : [];
   const activeConfig = activeProject?.launchConfig;
   const launchReceipt = activeProject?.launchReceipt;
-  const participatingPlan = activeConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
+  const walletPlan = walletPlanEntries(activeProject);
+  const participatingPlan = walletPlan.filter((entry) => entry.participate);
   const plannedBuySol = participatingPlan.reduce((sum, entry) => sum + entry.plannedBuySol, 0);
   const maxBuySol = participatingPlan.reduce((sum, entry) => sum + entry.maxBuySol, 0);
   const dryRun = activeProject?.preLiveDryRun;
@@ -273,7 +274,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
               <div className="railPanelHeader"><span>Wallet plan</span><strong>{activeWallets.length}</strong></div>
               <div className="deploymentWalletRailList compact">
                 {activeWallets.length ? activeWallets.map((wallet) => {
-                  const plan = activeConfig?.walletPlan.find((entry) => entry.walletId === wallet.id);
+                  const plan = walletPlan.find((entry) => entry.walletId === wallet.id);
                   return (
                     <div className="deploymentWalletRailRow" key={wallet.id}>
                       <strong>{plan?.role ?? wallet.role}</strong>

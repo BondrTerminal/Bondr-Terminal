@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { LiveActivationStatus } from './live-activation';
 import type { JitoRelayReadiness } from './jito-relay-readiness';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { buildWalletSigningReadiness, type WalletSigningSessionInput } from './wallet-signing-readiness';
 
 type Rail = 'deployment' | 'bundle' | 'sniper' | 'task' | 'tip';
@@ -132,7 +132,7 @@ export function buildJitoLaunchBundlePlan(
   options: { session?: WalletSigningSessionInput; relay?: JitoRelayReadiness; expectedMint?: string | null; tipLamports?: number; preparedTransactions?: JitoPreparedLaunchTransaction[] } = {}
 ): JitoLaunchBundlePlan {
   const relay = options.relay ?? getJitoRelayReadiness();
-  const walletPlans = project?.launchConfig?.walletPlan.filter((entry) => entry.participate) ?? [];
+  const walletPlans = walletPlanEntries(project).filter((entry) => entry.participate);
   const devPlan = walletPlans.find((entry) => phaseFor(entry) === 'dev') ?? walletPlans[0] ?? null;
   const dev = planWallet(wallets, devPlan);
   const executablePlans = walletPlans.filter((entry) => ['dev', 'bundle', 'sniper', 'task'].includes(phaseFor(entry)));
@@ -230,8 +230,8 @@ export function buildJitoLaunchBundlePlan(
       plannedTransactions: plannedTransactionCount,
       maxTotalSol,
       plannedMaxSol,
-      maxSlippageBps: project?.launchConfig?.route.slippageBps ?? null,
-      maxPriorityFeeSol: project?.launchConfig?.devWalletRules.maxPriorityFeeSol ?? null,
+      maxSlippageBps: project?.launchConfig?.route?.slippageBps ?? null,
+      maxPriorityFeeSol: project?.launchConfig?.devWalletRules?.maxPriorityFeeSol ?? null,
       tipLamports,
       maxTipLamports: relay.tip.maxLamports,
       simulationRequired: true,

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { LiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
-import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 
 type ReadinessStatus = 'ready' | 'rehearsal-only' | 'blocked' | 'missing-implementation';
@@ -26,7 +26,7 @@ function worst(items: ReadinessItem[]): ReadinessStatus {
 }
 
 function selectedCount(project: Project | null, phase: 'sniper' | 'task') {
-  return project?.launchConfig?.walletPlan.filter((entry) => entry.participate && entry.executionPhase === phase).length ?? 0;
+  return walletPlanEntries(project).filter((entry) => entry.participate && entry.executionPhase === phase).length;
 }
 
 export function buildSniperExecutionReadiness(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus) {
@@ -75,7 +75,7 @@ export function buildSniperTriggerPreview(project: Project | null, wallets: Wall
   const mint = input.mint?.trim() || project?.tokenMint || null;
   const signer = input.connectedSigner?.trim() || null;
   const amountSol = typeof input.amountSol === 'number' && Number.isFinite(input.amountSol) ? input.amountSol : 0;
-  const slippageBps = typeof input.slippageBps === 'number' && Number.isFinite(input.slippageBps) ? input.slippageBps : project?.launchConfig?.route.slippageBps ?? 100;
+  const slippageBps = typeof input.slippageBps === 'number' && Number.isFinite(input.slippageBps) ? input.slippageBps : project?.launchConfig?.route?.slippageBps ?? 100;
   const maxSolPerSwap = activation.limits?.maxSolPerSwap ?? 0.25;
   const maxSlippageBps = activation.limits?.maxSlippageBps ?? 250;
   const walletAddresses = wallets.map((wallet) => wallet.address);
