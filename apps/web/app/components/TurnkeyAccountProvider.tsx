@@ -403,8 +403,10 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
     loginWithExternalWallet: async (preferredChain = 'solana') => {
       sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
       setDebug((current) => ({ ...current, lastEvent: 'wallet-login-provider-scan', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet provider scan`) }));
-      const providers = await turnkey.fetchWalletProviders(preferredChain as never) as TurnkeyWalletProviderLike[];
-      const selectedProvider = selectWalletProvider(providers, preferredChain);
+      const loadedProviders = turnkey.walletProviders as TurnkeyWalletProviderLike[];
+      const selectedLoadedProvider = selectWalletProvider(loadedProviders, preferredChain);
+      const providers = selectedLoadedProvider ? loadedProviders : await turnkey.fetchWalletProviders(preferredChain as never) as TurnkeyWalletProviderLike[];
+      const selectedProvider = selectedLoadedProvider ?? selectWalletProvider(providers, preferredChain);
       if (!selectedProvider) {
         const message = providers.length > 0
           ? `Turnkey found ${providers.length} wallet provider(s), but none were ${preferredChain} providers.`

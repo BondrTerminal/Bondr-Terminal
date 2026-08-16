@@ -76,12 +76,11 @@ export function BondrLandingPage() {
 
     setBusy(true);
     setMessage(`Opening ${chain === 'solana' ? 'Solana' : 'EVM'} wallet login...`);
-    setIntent(null);
-    await waitForModalUnmount();
     try {
       await account.loginWithExternalWallet(chain);
       await account.refresh();
       setMessage('Wallet signature verified. Unlocking BONDR terminal...');
+      setIntent(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Wallet login did not complete.');
     } finally {
