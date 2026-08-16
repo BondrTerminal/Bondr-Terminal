@@ -107,6 +107,7 @@ type TurnkeyAuthSessionLike = {
   organizationId?: string;
   expiry?: number;
   token?: string;
+  sessionToken?: string;
   publicKey?: string;
 };
 
@@ -144,13 +145,41 @@ const defaultDebugState: AuthDebugState = {
 function normalizeVerifiedSession(session: TurnkeyAuthSessionLike | undefined): VerifiedTurnkeySession | null {
   if (!session?.userId || !session.organizationId) return null;
   if (typeof session.expiry === 'number' && session.expiry > 0 && session.expiry * 1000 <= Date.now()) return null;
+  const token = session.token ?? session.sessionToken;
   return {
     userId: session.userId,
     organizationId: session.organizationId,
     expiry: session.expiry,
-    token: session.token,
+    token,
     publicKey: session.publicKey
   };
+}
+
+function decodeBase64UrlJson(segment: string): Record<string, unknown> | null {
+  try {
+    const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = JSON.parse(window.atob(padded));
+    return decoded && typeof decoded === 'object' ? decoded as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionFromJwt(token: string): VerifiedTurnkeySession | null {
+  const payload = decodeBase64UrlJson(token.split('.')[1] ?? '');
+  if (!payload) return null;
+  const userId = maybeString(payload.user_id);
+  const organizationId = maybeString(payload.organization_id);
+  const expiry = typeof payload.exp === 'number' && Number.isFinite(payload.exp) ? payload.exp : undefined;
+  if (!userId || !organizationId) return null;
+  return normalizeVerifiedSession({
+    userId,
+    organizationId,
+    expiry,
+    token,
+    publicKey: maybeString(payload.public_key) ?? undefined
+  });
 }
 
 function readStoredVerifiedSession(): VerifiedTurnkeySession | null {
@@ -195,6 +224,7 @@ function storeVerifiedSession(session: VerifiedTurnkeySession) {
     userId: session.userId,
     organizationId: session.organizationId,
     expiry: session.expiry,
+    token: session.token,
     publicKey: session.publicKey
   }));
 }
@@ -293,7 +323,7 @@ function configuredTurnkeyConfig(): TurnkeyProviderConfig {
   };
 }
 
-function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, verifiedAuthMethod, clearVerifiedSession, debug, setDebug }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; setVerifiedSession: (session: VerifiedTurnkeySession) => void; verifiedAuthMethod: VerifiedAuthMethod | null; clearVerifiedSession: () => void; debug: AuthDebugState; setDebug: (updater: (current: AuthDebugState) => AuthDebugState) => void }) {
+function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, verifiedAuthMethod, setVerifiedAuthMethod, clearVerifiedSession, debug, setDebug }: { children: ReactNode; verifiedSession: VerifiedTurnkeySession | null; setVerifiedSession: (session: VerifiedTurnkeySession) => void; verifiedAuthMethod: VerifiedAuthMethod | null; setVerifiedAuthMethod: (method: VerifiedAuthMethod) => void; clearVerifiedSession: () => void; debug: AuthDebugState; setDebug: (updater: (current: AuthDebugState) => AuthDebugState) => void }) {
   const turnkey = useTurnkey();
   const clientReady = turnkey.clientState === ClientState.Ready;
   const session = turnkey.session as Record<string, unknown> | undefined;
@@ -378,9 +408,25 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
         provider: providerName(selectedProvider),
         chain: 'solana'
       };
+      setVerifiedAuthMethod(nextAuthMethod);
       storeVerifiedAuthMethod(nextAuthMethod);
       setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login-or-signup', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `wallet login ${nextAuthMethod.provider}`) }));
-      await turnkey.loginOrSignupWithWallet({ walletProvider: selectedProvider as never });
+      const result = await turnkey.loginOrSignupWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string; action?: string } | undefined;
+      if (result?.address) {
+        const walletAuthMethod = { ...nextAuthMethod, identifier: result.address };
+        setVerifiedAuthMethod(walletAuthMethod);
+        storeVerifiedAuthMethod(walletAuthMethod);
+      }
+      if (result?.sessionToken) {
+        const verified = sessionFromJwt(result.sessionToken);
+        if (verified) {
+          setVerifiedSession(verified);
+          storeVerifiedSession(verified);
+          sessionStorage.removeItem(PENDING_LOGIN_KEY);
+          window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-session-stored', callbackMethod: 'wallet', callbackAction: result.action ?? 'login-or-signup', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet session stored') }));
+        }
+      }
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
     logout: async () => {
@@ -392,7 +438,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
     refresh: async () => {
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     }
-  }), [authMethod, authenticated, authHydrating, authResolved, clearVerifiedSession, clientReady, debug, externalWalletAddress, externalWalletChain, externalWalletProvider, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, turnkey, user, verifiedAuthMethod, verifiedSession, walletProviderNames, walletProviderNamespaces]);
+  }), [authMethod, authenticated, authHydrating, authResolved, clearVerifiedSession, clientReady, debug, externalWalletAddress, externalWalletChain, externalWalletProvider, firstAccount?.address, firstWallet?.walletId, session, sessionOrganizationId, sessionUserId, setDebug, setVerifiedAuthMethod, setVerifiedSession, turnkey, user, verifiedAuthMethod, verifiedSession, walletProviderNames, walletProviderNamespaces]);
 
   return <TurnkeyAccountContext.Provider value={value}>{children}</TurnkeyAccountContext.Provider>;
 }
@@ -455,7 +501,7 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
         }
       }}
     >
-      <TurnkeyAccountBridge verifiedSession={verifiedSession} setVerifiedSession={setVerifiedSession} verifiedAuthMethod={verifiedAuthMethod} clearVerifiedSession={() => { setVerifiedSession(null); setVerifiedAuthMethod(null); }} debug={debug} setDebug={setDebug}>{children}</TurnkeyAccountBridge>
+      <TurnkeyAccountBridge verifiedSession={verifiedSession} setVerifiedSession={setVerifiedSession} verifiedAuthMethod={verifiedAuthMethod} setVerifiedAuthMethod={setVerifiedAuthMethod} clearVerifiedSession={() => { setVerifiedSession(null); setVerifiedAuthMethod(null); }} debug={debug} setDebug={setDebug}>{children}</TurnkeyAccountBridge>
     </TurnkeyProvider>
   );
 }

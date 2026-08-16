@@ -19,6 +19,9 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /loginWithExternalWallet/);
   assert.match(providerSource, /fetchWalletProviders\('solana' as never\)/);
   assert.match(providerSource, /loginOrSignupWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
+  assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
+  assert.match(providerSource, /wallet-login-session-stored/);
+  assert.match(providerSource, /token:\s*session\.token/);
   assert.match(providerSource, /externalWalletAddress/);
   assert.match(providerSource, /onAuthenticationSuccess:\s*\(\{ session, method, action, identifier \}\)/);
 });
