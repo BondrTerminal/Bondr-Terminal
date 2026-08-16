@@ -3,7 +3,15 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AuthState, ClientState, TurnkeyProvider, type TurnkeyProviderConfig, useTurnkey } from '@turnkey/react-wallet-kit';
 
-const organizationId = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ?? process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? '';
+const TURNKEY_ORGANIZATION_ID_SHAPE = /^[0-9a-f-]{36}$/i;
+const TURNKEY_API_PUBLIC_KEY_SHAPE = /^[0-9a-f]{64}$/i;
+
+function selectTurnkeyOrganizationId(candidates: Array<string | undefined>) {
+  const present = candidates.map((value) => value?.trim() ?? '').filter(Boolean);
+  return present.find((value) => TURNKEY_ORGANIZATION_ID_SHAPE.test(value) && !TURNKEY_API_PUBLIC_KEY_SHAPE.test(value)) ?? present[0] ?? '';
+}
+
+const organizationId = selectTurnkeyOrganizationId([process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID, process.env.NEXT_PUBLIC_ORGANIZATION_ID]);
 const authProxyConfigId = process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID ?? process.env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID ?? '';
 const configured = Boolean(organizationId && authProxyConfigId);
 const VERIFIED_AUTH_KEY = 'bondr_verified_auth';
@@ -349,6 +357,17 @@ function walletAuthCreateSubOrgParams(provider: TurnkeyWalletProviderLike, chain
   };
 }
 
+function walletAuthConfigError() {
+  if (!organizationId) return 'Turnkey wallet auth is missing NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID.';
+  if (TURNKEY_API_PUBLIC_KEY_SHAPE.test(organizationId)) {
+    return 'Turnkey wallet auth is configured with a 64-character API public key where the parent organization ID is required. Set NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID in Vercel to the real Turnkey organization ID, then redeploy.';
+  }
+  if (!TURNKEY_ORGANIZATION_ID_SHAPE.test(organizationId)) {
+    return 'Turnkey wallet auth has an invalid NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID shape. Set it to the real Turnkey parent organization ID, then redeploy.';
+  }
+  return null;
+}
+
 function configuredTurnkeyConfig(): TurnkeyProviderConfig {
   return {
     organizationId,
@@ -457,6 +476,12 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
     loginWithExternalWallet: async (preferredChain = 'solana') => {
       sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
       setDebug((current) => ({ ...current, lastEvent: 'wallet-login-provider-scan', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet provider scan`) }));
+      const configError = walletAuthConfigError();
+      if (configError) {
+        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-config-invalid', lastErrorMessage: configError, timeline: addTimeline(current, 'wallet config invalid') }));
+        sessionStorage.removeItem(PENDING_LOGIN_KEY);
+        throw new Error(configError);
+      }
       const loadedProviders = turnkey.walletProviders as TurnkeyWalletProviderLike[];
       const selectedLoadedProvider = selectWalletProvider(loadedProviders, preferredChain);
       const providers = selectedLoadedProvider ? loadedProviders : await turnkey.fetchWalletProviders(preferredChain as never) as TurnkeyWalletProviderLike[];

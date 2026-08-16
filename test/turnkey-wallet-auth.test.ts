@@ -15,6 +15,7 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /methodOrder:\s*\['email', 'passkey', 'wallet'\]/);
   assert.match(providerSource, /walletConfig:\s*\{/);
   assert.match(providerSource, /auth:\s*true/);
+  assert.match(providerSource, /function selectTurnkeyOrganizationId/);
   assert.match(providerSource, /solana:\s*\{\s*native:\s*true/s);
   assert.match(providerSource, /ethereum:\s*\{\s*native:\s*true/s);
   assert.match(providerSource, /walletConnectNamespaces:\s*\[\]/);
@@ -24,6 +25,8 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /fetchWalletProviders\(preferredChain as never\)/);
   assert.match(providerSource, /loginOrSignupWithWallet\(\{\s*walletProvider: selectedProvider as never,\s*createSubOrgParams: walletAuthCreateSubOrgParams\(selectedProvider, preferredChain\) as never/s);
   assert.match(providerSource, /function walletAuthCreateSubOrgParams/);
+  assert.match(providerSource, /function walletAuthConfigError/);
+  assert.match(providerSource, /64-character API public key where the parent organization ID is required/);
   assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
   assert.match(providerSource, /wallet-login-session-stored/);
   assert.match(providerSource, /wallet-login-missing-session-token/);
