@@ -17,7 +17,8 @@ import {
   type ProjectEvent,
   type Wallet,
   type WalletActivity,
-  type WalletGroup
+  type WalletGroup,
+  stripProjectInlineAssetData
 } from './meridian-store';
 
 export type SourceStatus = {
@@ -242,7 +243,7 @@ function normalizedLaunchConfig(project: Project, wallets: Wallet[] = []): Launc
 }
 
 function normalizedProject(project: Project): Project {
-  const raw = project as Partial<Project>;
+  const raw = stripProjectInlineAssetData(project) as Partial<Project>;
   const id = stringValue(raw.id, 'project-unknown');
   const ticker = stringValue(raw.ticker, stringValue(raw.metadata?.symbol, 'TKN'));
   const name = stringValue(raw.name, stringValue(raw.metadata?.name, ticker));
@@ -266,7 +267,6 @@ function normalizedProject(project: Project): Project {
       description: stringValue(metadata.description),
       imageUrl: stringValue(metadata.imageUrl),
       metadataUri: typeof metadata.metadataUri === 'string' ? metadata.metadataUri : undefined,
-      imageDataUrl: typeof metadata.imageDataUrl === 'string' ? metadata.imageDataUrl : undefined,
       imageContentType: typeof metadata.imageContentType === 'string' ? metadata.imageContentType : undefined,
       imageUpdatedAt: typeof metadata.imageUpdatedAt === 'string' ? metadata.imageUpdatedAt : undefined,
       website: stringValue(metadata.website),

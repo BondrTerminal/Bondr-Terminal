@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { getMeridianStorePath, type LaunchConfig, type MeridianStore, type Project } from '../../../lib/meridian-store';
+import { getMeridianStorePath, stripMeridianInlineAssetData, type LaunchConfig, type MeridianStore, type Project } from '../../../lib/meridian-store';
 import { getMeridianWalletStore, insertDurableProject, walletStoreMode } from '../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../lib/mutation-safety';
 import { normalizeDeploymentLaunchPath, routePlatformForLaunchPath } from '../../../lib/deployment-launch-path';
@@ -58,7 +58,7 @@ function responseMutationMeta(note: string, observedAt = new Date().toISOString(
 }
 
 export async function GET() {
-  const store = await getMeridianWalletStore();
+  const store = stripMeridianInlineAssetData(await getMeridianWalletStore());
   const mode = walletStoreMode();
   return Response.json({
     status: 'ok',

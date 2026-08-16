@@ -1,4 +1,4 @@
-import { allProjectFlow, eventsForProject, formatSol, projectFlow, projectNextAction, readinessScore } from '../../lib/meridian-store';
+import { allProjectFlow, eventsForProject, formatSol, projectFlow, projectNextAction, readinessScore, stripMeridianInlineAssetData } from '../../lib/meridian-store';
 import Link from 'next/link';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { CreateProjectForm } from './components/CreateProjectForm';
@@ -22,7 +22,7 @@ function BalanceGraph({ points }: { points: number[] }) {
 
 export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
   const params = await searchParams;
-  const store = await getMeridianWalletStore();
+  const store = stripMeridianInlineAssetData(await getMeridianWalletStore());
   const selectedProject = params?.project ? store.projects.find((project) => project.id === params.project) : undefined;
   const totalFlow = allProjectFlow(store);
   const projects = selectedProject ? [selectedProject] : store.projects;

@@ -224,6 +224,17 @@ export type FlowSummary = {
 
 const MERIDIAN_STORE_PATH = join(/*turbopackIgnore: true*/ process.cwd(), 'data', 'meridian-projects.json');
 
+export function stripProjectInlineAssetData(project: Project): Project {
+  const metadata = (project as Partial<Project>).metadata;
+  if (!metadata?.imageDataUrl) return project;
+  const { imageDataUrl: _imageDataUrl, ...strippedMetadata } = metadata;
+  return { ...project, metadata: strippedMetadata };
+}
+
+export function stripMeridianInlineAssetData(store: MeridianStore): MeridianStore {
+  return { ...store, projects: store.projects.map(stripProjectInlineAssetData) };
+}
+
 export function getMeridianStorePath(): string {
   if (!existsSync(MERIDIAN_STORE_PATH)) throw new Error(`Meridian store not found at ${MERIDIAN_STORE_PATH}`);
   return MERIDIAN_STORE_PATH;

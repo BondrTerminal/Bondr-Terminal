@@ -1,4 +1,4 @@
-import { eventsForProject, launchPreflight, readinessScore, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
+import { eventsForProject, launchPreflight, readinessScore, stripMeridianInlineAssetData, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { buildMeridianHubContext } from '../../lib/meridian-context';
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
@@ -111,7 +111,7 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const params = await searchParams;
   const rpc = await getSolanaRpcHealth();
   const activation = getLiveActivationStatus();
-  const store: MeridianStore = await getMeridianWalletStore();
+  const store: MeridianStore = stripMeridianInlineAssetData(await getMeridianWalletStore());
   const hubContext = buildMeridianHubContext(params?.project ?? null, store);
   const selectedContext = hubContext.activeProjectId ? hubContext.projects[0] : undefined;
   const selectedProject = selectedContext?.project;

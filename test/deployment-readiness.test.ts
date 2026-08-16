@@ -22,7 +22,7 @@ import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routeP
 import { buildLpBurnTransaction, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
-import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
+import { stripMeridianInlineAssetData, stripProjectInlineAssetData, type MeridianStore, type Project, type Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
 import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pumpportal/build-create/route.js';
@@ -120,6 +120,32 @@ const activation = {
   disabledReason: 'deployment gate closed',
   warnings: []
 };
+
+test('Meridian view payloads strip inline project asset data', () => {
+  const projectWithInlineAsset: Project = {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      imageDataUrl: `data:image/png;base64,${'a'.repeat(4096)}`,
+      imageContentType: 'image/png'
+    }
+  };
+  const strippedProject = stripProjectInlineAssetData(projectWithInlineAsset);
+  assert.equal(strippedProject.metadata.imageDataUrl, undefined);
+  assert.equal(strippedProject.metadata.imageContentType, 'image/png');
+  assert.equal(projectWithInlineAsset.metadata.imageDataUrl?.startsWith('data:image/png;base64,'), true);
+
+  const store: MeridianStore = {
+    projects: [projectWithInlineAsset],
+    wallets: [wallet],
+    walletGroups: [{ id: 'operator-wallets', name: 'Operator Wallets', scope: 'global', walletIds: [wallet.id] }],
+    flowEvents: [],
+    eventLog: []
+  };
+  const strippedStore = stripMeridianInlineAssetData(store);
+  assert.equal(strippedStore.projects[0].metadata.imageDataUrl, undefined);
+  assert.equal(store.projects[0].metadata.imageDataUrl, projectWithInlineAsset.metadata.imageDataUrl);
+});
 
 const validMintPublicKey = 'Mint111111111111111111111111111111111111111';
 

@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { eventsForProject, formatSol, getProject, launchPreflight, portfolioWalletHref, projectFlow, readinessScore, walletsForGroup } from '../../../lib/meridian-store';
+import { eventsForProject, formatSol, getProject, launchPreflight, portfolioWalletHref, projectFlow, readinessScore, stripMeridianInlineAssetData, walletsForGroup } from '../../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../../lib/durable-wallet-store';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ type ProjectPageProps = {
 
 export default async function ProjectCockpitPage({ params }: ProjectPageProps) {
   const { id } = await params;
-  const store = await getMeridianWalletStore();
+  const store = stripMeridianInlineAssetData(await getMeridianWalletStore());
   const project = getProject(id, store);
   if (!project) notFound();
 
