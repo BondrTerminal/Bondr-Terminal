@@ -10,6 +10,7 @@ import { TradingTokenLoader } from './components/TradingTokenLoader';
 import { TerminalInfoBooth } from './components/TerminalInfoBooth';
 import { TokenCockpitHeader } from './components/TokenCockpitHeader';
 import { WalletRailStatus } from '../components/WalletRailStatus';
+import { ClientWidgetBoundary } from '../components/ClientWidgetBoundary';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,28 +53,38 @@ export default async function SniperPage({ searchParams }: SniperPageProps) {
           <nav aria-label="Terminal links"><Link href={selectedProject ? `/deployment?project=${encodeURIComponent(selectedProject.id)}` : '/deployment'}>Deployment</Link><Link href={selectedProject ? `/portfolio?view=wallets&project=${encodeURIComponent(selectedProject.id)}` : '/portfolio?view=wallets'}>Wallets</Link></nav>
         </section>
 
-        <WalletRailStatus surface="terminal" selectedWalletAddress={selectedWallet?.address ?? null} activeMint={defaultMint || null} />
-        <TokenCockpitHeader mint={defaultMint} />
+        <ClientWidgetBoundary label="Terminal wallet rail">
+          <WalletRailStatus surface="terminal" selectedWalletAddress={selectedWallet?.address ?? null} activeMint={defaultMint || null} />
+        </ClientWidgetBoundary>
+        <ClientWidgetBoundary label="Token cockpit header">
+          <TokenCockpitHeader mint={defaultMint} />
+        </ClientWidgetBoundary>
         <section className="axiomTradeGrid premiumTradeGrid compactTradeGrid">
           <section className="terminalChartColumn premiumChartColumn">
-            <TradingTokenLoader defaultMint={defaultMint} devWallets={tradingWallets.map((wallet) => wallet.address)} />
+            <ClientWidgetBoundary label="Trading token loader">
+              <TradingTokenLoader defaultMint={defaultMint} devWallets={tradingWallets.map((wallet) => wallet.address)} />
+            </ClientWidgetBoundary>
           </section>
-          <ExecutionDock mint={defaultMint} selectedWalletLabel={selectedWalletLabel} wallets={tradingWallets} projectId={selectedProject?.id} />
+          <ClientWidgetBoundary label="Execution dock">
+            <ExecutionDock mint={defaultMint} selectedWalletLabel={selectedWalletLabel} wallets={tradingWallets} projectId={selectedProject?.id} />
+          </ClientWidgetBoundary>
         </section>
 
-        <TerminalInfoBooth
-          wallets={tradingWallets}
-          flow={flow}
-          mint={defaultMint}
-          projectId={selectedProject?.id}
-          projectName={selectedProject?.name ?? null}
-          terminalWarning={terminalWarning}
-          liveReadinessStatus={liveReadiness.status}
-          authConfigured={authConfig.configured}
-          sessionAuthenticated={session.authenticated}
-          rpcSummary={{ status: rpcHealth.status, providerLabel: rpcHealth.selectedProviderLabel, quotaLimited: rpcHealth.quotaLimited, configuredProviderCount: rpcHealth.configuredProviderCount, providerSummary: rpcHealth.providerSummary, currentSlot: rpcHealth.currentSlot ?? null, providers: rpcHealth.providers.map((provider) => ({ label: provider.providerLabel, status: provider.status, quotaLimited: Boolean(provider.quotaLimited), latencyMs: provider.latencyMs ?? null, currentSlot: provider.currentSlot ?? null })) }}
-          checklist={{ state: preLiveChecklist.state, failed: preLiveChecklist.failed, warnings: preLiveChecklist.warnings, items: preLiveChecklist.items }}
-        />
+        <ClientWidgetBoundary label="Terminal info booth">
+          <TerminalInfoBooth
+            wallets={tradingWallets}
+            flow={flow}
+            mint={defaultMint}
+            projectId={selectedProject?.id}
+            projectName={selectedProject?.name ?? null}
+            terminalWarning={terminalWarning}
+            liveReadinessStatus={liveReadiness.status}
+            authConfigured={authConfig.configured}
+            sessionAuthenticated={session.authenticated}
+            rpcSummary={{ status: rpcHealth.status, providerLabel: rpcHealth.selectedProviderLabel, quotaLimited: rpcHealth.quotaLimited, configuredProviderCount: rpcHealth.configuredProviderCount, providerSummary: rpcHealth.providerSummary, currentSlot: rpcHealth.currentSlot ?? null, providers: rpcHealth.providers.map((provider) => ({ label: provider.providerLabel, status: provider.status, quotaLimited: Boolean(provider.quotaLimited), latencyMs: provider.latencyMs ?? null, currentSlot: provider.currentSlot ?? null })) }}
+            checklist={{ state: preLiveChecklist.state, failed: preLiveChecklist.failed, warnings: preLiveChecklist.warnings, items: preLiveChecklist.items }}
+          />
+        </ClientWidgetBoundary>
       </div>
     </main>
   );

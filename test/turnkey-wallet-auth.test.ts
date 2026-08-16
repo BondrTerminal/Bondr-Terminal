@@ -23,6 +23,8 @@ const walletSelectionDeskSource = readFileSync(new URL('../apps/web/app/sniper/c
 const createProjectLauncherSource = readFileSync(new URL('../apps/web/app/components/CreateProjectLauncher.tsx', import.meta.url), 'utf8');
 const launchConfigEditorSource = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
 const deploymentBuilderSource = readFileSync(new URL('../apps/web/app/deployment/components/DeploymentLaunchBuilderPanel.tsx', import.meta.url), 'utf8');
+const clientWidgetBoundarySource = readFileSync(new URL('../apps/web/app/components/ClientWidgetBoundary.tsx', import.meta.url), 'utf8');
+const sniperPageSource = readFileSync(new URL('../apps/web/app/sniper/page.tsx', import.meta.url), 'utf8');
 
 function fakeJwt(payload: Record<string, unknown>) {
   const encode = (value: Record<string, unknown> | string) => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
@@ -161,6 +163,19 @@ test('route error boundary fails closed with profile audit recovery', () => {
   assert.match(clientErrorReportSource, /Bearer \[redacted\]/);
   assert.match(clientErrorReportSource, /token\|jwt\|secret\|private\|seed\|password\|authorization\|bearer/i);
   assert.match(clientErrorReportSource, /invalid-error-report/);
+});
+
+test('client widget failures are contained inside authenticated shell surfaces', () => {
+  assert.match(clientWidgetBoundarySource, /class ClientWidgetBoundary/);
+  assert.match(clientWidgetBoundarySource, /componentDidCatch/);
+  assert.match(clientWidgetBoundarySource, /client-widget:/);
+  assert.match(clientWidgetBoundarySource, /\/api\/client-error-report/);
+  assert.match(platformShellSource, /<ClientWidgetBoundary label="Header wallet chip"/);
+  assert.match(platformShellSource, /<ClientWidgetBoundary label="Create project action"/);
+  assert.match(platformShellSource, /<ClientWidgetBoundary label="Account nav"/);
+  for (const label of ['Terminal wallet rail', 'Token cockpit header', 'Trading token loader', 'Execution dock', 'Terminal info booth']) {
+    assert.match(sniperPageSource, new RegExp(`<ClientWidgetBoundary label="${label}"`));
+  }
 });
 
 test('authenticated shell navigation uses document loads after Turnkey subject changes', () => {

@@ -8,6 +8,7 @@ import { BondrLandingPage } from './BondrLandingPage';
 import { GlobalCreateProjectAction } from './GlobalCreateProjectAction';
 import { HeaderWalletChip } from './HeaderWalletChip';
 import { AccountNavButton } from './AccountNavButton';
+import { ClientWidgetBoundary } from './ClientWidgetBoundary';
 
 const NEXT_KEY = 'bondr_next_path';
 const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
@@ -67,9 +68,15 @@ function AppHeader() {
         </details>
       </nav>
       <div className="bondrHeaderActions" aria-label="Account and watch controls">
-        <HeaderWalletChip />
-        <GlobalCreateProjectAction />
-        <AccountNavButton />
+        <ClientWidgetBoundary label="Header wallet chip" fallback={<a className="bondrHeaderWalletChip" href="/portfolio?view=wallets"><span>Wallet</span><strong>Paused</strong><em>open portfolio</em></a>}>
+          <HeaderWalletChip />
+        </ClientWidgetBoundary>
+        <ClientWidgetBoundary label="Create project action" fallback={<a className="button secondary" href="/projects">Projects</a>}>
+          <GlobalCreateProjectAction />
+        </ClientWidgetBoundary>
+        <ClientWidgetBoundary label="Account nav" fallback={<a className="button secondary" href="/profile">Profile</a>}>
+          <AccountNavButton />
+        </ClientWidgetBoundary>
       </div>
     </header>
   );
