@@ -17072,6 +17072,10 @@ body > .createProjectModal .professionalCreateProjectShell {
 .accountHeroCard::after { content: ''; position: absolute; inset: auto -20% -40% 10%; height: 160px; background: radial-gradient(circle, rgba(47,128,255,0.23), transparent 68%); pointer-events: none; }
 .accountHeroTopline { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; position: relative; z-index: 1; }
 .accountGlassCard { background: linear-gradient(180deg, rgba(8,20,38,0.92), rgba(3,8,18,0.86)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
+.bondrErrorShell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #05070a; color: var(--text, #f8efe7); }
+.bondrErrorCard { max-width: 720px; width: min(720px, 100%); }
+.bondrErrorCard h1 { margin: 8px 0; }
+.bondrErrorCard p { color: var(--muted, #9b8d84); }
 .accountFlowList li { margin-bottom: 5px; }
 .accountGateBackdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 18px; background: rgba(1,4,10,0.72); backdrop-filter: blur(12px); }
 .accountGateCard { position: relative; width: min(480px, 100%); overflow: hidden; border: 1px solid rgba(86,164,255,0.26); border-radius: 24px; padding: 24px; background: linear-gradient(180deg, rgba(8,20,38,0.98), rgba(3,8,18,0.96)); box-shadow: 0 30px 100px rgba(0,0,0,0.5); }

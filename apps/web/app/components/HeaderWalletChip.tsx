@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { getProfileScopedActiveWallet } from '../../lib/profile-scoped-browser-state';
 
 type SolanaProvider = {
@@ -80,9 +79,9 @@ export function HeaderWalletChip() {
         ? 'signer mismatch'
         : rail?.balanceStatus ?? (signer ? 'checking' : 'not connected');
 
-  return <Link className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/portfolio?view=wallets" title={rail?.warnings?.join(' · ') ?? 'Portfolio wallets'}>
+  return <a className={`bondrHeaderWalletChip ${fullyMatched ? 'matched' : selectedSaved ? 'savedWallet' : ''}`} href="/portfolio?view=wallets" title={rail?.warnings?.join(' · ') ?? 'Portfolio wallets'}>
     <span>{short(selected)}</span>
     <strong>{sol(balance)}</strong>
     <em>{status}</em>
-  </Link>;
+  </a>;
 }

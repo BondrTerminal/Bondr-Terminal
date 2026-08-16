@@ -7,11 +7,14 @@ const providerSource = readFileSync(new URL('../apps/web/app/components/TurnkeyA
 const profileRouteSource = readFileSync(new URL('../apps/web/app/api/account/profile/route.ts', import.meta.url), 'utf8');
 const profileStoreSource = readFileSync(new URL('../apps/web/lib/bondr-profile-store.ts', import.meta.url), 'utf8');
 const profileUiSource = readFileSync(new URL('../apps/web/app/profile/components/TurnkeyProfileLogin.tsx', import.meta.url), 'utf8');
+const appErrorSource = readFileSync(new URL('../apps/web/app/error.tsx', import.meta.url), 'utf8');
 const landingSource = readFileSync(new URL('../apps/web/app/components/BondrLandingPage.tsx', import.meta.url), 'utf8');
 const readinessSource = readFileSync(new URL('../apps/web/app/api/account/readiness/route.ts', import.meta.url), 'utf8');
 const envExampleSource = readFileSync(new URL('../apps/web/.env.example', import.meta.url), 'utf8');
 const profileScopedStateSource = readFileSync(new URL('../apps/web/lib/profile-scoped-browser-state.ts', import.meta.url), 'utf8');
 const headerWalletChipSource = readFileSync(new URL('../apps/web/app/components/HeaderWalletChip.tsx', import.meta.url), 'utf8');
+const platformShellSource = readFileSync(new URL('../apps/web/app/components/BondrPlatformShell.tsx', import.meta.url), 'utf8');
+const accountNavButtonSource = readFileSync(new URL('../apps/web/app/components/AccountNavButton.tsx', import.meta.url), 'utf8');
 const walletRailStatusSource = readFileSync(new URL('../apps/web/app/components/WalletRailStatus.tsx', import.meta.url), 'utf8');
 const walletBoardSource = readFileSync(new URL('../apps/web/app/wallets/components/WalletBoardActions.tsx', import.meta.url), 'utf8');
 const executionDockSource = readFileSync(new URL('../apps/web/app/sniper/components/ExecutionDock.tsx', import.meta.url), 'utf8');
@@ -109,11 +112,45 @@ test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(profileUiSource, /Unknown wallets fail closed and cannot create a new BONDR operator profile/);
   assert.match(profileUiSource, /Turnkey debug:/);
   assert.match(profileUiSource, /External wallet/);
+  assert.match(profileUiSource, /Turnkey auth audit/);
+  assert.match(profileUiSource, /Audit verdict/);
+  assert.match(profileUiSource, /Expected subject/);
+  assert.match(profileUiSource, /Active subject/);
+  assert.match(profileUiSource, /Scoped active wallet/);
+  assert.match(profileUiSource, /Browser signer/);
+  assert.match(profileUiSource, /subject mismatch/);
+  assert.match(profileUiSource, /active wallet mismatch/);
+  assert.match(profileUiSource, /browser signer mismatch/);
+  assert.match(profileUiSource, /getActiveProfileSubject/);
+  assert.match(profileUiSource, /getProfileScopedActiveWallet/);
   assert.match(readinessSource, /externalWalletAuth:\s*'enabled-in-client-config'/);
   assert.match(readinessSource, /wallet-auth-proves-identity-only/);
   assert.match(readinessSource, /walletAuthChains:\s*\['solana', 'ethereum'\]/);
   assert.match(envExampleSource, /Wallet auth is enabled client-side for Solana and injected EVM wallets/);
   assert.match(envExampleSource, /Transaction signing still requires explicit browser review/);
+});
+
+test('route error boundary fails closed with profile audit recovery', () => {
+  assert.match(appErrorSource, /'use client'/);
+  assert.match(appErrorSource, /BONDR route error/);
+  assert.match(appErrorSource, /This view failed closed/);
+  assert.match(appErrorSource, /Your identity and wallet state were not changed by this screen/);
+  assert.match(appErrorSource, /Error digest/);
+  assert.match(appErrorSource, /Open Profile Audit/);
+  assert.match(appErrorSource, /href="\/profile"/);
+});
+
+test('authenticated shell navigation uses document loads after Turnkey subject changes', () => {
+  assert.doesNotMatch(platformShellSource, /from 'next\/link'/);
+  assert.doesNotMatch(accountNavButtonSource, /from 'next\/link'/);
+  assert.doesNotMatch(headerWalletChipSource, /from 'next\/link'/);
+  assert.match(platformShellSource, /router\.replace\(next\)/);
+  assert.match(platformShellSource, /window\.location\.href = next/);
+  assert.match(platformShellSource, /sessionStorage\.setItem\(NEXT_KEY, '\/'\)/);
+  assert.match(platformShellSource, /<a className="bondrWordmark" href="\/"/);
+  assert.match(platformShellSource, /<a key=\{item\.href\} href=\{item\.href\}>/);
+  assert.match(accountNavButtonSource, /<a href="\/profile">Profile<\/a>/);
+  assert.match(headerWalletChipSource, /href="\/portfolio\?view=wallets"/);
 });
 
 test('profile-scoped browser wallet state prevents cross-profile active wallet leakage', () => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { avatarInitials, type BondrStoredProfile } from '../../../lib/bondr-profile';
+import { getActiveProfileSubject, getProfileScopedActiveWallet } from '../../../lib/profile-scoped-browser-state';
 import { useBondrTurnkeyAccount } from '../../components/TurnkeyAccountProvider';
 
 function shortValue(value: string | null | undefined): string {
@@ -14,6 +15,12 @@ function detectBrowserWallet(): string {
   const solana = (window as Window & { solana?: { isPhantom?: boolean } }).solana;
   if (!solana) return 'not detected';
   return solana.isPhantom ? 'Phantom detected' : 'Solana wallet detected';
+}
+
+function detectBrowserSignerAddress(): string {
+  if (typeof window === 'undefined') return '';
+  const solana = (window as Window & { solana?: { publicKey?: { toBase58?(): string; toString(): string } } }).solana;
+  return solana?.publicKey?.toBase58?.() ?? solana?.publicKey?.toString?.() ?? '';
 }
 
 type ProfileForm = {
@@ -29,9 +36,26 @@ export function TurnkeyProfileLogin() {
   const [syncStatus, setSyncStatus] = useState('');
   const [profile, setProfile] = useState<BondrStoredProfile | null>(null);
   const [form, setForm] = useState<ProfileForm>({ userName: '', displayName: '', bio: '', preferredWalletLabel: '' });
+  const [activeSubject, setActiveSubject] = useState('');
+  const [activeWallet, setActiveWallet] = useState('');
+  const [browserSigner, setBrowserSigner] = useState('');
   const browserWallet = detectBrowserWallet();
 
   const initials = useMemo(() => profile ? avatarInitials(profile) : 'B', [profile]);
+  const expectedSubject = useMemo(() => account.userId && account.organizationId ? `${account.organizationId}:${account.userId}` : '', [account.organizationId, account.userId]);
+  const authWallet = profile?.externalWalletAddress ?? account.externalWalletAddress ?? '';
+  const subjectMatches = Boolean(expectedSubject && activeSubject && expectedSubject === activeSubject);
+  const activeWalletMatchesAuth = Boolean(!authWallet || !activeWallet || activeWallet === authWallet);
+  const signerMatchesActive = Boolean(!browserSigner || !activeWallet || browserSigner === activeWallet);
+  const auditVerdict = !account.authenticated
+    ? 'identity required'
+    : !subjectMatches
+      ? 'subject mismatch'
+      : !activeWalletMatchesAuth
+        ? 'active wallet mismatch'
+        : !signerMatchesActive
+          ? 'browser signer mismatch'
+          : 'profile aligned';
 
   async function requestProfile(method: 'GET' | 'POST', payload?: Record<string, unknown>) {
     if (!account.sessionJwt) throw new Error('Turnkey session JWT not exposed by the client SDK yet. Login identity is active, but profile sync needs the JWT bearer token.');
@@ -147,6 +171,27 @@ export function TurnkeyProfileLogin() {
   }
 
   useEffect(() => {
+    function refreshAuditState() {
+      setActiveSubject(getActiveProfileSubject() ?? '');
+      setActiveWallet(getProfileScopedActiveWallet());
+      setBrowserSigner(detectBrowserSignerAddress());
+    }
+
+    refreshAuditState();
+    const solana = (window as Window & { solana?: { on?: (event: string, handler: (...args: unknown[]) => void) => void; off?: (event: string, handler: (...args: unknown[]) => void) => void } }).solana;
+    solana?.on?.('accountChanged', refreshAuditState);
+    window.addEventListener('bondr-profile-subject-changed', refreshAuditState);
+    window.addEventListener('bondr-active-wallet-changed', refreshAuditState);
+    window.addEventListener('bondr-watch-only-wallet-added', refreshAuditState);
+    return () => {
+      solana?.off?.('accountChanged', refreshAuditState);
+      window.removeEventListener('bondr-profile-subject-changed', refreshAuditState);
+      window.removeEventListener('bondr-active-wallet-changed', refreshAuditState);
+      window.removeEventListener('bondr-watch-only-wallet-added', refreshAuditState);
+    };
+  }, [account.authenticated, expectedSubject]);
+
+  useEffect(() => {
     if (account.authenticated && account.sessionJwt && !profile && !busy) void loadProfile();
   }, [account.authenticated, account.sessionJwt]);
 
@@ -200,12 +245,15 @@ export function TurnkeyProfileLogin() {
       </div>
 
       <div className="documentCard accountGlassCard">
-        <h2>Identity state</h2>
+        <h2>Turnkey auth audit</h2>
         <div className="infoGrid">
+          <div className="sideRow"><span>Audit verdict</span><strong>{auditVerdict}</strong></div>
           <div className="sideRow"><span>Status</span><strong>{account.authenticated ? 'authenticated' : 'not authenticated'}</strong></div>
           <div className="sideRow"><span>Turnkey client</span><strong>{account.clientState}</strong></div>
           <div className="sideRow"><span>User</span><strong>{profile?.userName ?? account.userName ?? shortValue(account.userId)}</strong></div>
           <div className="sideRow"><span>Organization</span><strong>{shortValue(account.organizationId)}</strong></div>
+          <div className="sideRow"><span>Expected subject</span><strong>{shortValue(expectedSubject)}</strong></div>
+          <div className="sideRow"><span>Active subject</span><strong>{shortValue(activeSubject)}</strong></div>
           <div className="sideRow"><span>Embedded wallets</span><strong>{account.walletCount}</strong></div>
           <div className="sideRow"><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
           <div className="sideRow"><span>Auth method</span><strong>{account.authMethod ?? '—'}</strong></div>
@@ -213,6 +261,11 @@ export function TurnkeyProfileLogin() {
           <div className="sideRow"><span>External provider</span><strong>{profile?.externalWalletProvider ?? account.externalWalletProvider ?? '—'}</strong></div>
           <div className="sideRow"><span>External chain</span><strong>{profile?.externalWalletChain ?? account.externalWalletChain ?? '—'}</strong></div>
           <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
+          <div className="sideRow"><span>Browser signer</span><strong>{shortValue(browserSigner)}</strong></div>
+          <div className="sideRow"><span>Scoped active wallet</span><strong>{shortValue(activeWallet)}</strong></div>
+          <div className="sideRow"><span>Subject match</span><strong>{subjectMatches ? 'yes' : 'no'}</strong></div>
+          <div className="sideRow"><span>Wallet match</span><strong>{activeWalletMatchesAuth ? 'yes' : 'no'}</strong></div>
+          <div className="sideRow"><span>Signer match</span><strong>{signerMatchesActive ? 'yes' : 'no'}</strong></div>
           <div className="sideRow"><span>Session JWT</span><strong>{account.sessionJwt ? 'available' : 'not exposed'}</strong></div>
           <div className="sideRow"><span>Profile storage</span><strong>verified / ephemeral</strong></div>
           <div className="sideRow"><span>Execution</span><strong>simulation + policy gated</strong></div>

@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 import { BondrLandingPage } from './BondrLandingPage';
@@ -57,17 +56,17 @@ function resolveStoredNextPath() {
 function AppHeader() {
   return (
     <header className="bondrTopHeader" aria-label="Bond.Terminal application header">
-      <Link className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
+      <a className="bondrWordmark" href="/" aria-label="Bond.Terminal home">
         <span className="bondrLogoText" aria-label="BONDR">
           <span>B</span><span className="bondrScopeO">O</span><span>N</span><span>D</span><span>R</span>
         </span>
-      </Link>
+      </a>
       <nav className="bondrHeaderNav" aria-label="Main navigation">
-        {primaryNavItems.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
+        {primaryNavItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
         <details className="bondrToolsMenu">
           <summary>Tools</summary>
           <div className="bondrToolsMenuPanel">
-            {toolItems.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
+            {toolItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
           </div>
         </details>
       </nav>
