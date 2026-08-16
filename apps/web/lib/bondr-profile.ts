@@ -9,6 +9,10 @@ export type BondrStoredProfile = {
   bio?: string;
   preferredWalletLabel?: string;
   firstAccountAddress?: string;
+  authMethod?: string;
+  externalWalletAddress?: string;
+  externalWalletProvider?: string;
+  externalWalletChain?: string;
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string;
@@ -47,6 +51,10 @@ export function defaultBondrProfile(input: {
   organizationId: string;
   email?: string;
   firstAccountAddress?: string;
+  authMethod?: string;
+  externalWalletAddress?: string;
+  externalWalletProvider?: string;
+  externalWalletChain?: string;
   now?: string;
 }): BondrStoredProfile {
   const hash = hashString(`${input.organizationId}:${input.userId}`);
@@ -61,6 +69,10 @@ export function defaultBondrProfile(input: {
     avatarSeed: fourDigits(hash),
     avatarGradient: gradients[hash % gradients.length],
     ...(input.firstAccountAddress ? { firstAccountAddress: input.firstAccountAddress } : {}),
+    ...(input.authMethod ? { authMethod: input.authMethod } : {}),
+    ...(input.externalWalletAddress ? { externalWalletAddress: input.externalWalletAddress } : {}),
+    ...(input.externalWalletProvider ? { externalWalletProvider: input.externalWalletProvider } : {}),
+    ...(input.externalWalletChain ? { externalWalletChain: input.externalWalletChain } : {}),
     createdAt: now,
     updatedAt: now,
     lastSeenAt: now

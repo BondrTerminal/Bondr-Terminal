@@ -12,6 +12,10 @@ const profileSchema = z.object({
   email: z.string().email().optional(),
   organizationId: z.string().min(1).max(160).optional(),
   firstAccountAddress: z.string().min(20).max(120).optional(),
+  authMethod: z.string().min(1).max(40).optional(),
+  externalWalletAddress: z.string().min(20).max(160).optional(),
+  externalWalletProvider: z.string().min(1).max(80).optional(),
+  externalWalletChain: z.string().min(1).max(40).optional(),
   avatarSeed: z.string().min(1).max(40).optional(),
   avatarGradient: z.string().min(8).max(220).optional(),
   bio: z.string().max(160).optional(),
@@ -102,7 +106,11 @@ export async function POST(request: Request) {
     userId: session.userId,
     organizationId: session.organizationId,
     ...(parsed.data.email ? { email: parsed.data.email } : {}),
-    ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {})
+    ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {}),
+    ...(parsed.data.authMethod ? { authMethod: parsed.data.authMethod } : {}),
+    ...(parsed.data.externalWalletAddress ? { externalWalletAddress: parsed.data.externalWalletAddress } : {}),
+    ...(parsed.data.externalWalletProvider ? { externalWalletProvider: parsed.data.externalWalletProvider } : {}),
+    ...(parsed.data.externalWalletChain ? { externalWalletChain: parsed.data.externalWalletChain } : {})
   });
 
   const profile: BondrStoredProfile = {
@@ -111,6 +119,10 @@ export async function POST(request: Request) {
     ...(parsed.data.displayName ? { displayName: sanitizeProfileText(parsed.data.displayName, loaded.profile.displayName) } : {}),
     ...(parsed.data.email ? { email: parsed.data.email } : {}),
     ...(parsed.data.firstAccountAddress ? { firstAccountAddress: parsed.data.firstAccountAddress } : {}),
+    ...(parsed.data.authMethod ? { authMethod: sanitizeProfileText(parsed.data.authMethod) } : {}),
+    ...(parsed.data.externalWalletAddress ? { externalWalletAddress: parsed.data.externalWalletAddress } : {}),
+    ...(parsed.data.externalWalletProvider ? { externalWalletProvider: sanitizeProfileText(parsed.data.externalWalletProvider) } : {}),
+    ...(parsed.data.externalWalletChain ? { externalWalletChain: sanitizeProfileText(parsed.data.externalWalletChain) } : {}),
     ...(parsed.data.avatarSeed ? { avatarSeed: sanitizeProfileText(parsed.data.avatarSeed, loaded.profile.avatarSeed) } : {}),
     ...(parsed.data.avatarGradient ? { avatarGradient: sanitizeProfileText(parsed.data.avatarGradient, loaded.profile.avatarGradient) } : {}),
     ...(typeof parsed.data.bio === 'string' ? { bio: sanitizeProfileText(parsed.data.bio) } : {}),

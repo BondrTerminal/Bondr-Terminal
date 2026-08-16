@@ -82,6 +82,10 @@ export function TurnkeyProfileLogin() {
         organizationId: account.organizationId ?? undefined,
         email: account.email ?? undefined,
         firstAccountAddress: account.firstAccountAddress ?? undefined,
+        authMethod: account.authMethod ?? undefined,
+        externalWalletAddress: account.externalWalletAddress ?? undefined,
+        externalWalletProvider: account.externalWalletProvider ?? undefined,
+        externalWalletChain: account.externalWalletChain ?? undefined,
         userName: form.userName,
         displayName: form.displayName,
         bio: form.bio,
@@ -101,6 +105,18 @@ export function TurnkeyProfileLogin() {
     try {
       await account.refresh();
       setSyncStatus('Turnkey client refreshed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function login() {
+    setBusy(true);
+    try {
+      await account.login();
+      setSyncStatus('Turnkey login opened. Choose wallet to authenticate with Phantom/Solflare, or email/passkey if needed.');
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Turnkey login failed.');
     } finally {
       setBusy(false);
     }
@@ -150,6 +166,7 @@ export function TurnkeyProfileLogin() {
           <p>Your Turnkey identity unlocks the terminal. Your profile organizes the operator account. Browser-wallet signing remains separate from login.</p>
         </div>
         <div className="profileActions">
+          <button className="button" type="button" onClick={() => void login()} disabled={!account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Logged in' : 'Log in with Turnkey'}</button>
           <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!account.clientReady || busy}>Refresh Turnkey</button>
           <button className="button secondary" type="button" onClick={() => void loadProfile()} disabled={!account.authenticated || busy}>Reload profile</button>
           <button className="button secondary" type="button" onClick={() => void logout()} disabled={!account.authenticated || busy}>Log out</button>
@@ -176,6 +193,10 @@ export function TurnkeyProfileLogin() {
           <div className="sideRow"><span>Organization</span><strong>{shortValue(account.organizationId)}</strong></div>
           <div className="sideRow"><span>Embedded wallets</span><strong>{account.walletCount}</strong></div>
           <div className="sideRow"><span>First account</span><strong>{shortValue(account.firstAccountAddress)}</strong></div>
+          <div className="sideRow"><span>Auth method</span><strong>{account.authMethod ?? '—'}</strong></div>
+          <div className="sideRow"><span>External wallet</span><strong>{shortValue(profile?.externalWalletAddress ?? account.externalWalletAddress)}</strong></div>
+          <div className="sideRow"><span>External provider</span><strong>{profile?.externalWalletProvider ?? account.externalWalletProvider ?? '—'}</strong></div>
+          <div className="sideRow"><span>External chain</span><strong>{profile?.externalWalletChain ?? account.externalWalletChain ?? '—'}</strong></div>
           <div className="sideRow"><span>Browser wallet</span><strong>{browserWallet}</strong></div>
           <div className="sideRow"><span>Session JWT</span><strong>{account.sessionJwt ? 'available' : 'not exposed'}</strong></div>
           <div className="sideRow"><span>Profile storage</span><strong>verified / ephemeral</strong></div>

@@ -18,6 +18,10 @@ type DbProfileRow = {
   bio: string | null;
   preferred_wallet_label: string | null;
   first_account_address: string | null;
+  auth_method: string | null;
+  external_wallet_address: string | null;
+  external_wallet_provider: string | null;
+  external_wallet_chain: string | null;
   created_at: string | Date;
   updated_at: string | Date;
   last_seen_at: string | Date;
@@ -61,11 +65,19 @@ async function ensureProfileSchema() {
         bio text,
         preferred_wallet_label text,
         first_account_address text,
+        auth_method text,
+        external_wallet_address text,
+        external_wallet_provider text,
+        external_wallet_chain text,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now(),
         last_seen_at timestamptz not null default now(),
         primary key (user_id, organization_id)
       );
+      alter table bondr_profiles add column if not exists auth_method text;
+      alter table bondr_profiles add column if not exists external_wallet_address text;
+      alter table bondr_profiles add column if not exists external_wallet_provider text;
+      alter table bondr_profiles add column if not exists external_wallet_chain text;
       create index if not exists bondr_profiles_updated_idx on bondr_profiles (updated_at desc);
       create index if not exists bondr_profiles_username_idx on bondr_profiles (lower(username));
     `).then(() => undefined);
@@ -85,6 +97,10 @@ function fromDbRow(row: DbProfileRow): BondrStoredProfile {
     ...(row.bio ? { bio: row.bio } : {}),
     ...(row.preferred_wallet_label ? { preferredWalletLabel: row.preferred_wallet_label } : {}),
     ...(row.first_account_address ? { firstAccountAddress: row.first_account_address } : {}),
+    ...(row.auth_method ? { authMethod: row.auth_method } : {}),
+    ...(row.external_wallet_address ? { externalWalletAddress: row.external_wallet_address } : {}),
+    ...(row.external_wallet_provider ? { externalWalletProvider: row.external_wallet_provider } : {}),
+    ...(row.external_wallet_chain ? { externalWalletChain: row.external_wallet_chain } : {}),
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
     lastSeenAt: new Date(row.last_seen_at).toISOString()
@@ -121,6 +137,10 @@ export async function loadOrCreateBondrProfile(input: {
   organizationId: string;
   email?: string;
   firstAccountAddress?: string;
+  authMethod?: string;
+  externalWalletAddress?: string;
+  externalWalletProvider?: string;
+  externalWalletChain?: string;
 }) {
   const pool = profilePool();
   const now = new Date().toISOString();
@@ -130,7 +150,7 @@ export async function loadOrCreateBondrProfile(input: {
     const key = profileKey(input.userId, input.organizationId);
     const existing = store.get(key);
     if (existing) {
-      const profile = { ...existing, lastSeenAt: now, ...(input.email ? { email: input.email } : {}), ...(input.firstAccountAddress ? { firstAccountAddress: input.firstAccountAddress } : {}) };
+      const profile = { ...existing, lastSeenAt: now, ...(input.email ? { email: input.email } : {}), ...(input.firstAccountAddress ? { firstAccountAddress: input.firstAccountAddress } : {}), ...(input.authMethod ? { authMethod: input.authMethod } : {}), ...(input.externalWalletAddress ? { externalWalletAddress: input.externalWalletAddress } : {}), ...(input.externalWalletProvider ? { externalWalletProvider: input.externalWalletProvider } : {}), ...(input.externalWalletChain ? { externalWalletChain: input.externalWalletChain } : {}) };
       store.set(key, profile);
       return { profile, created: false, ...bondrProfileStorageMetadata() };
     }
@@ -144,14 +164,19 @@ export async function loadOrCreateBondrProfile(input: {
   const result = await pool.query<DbProfileRow>(`
     insert into bondr_profiles (
       user_id, organization_id, username, display_name, email, avatar_seed, avatar_gradient,
-      first_account_address, created_at, updated_at, last_seen_at
-    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$9)
+      first_account_address, auth_method, external_wallet_address, external_wallet_provider,
+      external_wallet_chain, created_at, updated_at, last_seen_at
+    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$13)
     on conflict (user_id, organization_id) do update set
       email = coalesce(excluded.email, bondr_profiles.email),
       first_account_address = coalesce(excluded.first_account_address, bondr_profiles.first_account_address),
+      auth_method = coalesce(excluded.auth_method, bondr_profiles.auth_method),
+      external_wallet_address = coalesce(excluded.external_wallet_address, bondr_profiles.external_wallet_address),
+      external_wallet_provider = coalesce(excluded.external_wallet_provider, bondr_profiles.external_wallet_provider),
+      external_wallet_chain = coalesce(excluded.external_wallet_chain, bondr_profiles.external_wallet_chain),
       last_seen_at = now()
     returning *;
-  `, [generated.userId, generated.organizationId, generated.userName, generated.displayName, generated.email ?? null, generated.avatarSeed, generated.avatarGradient, generated.firstAccountAddress ?? null, now]);
+  `, [generated.userId, generated.organizationId, generated.userName, generated.displayName, generated.email ?? null, generated.avatarSeed, generated.avatarGradient, generated.firstAccountAddress ?? null, generated.authMethod ?? null, generated.externalWalletAddress ?? null, generated.externalWalletProvider ?? null, generated.externalWalletChain ?? null, now]);
 
   return { profile: fromDbRow(result.rows[0]), created: result.rowCount === 1, ...bondrProfileStorageMetadata() };
 }
@@ -170,8 +195,9 @@ export async function saveBondrProfile(profile: BondrStoredProfile) {
   const result = await pool.query<DbProfileRow>(`
     insert into bondr_profiles (
       user_id, organization_id, username, display_name, email, avatar_seed, avatar_gradient,
-      bio, preferred_wallet_label, first_account_address, created_at, updated_at, last_seen_at
-    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
+      bio, preferred_wallet_label, first_account_address, auth_method, external_wallet_address,
+      external_wallet_provider, external_wallet_chain, created_at, updated_at, last_seen_at
+    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
     on conflict (user_id, organization_id) do update set
       username = excluded.username,
       display_name = excluded.display_name,
@@ -181,10 +207,14 @@ export async function saveBondrProfile(profile: BondrStoredProfile) {
       bio = excluded.bio,
       preferred_wallet_label = excluded.preferred_wallet_label,
       first_account_address = coalesce(excluded.first_account_address, bondr_profiles.first_account_address),
+      auth_method = coalesce(excluded.auth_method, bondr_profiles.auth_method),
+      external_wallet_address = coalesce(excluded.external_wallet_address, bondr_profiles.external_wallet_address),
+      external_wallet_provider = coalesce(excluded.external_wallet_provider, bondr_profiles.external_wallet_provider),
+      external_wallet_chain = coalesce(excluded.external_wallet_chain, bondr_profiles.external_wallet_chain),
       updated_at = excluded.updated_at,
       last_seen_at = excluded.last_seen_at
     returning *;
-  `, [next.userId, next.organizationId, next.userName, next.displayName, next.email ?? null, next.avatarSeed, next.avatarGradient, next.bio ?? null, next.preferredWalletLabel ?? null, next.firstAccountAddress ?? null, next.createdAt, now]);
+  `, [next.userId, next.organizationId, next.userName, next.displayName, next.email ?? null, next.avatarSeed, next.avatarGradient, next.bio ?? null, next.preferredWalletLabel ?? null, next.firstAccountAddress ?? null, next.authMethod ?? null, next.externalWalletAddress ?? null, next.externalWalletProvider ?? null, next.externalWalletChain ?? null, next.createdAt, now]);
 
   return { profile: fromDbRow(result.rows[0]), ...bondrProfileStorageMetadata() };
 }

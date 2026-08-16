@@ -24,6 +24,8 @@ export async function GET() {
       serverVerification: 'turnkey-session-jwt',
       verificationHelper: 'apps/web/lib/turnkey-session-auth.ts',
       requiredHeader: 'Authorization: Bearer <Turnkey session JWT>',
+      externalWalletAuth: 'enabled-in-client-config',
+      externalWalletAuthModel: 'wallet-auth-proves-identity-only; transaction signing remains explicit browser review',
       durableProfileDatabase: profileStorage.durableProfileDatabase,
       profileStorage,
       blocker: profileStorage.durableProfileDatabase ? null : 'DATABASE_URL is not configured; profile persistence is process memory only.',
@@ -35,6 +37,8 @@ export async function GET() {
     turnkey: {
       organizationIdConfigured,
       authProxyConfigIdConfigured,
+      walletAuthEnabledInClient: true,
+      walletAuthChains: ['solana'],
       requiredPublicEnv: ['NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID', 'NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID']
     },
     operatorSession: {
