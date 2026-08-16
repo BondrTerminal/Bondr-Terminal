@@ -152,6 +152,11 @@ export function BondrLandingPage() {
             </div>
             <small>Your BONDR profile unlocks the terminal. Your browser wallet remains the signer.</small>
             {message && <p className="bondrLoginMessage">{message}</p>}
+            {account.debug.lastErrorMessage && (
+              <p className="bondrLoginMessage">
+                {account.debug.lastEvent}: {account.debug.lastErrorCode ? `${account.debug.lastErrorCode} - ` : ''}{account.debug.lastErrorMessage}
+              </p>
+            )}
           </section>
         </div>
       )}

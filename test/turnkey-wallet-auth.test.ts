@@ -22,7 +22,8 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /loginWithExternalWallet:\s*async\s*\(preferredChain = 'solana'\)/);
   assert.match(providerSource, /const loadedProviders = turnkey\.walletProviders as TurnkeyWalletProviderLike\[\]/);
   assert.match(providerSource, /fetchWalletProviders\(preferredChain as never\)/);
-  assert.match(providerSource, /loginOrSignupWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
+  assert.match(providerSource, /loginOrSignupWithWallet\(\{\s*walletProvider: selectedProvider as never,\s*createSubOrgParams: walletAuthCreateSubOrgParams\(selectedProvider, preferredChain\) as never/s);
+  assert.match(providerSource, /function walletAuthCreateSubOrgParams/);
   assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
   assert.match(providerSource, /wallet-login-session-stored/);
   assert.match(providerSource, /wallet-login-missing-session-token/);
@@ -48,8 +49,10 @@ test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(landingSource, /continueWithWallet\(chain: 'solana' \| 'ethereum'\)/);
   assert.match(landingSource, /Solana wallet/);
   assert.match(landingSource, /EVM wallet/);
+  assert.match(landingSource, /account\.debug\.lastErrorMessage/);
   assert.doesNotMatch(landingSource, /async function continueWithWallet[\s\S]*await waitForModalUnmount\(\);/);
   assert.match(profileUiSource, /Choose wallet to authenticate with Phantom\/Solflare/);
+  assert.match(profileUiSource, /Turnkey debug:/);
   assert.match(profileUiSource, /External wallet/);
   assert.match(readinessSource, /externalWalletAuth:\s*'enabled-in-client-config'/);
   assert.match(readinessSource, /wallet-auth-proves-identity-only/);

@@ -128,6 +128,11 @@ type TurnkeyWalletProviderLike = {
   connectedAddresses?: string[];
 };
 
+type WalletAuthCreateSubOrgParams = {
+  userName: string;
+  subOrgName: string;
+};
+
 const defaultDebugState: AuthDebugState = {
   lastEvent: 'not-started',
   callbackFired: false,
@@ -242,7 +247,7 @@ function sessionExpiryIso(expiry: unknown) {
 }
 
 function safeErrorMessage(value: unknown) {
-  return value instanceof Error ? value.message.slice(0, 240) : 'Turnkey auth error';
+  return detailedErrorMessage(value).slice(0, 360);
 }
 
 function safeErrorCode(value: unknown) {
@@ -251,6 +256,39 @@ function safeErrorCode(value: unknown) {
     return typeof code === 'string' ? code.slice(0, 80) : null;
   }
   return null;
+}
+
+function errorStatusCode(value: unknown) {
+  if (typeof value === 'object' && value && 'statusCode' in value) {
+    const statusCode = (value as { statusCode?: unknown }).statusCode;
+    return typeof statusCode === 'number' && Number.isFinite(statusCode) ? statusCode : null;
+  }
+  return null;
+}
+
+function errorCause(value: unknown) {
+  if (typeof value === 'object' && value && 'cause' in value) return (value as { cause?: unknown }).cause;
+  return null;
+}
+
+function detailedErrorMessage(value: unknown): string {
+  if (!(value instanceof Error)) return 'Turnkey auth error';
+  const parts = [value.message];
+  const code = safeErrorCode(value);
+  const statusCode = errorStatusCode(value);
+  const cause = errorCause(value);
+  if (code) parts.push(`code=${code}`);
+  if (statusCode) parts.push(`status=${statusCode}`);
+  if (cause instanceof Error && cause.message && cause.message !== value.message) {
+    parts.push(`cause=${cause.message}`);
+    const causeCode = safeErrorCode(cause);
+    const causeStatus = errorStatusCode(cause);
+    if (causeCode) parts.push(`causeCode=${causeCode}`);
+    if (causeStatus) parts.push(`causeStatus=${causeStatus}`);
+  } else if (typeof cause === 'string' && cause !== value.message) {
+    parts.push(`cause=${cause}`);
+  }
+  return parts.join(' | ');
 }
 
 function addTimeline(current: AuthDebugState, event: string) {
@@ -293,6 +331,22 @@ function selectWalletProvider(providers: TurnkeyWalletProviderLike[], preferredC
     ?? preferredNames.map((name) => chainProviders.find((provider) => providerName(provider).toLowerCase().includes(name))).find(Boolean)
     ?? chainProviders[0]
     ?? null;
+}
+
+function shortWalletIdentifier(address: string | null, fallback: string) {
+  if (!address) return fallback;
+  const compact = address.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  if (compact.length <= 16) return compact || fallback;
+  return `${compact.slice(0, 8)}-${compact.slice(-8)}`;
+}
+
+function walletAuthCreateSubOrgParams(provider: TurnkeyWalletProviderLike, chain: 'solana' | 'ethereum'): WalletAuthCreateSubOrgParams {
+  const providerLabel = providerName(provider).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'wallet';
+  const walletId = shortWalletIdentifier(providerAddress(provider), providerLabel);
+  return {
+    userName: `bondr-${chain}-${walletId}`,
+    subOrgName: `bondr-${chain}-${walletId}`
+  };
 }
 
 function configuredTurnkeyConfig(): TurnkeyProviderConfig {
@@ -423,7 +477,18 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
       setVerifiedAuthMethod(nextAuthMethod);
       storeVerifiedAuthMethod(nextAuthMethod);
       setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login-or-signup', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet login ${nextAuthMethod.provider}`) }));
-      const result = await turnkey.loginOrSignupWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string; action?: string } | undefined;
+      let result: { sessionToken?: string; address?: string; action?: string } | undefined;
+      try {
+        result = await turnkey.loginOrSignupWithWallet({
+          walletProvider: selectedProvider as never,
+          createSubOrgParams: walletAuthCreateSubOrgParams(selectedProvider, preferredChain) as never
+        }) as { sessionToken?: string; address?: string; action?: string } | undefined;
+      } catch (error) {
+        const message = detailedErrorMessage(error);
+        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-or-signup-failed', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet loginOrSignup failed') }));
+        sessionStorage.removeItem(PENDING_LOGIN_KEY);
+        throw new Error(message);
+      }
       if (result?.address) {
         const walletAuthMethod = { ...nextAuthMethod, identifier: result.address };
         setVerifiedAuthMethod(walletAuthMethod);

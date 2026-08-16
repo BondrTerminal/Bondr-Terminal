@@ -186,6 +186,7 @@ export function TurnkeyProfileLogin() {
           <button className="button secondary" type="button" onClick={() => void logout()} disabled={!account.authenticated || busy}>Log out</button>
         </div>
         {syncStatus && <p className="qaMuted">{syncStatus}</p>}
+        {account.debug.lastErrorMessage && <p className="qaMuted">Turnkey debug: {account.debug.lastEvent} {account.debug.lastErrorCode ? `(${account.debug.lastErrorCode}) ` : ''}{account.debug.lastErrorMessage}</p>}
       </div>
 
       <div className="documentCard accountGlassCard bondrProfileEditor">
