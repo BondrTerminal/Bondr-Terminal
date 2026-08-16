@@ -38,7 +38,7 @@ export async function GET() {
       organizationIdConfigured,
       authProxyConfigIdConfigured,
       walletAuthEnabledInClient: true,
-      walletAuthChains: ['solana'],
+      walletAuthChains: ['solana', 'ethereum'],
       requiredPublicEnv: ['NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID', 'NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID']
     },
     operatorSession: {

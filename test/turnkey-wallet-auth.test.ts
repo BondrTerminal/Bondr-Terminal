@@ -6,6 +6,7 @@ const providerSource = readFileSync(new URL('../apps/web/app/components/TurnkeyA
 const profileRouteSource = readFileSync(new URL('../apps/web/app/api/account/profile/route.ts', import.meta.url), 'utf8');
 const profileStoreSource = readFileSync(new URL('../apps/web/lib/bondr-profile-store.ts', import.meta.url), 'utf8');
 const profileUiSource = readFileSync(new URL('../apps/web/app/profile/components/TurnkeyProfileLogin.tsx', import.meta.url), 'utf8');
+const landingSource = readFileSync(new URL('../apps/web/app/components/BondrLandingPage.tsx', import.meta.url), 'utf8');
 const readinessSource = readFileSync(new URL('../apps/web/app/api/account/readiness/route.ts', import.meta.url), 'utf8');
 const envExampleSource = readFileSync(new URL('../apps/web/.env.example', import.meta.url), 'utf8');
 
@@ -15,12 +16,15 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /walletConfig:\s*\{/);
   assert.match(providerSource, /auth:\s*true/);
   assert.match(providerSource, /solana:\s*\{\s*native:\s*true/s);
+  assert.match(providerSource, /ethereum:\s*\{\s*native:\s*true/s);
   assert.match(providerSource, /walletConnectNamespaces:\s*\[\]/);
   assert.match(providerSource, /loginWithExternalWallet/);
-  assert.match(providerSource, /fetchWalletProviders\('solana' as never\)/);
+  assert.match(providerSource, /loginWithExternalWallet:\s*async\s*\(preferredChain = 'solana'\)/);
+  assert.match(providerSource, /fetchWalletProviders\(preferredChain as never\)/);
   assert.match(providerSource, /loginOrSignupWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
   assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
   assert.match(providerSource, /wallet-login-session-stored/);
+  assert.match(providerSource, /wallet-login-missing-session-token/);
   assert.match(providerSource, /token:\s*session\.token/);
   assert.match(providerSource, /externalWalletAddress/);
   assert.match(providerSource, /onAuthenticationSuccess:\s*\(\{ session, method, action, identifier \}\)/);
@@ -40,11 +44,14 @@ test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(profileUiSource, /Log in with Turnkey/);
   assert.match(profileUiSource, /Log in with Solana wallet/);
   assert.match(profileUiSource, /Looking for a Solana wallet through Turnkey/);
+  assert.match(landingSource, /continueWithWallet\(chain: 'solana' \| 'ethereum'\)/);
+  assert.match(landingSource, /Solana wallet/);
+  assert.match(landingSource, /EVM wallet/);
   assert.match(profileUiSource, /Choose wallet to authenticate with Phantom\/Solflare/);
   assert.match(profileUiSource, /External wallet/);
   assert.match(readinessSource, /externalWalletAuth:\s*'enabled-in-client-config'/);
   assert.match(readinessSource, /wallet-auth-proves-identity-only/);
-  assert.match(readinessSource, /walletAuthChains:\s*\['solana'\]/);
-  assert.match(envExampleSource, /Wallet auth is enabled client-side for Solana/);
+  assert.match(readinessSource, /walletAuthChains:\s*\['solana', 'ethereum'\]/);
+  assert.match(envExampleSource, /Wallet auth is enabled client-side for Solana and injected EVM wallets/);
   assert.match(envExampleSource, /Transaction signing still requires explicit browser review/);
 });

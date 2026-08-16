@@ -50,7 +50,7 @@ export type BondrTurnkeyAccount = {
     timeline: string[];
   };
   login: () => Promise<void>;
-  loginWithExternalWallet: () => Promise<void>;
+  loginWithExternalWallet: (preferredChain?: 'solana' | 'ethereum') => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -277,11 +277,21 @@ function providerAddress(provider: TurnkeyWalletProviderLike | undefined) {
   return provider?.connectedAddresses?.find((address) => Boolean(address?.trim())) ?? null;
 }
 
-function selectSolanaWalletProvider(providers: TurnkeyWalletProviderLike[]) {
-  const solanaProviders = providers.filter((provider) => provider.chainInfo?.namespace === 'solana');
-  return solanaProviders.find((provider) => provider.connectedAddresses && provider.connectedAddresses.length > 0)
-    ?? solanaProviders.find((provider) => providerName(provider).toLowerCase().includes('phantom'))
-    ?? solanaProviders[0]
+function providerChain(provider: TurnkeyWalletProviderLike | undefined) {
+  const namespace = provider?.chainInfo?.namespace;
+  if (namespace === 'solana') return 'solana';
+  if (namespace === 'ethereum' || namespace === 'eip155') return 'ethereum';
+  return namespace ?? null;
+}
+
+function selectWalletProvider(providers: TurnkeyWalletProviderLike[], preferredChain: 'solana' | 'ethereum') {
+  const chainProviders = providers.filter((provider) => providerChain(provider) === preferredChain);
+  const preferredNames = preferredChain === 'solana'
+    ? ['phantom', 'solflare', 'backpack']
+    : ['metamask', 'rabby', 'coinbase', 'phantom'];
+  return chainProviders.find((provider) => provider.connectedAddresses && provider.connectedAddresses.length > 0)
+    ?? preferredNames.map((name) => chainProviders.find((provider) => providerName(provider).toLowerCase().includes(name))).find(Boolean)
+    ?? chainProviders[0]
     ?? null;
 }
 
@@ -315,7 +325,7 @@ function configuredTurnkeyConfig(): TurnkeyProviderConfig {
           walletConnectNamespaces: []
         },
         ethereum: {
-          native: false,
+          native: true,
           walletConnectNamespaces: []
         }
       }
@@ -390,27 +400,27 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
       await turnkey.handleLogin({ title: 'Log in to Bondr.terminal' });
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
     },
-    loginWithExternalWallet: async () => {
+    loginWithExternalWallet: async (preferredChain = 'solana') => {
       sessionStorage.setItem(PENDING_LOGIN_KEY, 'true');
-      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-provider-scan', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, 'wallet provider scan') }));
-      const providers = await turnkey.fetchWalletProviders('solana' as never) as TurnkeyWalletProviderLike[];
-      const selectedProvider = selectSolanaWalletProvider(providers);
+      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-provider-scan', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet provider scan`) }));
+      const providers = await turnkey.fetchWalletProviders(preferredChain as never) as TurnkeyWalletProviderLike[];
+      const selectedProvider = selectWalletProvider(providers, preferredChain);
       if (!selectedProvider) {
         const message = providers.length > 0
-          ? `Turnkey found ${providers.length} wallet provider(s), but none were Solana providers.`
-          : 'No Solana wallet provider found by Turnkey. Unlock Phantom/Solflare and refresh the page.';
-        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-no-solana-provider', lastErrorMessage: message, timeline: addTimeline(current, 'no solana wallet provider') }));
+          ? `Turnkey found ${providers.length} wallet provider(s), but none were ${preferredChain} providers.`
+          : `No ${preferredChain} wallet provider found by Turnkey. Unlock your wallet extension and refresh the page.`;
+        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-no-provider', lastErrorMessage: message, timeline: addTimeline(current, `no ${preferredChain} wallet provider`) }));
         throw new Error(message);
       }
       const nextAuthMethod = {
         method: 'wallet',
         identifier: providerAddress(selectedProvider),
         provider: providerName(selectedProvider),
-        chain: 'solana'
+        chain: preferredChain
       };
       setVerifiedAuthMethod(nextAuthMethod);
       storeVerifiedAuthMethod(nextAuthMethod);
-      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login-or-signup', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `wallet login ${nextAuthMethod.provider}`) }));
+      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login-or-signup', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet login ${nextAuthMethod.provider}`) }));
       const result = await turnkey.loginOrSignupWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string; action?: string } | undefined;
       if (result?.address) {
         const walletAuthMethod = { ...nextAuthMethod, identifier: result.address };
@@ -428,6 +438,21 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
         }
       }
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
+      if (!result?.sessionToken) {
+        const verified = normalizeVerifiedSession(turnkey.session as TurnkeyAuthSessionLike | undefined);
+        if (verified) {
+          setVerifiedSession(verified);
+          storeVerifiedSession(verified);
+          sessionStorage.removeItem(PENDING_LOGIN_KEY);
+          window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-refreshed-session-stored', callbackMethod: 'wallet', callbackAction: result?.action ?? 'login-or-signup', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet refreshed session stored') }));
+          return;
+        }
+        sessionStorage.removeItem(PENDING_LOGIN_KEY);
+        const message = 'Wallet signature completed, but Turnkey did not return a session token. Check wallet auth/sub-org settings in the Turnkey auth proxy.';
+        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-missing-session-token', lastErrorMessage: message, timeline: addTimeline(current, 'wallet missing session token') }));
+        throw new Error(message);
+      }
     },
     logout: async () => {
       clearVerifiedSession();

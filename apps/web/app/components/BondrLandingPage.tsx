@@ -68,6 +68,27 @@ export function BondrLandingPage() {
     }
   }
 
+  async function continueWithWallet(chain: 'solana' | 'ethereum') {
+    if (!account.configured || !account.clientReady) {
+      setMessage('Turnkey login is not fully configured yet.');
+      return;
+    }
+
+    setBusy(true);
+    setMessage(`Opening ${chain === 'solana' ? 'Solana' : 'EVM'} wallet login...`);
+    setIntent(null);
+    await waitForModalUnmount();
+    try {
+      await account.loginWithExternalWallet(chain);
+      await account.refresh();
+      setMessage('Wallet signature verified. Unlocking BONDR terminal...');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Wallet login did not complete.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const modalCopy = intent ? intentCopy[intent] : null;
 
   return (
@@ -126,6 +147,10 @@ export function BondrLandingPage() {
             <button className="bondrAuthPrimary" type="button" onClick={() => void continueWithTurnkey()} disabled={!account.configured || !account.clientReady || busy}>
               {busy ? 'Opening Turnkey…' : account.configured ? 'Continue with Turnkey' : 'Turnkey unavailable'}
             </button>
+            <div className="bondrWalletAuthButtons" aria-label="Wallet login options">
+              <button type="button" onClick={() => void continueWithWallet('solana')} disabled={!account.configured || !account.clientReady || busy}>Solana wallet</button>
+              <button type="button" onClick={() => void continueWithWallet('ethereum')} disabled={!account.configured || !account.clientReady || busy}>EVM wallet</button>
+            </div>
             <small>Your BONDR profile unlocks the terminal. Your browser wallet remains the signer.</small>
             {message && <p className="bondrLoginMessage">{message}</p>}
           </section>
