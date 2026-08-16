@@ -10,6 +10,17 @@ const reportSchema = z.object({
   userAgent: z.string().max(300).optional()
 }).strict();
 
+type ErrorReport = {
+  observedAt: string;
+  digest: string;
+  name: string;
+  message: string;
+  path: string;
+  userAgent: string;
+};
+
+const recentReports: ErrorReport[] = [];
+
 function clean(value: string | undefined) {
   return value
     ?.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]')
@@ -31,12 +42,22 @@ export async function POST(request: Request) {
   }
 
   const report = {
+    observedAt: new Date().toISOString(),
     digest: clean(parsed.data.digest) ?? 'no-digest',
     name: clean(parsed.data.name) ?? 'Error',
     message: clean(parsed.data.message) ?? 'No message',
     path: clean(parsed.data.path) ?? '/',
     userAgent: clean(parsed.data.userAgent) ?? 'unknown'
   };
+  recentReports.unshift(report);
+  recentReports.splice(20);
   console.error('BONDR client route error report', report);
   return Response.json({ status: 'ok', digest: report.digest }, { headers: { 'cache-control': 'no-store' } });
+}
+
+export async function GET() {
+  return Response.json({
+    status: 'ok',
+    reports: recentReports.slice(0, 20)
+  }, { headers: { 'cache-control': 'no-store' } });
 }
