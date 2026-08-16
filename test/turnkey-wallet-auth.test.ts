@@ -140,10 +140,17 @@ test('route error boundary fails closed with profile audit recovery', () => {
   assert.match(appErrorSource, /Route/);
   assert.match(appErrorSource, /Error type/);
   assert.match(appErrorSource, /\/api\/client-error-report/);
+  assert.match(appErrorSource, /collectDiagnostics/);
+  assert.match(appErrorSource, /storageSnapshot/);
+  assert.match(appErrorSource, /bondr_verified_auth_session/);
+  assert.match(appErrorSource, /cookieNames/);
   assert.match(appErrorSource, /Open Profile Audit/);
   assert.match(appErrorSource, /href="\/profile"/);
   assert.match(clientErrorReportSource, /BONDR client route error report/);
+  assert.match(clientErrorReportSource, /diagnostics:\s*z\.record/);
+  assert.match(clientErrorReportSource, /cleanDiagnosticValue/);
   assert.match(clientErrorReportSource, /Bearer \[redacted\]/);
+  assert.match(clientErrorReportSource, /token\|jwt\|secret\|private\|seed\|password\|authorization\|bearer/i);
   assert.match(clientErrorReportSource, /invalid-error-report/);
 });
 

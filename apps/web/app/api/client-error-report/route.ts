@@ -7,7 +7,8 @@ const reportSchema = z.object({
   name: z.string().max(120).optional(),
   message: z.string().max(500).optional(),
   path: z.string().max(300).optional(),
-  userAgent: z.string().max(300).optional()
+  userAgent: z.string().max(300).optional(),
+  diagnostics: z.record(z.string(), z.unknown()).optional()
 }).strict();
 
 type ErrorReport = {
@@ -17,6 +18,7 @@ type ErrorReport = {
   message: string;
   path: string;
   userAgent: string;
+  diagnostics?: Record<string, unknown>;
 };
 
 const recentReports: ErrorReport[] = [];
@@ -26,6 +28,24 @@ function clean(value: string | undefined) {
     ?.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [redacted]')
     .replace(/session(Token|Jwt)?["'=:\s]+[A-Za-z0-9._-]+/gi, 'session[redacted]')
     .slice(0, 500);
+}
+
+function cleanDiagnosticValue(value: unknown): unknown {
+  if (typeof value === 'string') return clean(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'boolean' || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, 24).map(cleanDiagnosticValue);
+  if (!value || typeof value !== 'object') return undefined;
+  const output: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value).slice(0, 40)) {
+    if (/token|jwt|secret|private|seed|password|authorization|bearer/i.test(key)) {
+      output[key] = '[redacted]';
+      continue;
+    }
+    const cleaned = cleanDiagnosticValue(item);
+    if (typeof cleaned !== 'undefined') output[key.slice(0, 80)] = cleaned;
+  }
+  return output;
 }
 
 export async function POST(request: Request) {
@@ -47,7 +67,8 @@ export async function POST(request: Request) {
     name: clean(parsed.data.name) ?? 'Error',
     message: clean(parsed.data.message) ?? 'No message',
     path: clean(parsed.data.path) ?? '/',
-    userAgent: clean(parsed.data.userAgent) ?? 'unknown'
+    userAgent: clean(parsed.data.userAgent) ?? 'unknown',
+    diagnostics: cleanDiagnosticValue(parsed.data.diagnostics) as Record<string, unknown> | undefined
   };
   recentReports.unshift(report);
   recentReports.splice(20);
