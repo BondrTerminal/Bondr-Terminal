@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+
+const DIAGNOSTICS_BUILD = 'route-diagnostics-v2';
 
 function safeJsonParse(value: string | null) {
   if (!value) return null;
@@ -103,6 +105,7 @@ function collectDiagnostics() {
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const digest = error.digest ?? 'no-digest';
+  const diagnostics = useMemo(() => (typeof window === 'undefined' ? null : collectDiagnostics()), []);
 
   useEffect(() => {
     const path = window.location.pathname + window.location.search;
@@ -112,15 +115,38 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
       message: error.message,
       path,
       userAgent: window.navigator.userAgent,
-      diagnostics: collectDiagnostics()
+      diagnostics: {
+        build: DIAGNOSTICS_BUILD,
+        ...diagnostics
+      }
     };
     console.error('BONDR route error', report);
+    try {
+      const blob = new Blob([JSON.stringify(report)], { type: 'application/json' });
+      window.navigator.sendBeacon?.('/api/client-error-report', blob);
+    } catch {
+      // Keep the error boundary fail-closed even if diagnostic transport is unavailable.
+    }
     void fetch('/api/client-error-report', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      keepalive: true,
       body: JSON.stringify(report)
     }).catch(() => undefined);
-  }, [digest, error.message]);
+  }, [diagnostics, digest, error.message, error.name]);
+
+  const localStorageDiagnostics = diagnostics?.localStorage;
+  const sessionStorageDiagnostics = diagnostics?.sessionStorage;
+  const verifiedSessionDiagnostics = diagnostics?.verifiedSession;
+  const storageSummary = typeof localStorageDiagnostics === 'object' && localStorageDiagnostics && 'available' in localStorageDiagnostics
+    ? localStorageDiagnostics
+    : null;
+  const sessionStorageSummary = typeof sessionStorageDiagnostics === 'object' && sessionStorageDiagnostics && 'available' in sessionStorageDiagnostics
+    ? sessionStorageDiagnostics
+    : null;
+  const verifiedSessionSummary = typeof verifiedSessionDiagnostics === 'object' && verifiedSessionDiagnostics && 'available' in verifiedSessionDiagnostics
+    ? verifiedSessionDiagnostics
+    : null;
 
   return (
     <main className="bondrErrorShell" aria-label="BONDR route error">
@@ -133,6 +159,10 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           <div className="sideRow"><span>Error digest</span><strong>{digest}</strong></div>
           <div className="sideRow"><span>Error type</span><strong>{error.name || 'Error'}</strong></div>
           <div className="sideRow"><span>Recovery</span><strong>reload or return to Hub</strong></div>
+          <div className="sideRow"><span>Diagnostics build</span><strong>{DIAGNOSTICS_BUILD}</strong></div>
+          <div className="sideRow"><span>Verified auth</span><strong>{storageSummary && 'hasVerifiedAuth' in storageSummary ? String(storageSummary.hasVerifiedAuth) : 'unknown'}</strong></div>
+          <div className="sideRow"><span>Session auth</span><strong>{sessionStorageSummary && 'hasVerifiedAuthSession' in sessionStorageSummary ? String(sessionStorageSummary.hasVerifiedAuthSession) : 'unknown'}</strong></div>
+          <div className="sideRow"><span>Session expired</span><strong>{verifiedSessionSummary && 'expired' in verifiedSessionSummary ? String(verifiedSessionSummary.expired) : 'unknown'}</strong></div>
         </div>
         <div className="profileActions">
           <button className="button" type="button" onClick={() => reset()}>Retry view</button>
