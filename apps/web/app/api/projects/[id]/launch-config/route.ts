@@ -3,6 +3,7 @@ import { getMeridianStore, getMeridianStorePath, type LaunchConfig, type Meridia
 import { getMeridianWalletStore, updateDurableProject, walletStoreMode } from '../../../../../lib/durable-wallet-store';
 import { atomicJsonWrite, mutationBlockedResponse, mutationMeta, mutationMode, sameOriginAllowed } from '../../../../../lib/mutation-safety';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../../../../../lib/deployment-launch-path';
+import { meridianAuthRequiredResponse } from '../../../../../lib/meridian-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -204,6 +205,8 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function PATCH(request: Request, { params }: Params) {
   const observedAt = new Date().toISOString();
+  const authBlocked = await meridianAuthRequiredResponse(request);
+  if (authBlocked) return authBlocked;
   const origin = sameOriginAllowed(request);
   if (!origin.allowed) return mutationBlockedResponse(origin.note);
   if (mutationMode() === 'disabled') return mutationBlockedResponse('Mutations are disabled by MUTATIONS_DISABLED=true.');

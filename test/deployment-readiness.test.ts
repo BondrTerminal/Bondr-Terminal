@@ -728,6 +728,13 @@ test('manual launch receipt reconciliation requires Meridian operator auth', () 
   assert.ok(source.indexOf('meridianAuthRequiredResponse(request)') < source.indexOf('sameOriginAllowed(request)'));
 });
 
+test('launch config mutation requires Meridian operator auth', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/projects/[id]/launch-config/route.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("import { meridianAuthRequiredResponse }"));
+  assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
+  assert.ok(source.indexOf('meridianAuthRequiredResponse(request)') < source.indexOf('sameOriginAllowed(request)'));
+});
+
 test('launch receipt normalization rejects invalid mint public keys', () => {
   const valid = normalizeLaunchReceipt({
     signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
