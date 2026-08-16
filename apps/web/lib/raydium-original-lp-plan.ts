@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { PublicKey } from '@solana/web3.js';
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { buildRaydiumRouteConfig, type RaydiumRouteConfigContract } from './raydium-route-config';
 
 const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -14,6 +15,7 @@ export type RaydiumOriginalLpPlan = {
   quoteMint: string;
   deployer: string | null;
   planHash: string;
+  routeConfig: RaydiumRouteConfigContract;
   unsignedBuildContract: {
     adapter: '@raydium-io/raydium-sdk-v2';
     method: 'makeCreateCpmmPoolInInstruction';
@@ -79,6 +81,7 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
   const route = project?.launchConfig?.route ?? null;
   const rules = project?.launchConfig?.devWalletRules ?? null;
   const deployer = deployerWallet(project, wallets);
+  const routeConfig = buildRaydiumRouteConfig(project, wallets);
   const baseMint = validPublicKey(project?.tokenMint ?? project?.launchReceipt?.tokenMint ?? null);
   const quoteMint = route?.quoteToken === 'USDC' ? 'USDC-resolver-required' : WSOL_MINT;
   const burnLiquidity = Boolean(route?.burnLiquidity);
@@ -99,7 +102,15 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
     quoteMint === WSOL_MINT ? null : 'quote-token-resolver-required'
   ].filter((item): item is string => Boolean(item));
   const chainProofBlockers = [
-    'raydium-cpmm-config-id-required',
+    ...routeConfig.blockers.filter((blocker) => [
+      'raydium-cpmm-config-id-required',
+      'base-decimals-required',
+      'quote-decimals-required',
+      'base-amount-raw-required',
+      'quote-amount-raw-required',
+      'user-base-token-account-derivation-required',
+      'user-quote-token-account-derivation-required'
+    ].includes(blocker)),
     'raydium-user-token-account-proof-required',
     'raydium-pool-account-proof-required',
     'verified-lp-token-account-required',
@@ -136,6 +147,7 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
     quoteMint,
     deployer: deployer?.address ?? null,
     planHash: hash(planCore),
+    routeConfig,
     unsignedBuildContract: {
       adapter: '@raydium-io/raydium-sdk-v2',
       method: 'makeCreateCpmmPoolInInstruction',

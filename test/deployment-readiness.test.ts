@@ -13,6 +13,8 @@ import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-
 import { buildRaydiumLpTokenAccountProof, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
 import { buildRaydiumCpmmCreatePoolTransaction } from '../apps/web/lib/raydium-cpmm-create-pool-adapter.js';
 import { buildRaydiumLpSimulationPolicy } from '../apps/web/lib/raydium-lp-simulation-policy.js';
+import { buildRaydiumRouteConfig } from '../apps/web/lib/raydium-route-config.js';
+import { normalizeRaydiumLaunchReceipt } from '../apps/web/lib/raydium-launch-receipts.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskLifecyclePreview, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
@@ -419,6 +421,20 @@ test('deployment engine LP readiness does not block Pump.fun route with Raydium 
   assert.equal(engines.createLp.execution, 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction');
 });
 
+test('Pump.fun route remains independent from Raydium config and LP blockers', () => {
+  const readiness = buildDeploymentLaunchReadiness(project, [wallet], activation);
+  const engines = buildDeploymentEngineReadiness(project, [wallet], activation);
+
+  assert.equal(readiness.routeCompleteness.platform, 'pump');
+  assert.equal(readiness.adapterRecommendation, 'pumpportal-create');
+  assert.equal(readiness.routeCompleteness.developed, true);
+  assert.deepEqual(readiness.routeCompleteness.missingBuilders, []);
+  assert.ok(!readiness.routeCompleteness.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.equal(readiness.raydiumLaunchReadiness.selected, false);
+  assert.equal(engines.createLp.status, 'not-required');
+  assert.deepEqual(engines.createLp.blockers, []);
+});
+
 test('deployment engine LP readiness marks Raydium route proof-gated', () => {
   const raydiumProject = structuredClone(project);
   raydiumProject.launchPath = 'raydium';
@@ -445,6 +461,65 @@ test('deployment engine LP readiness marks Raydium route proof-gated', () => {
   assert.ok(engines.createLp.blockers.includes('lp-burn-simulation-proof-required'));
 });
 
+test('Raydium route config is Raydium-native and has no Pump.fun dependency', () => {
+  const raydiumProject = structuredClone(project);
+  raydiumProject.launchPath = 'raydium';
+  raydiumProject.tokenMint = validMintPublicKey;
+  raydiumProject.launchConfig = {
+    ...raydiumProject.launchConfig!,
+    route: {
+      ...raydiumProject.launchConfig!.route,
+      platform: 'raydium',
+      raydiumLiquiditySol: 1,
+      raydiumWithheldTokenPct: 10,
+      raydiumWithheldTokenAmount: 1000000,
+      raydiumCpmmConfigId: SystemProgram.programId.toBase58(),
+      raydiumBaseAmountRaw: '1000000',
+      raydiumQuoteAmountRaw: '1000000000',
+      burnLiquidity: true
+    }
+  };
+
+  const config = buildRaydiumRouteConfig(raydiumProject, [wallet]);
+  assert.equal(config.contract, 'bondr-raydium-route-config-v1');
+  assert.equal(config.status, 'ready');
+  assert.equal(config.route.selected, true);
+  assert.equal(config.route.independentOfPumpFun, true);
+  assert.ok(config.route.disallowedDependencies.includes('PumpPortal create'));
+  assert.equal(config.config.validationStatus, 'valid-public-key');
+  assert.equal(config.unsignedBuildInput.endpoint, '/api/deployment/raydium/build-lp');
+  assert.equal(config.tokenAccountPrep.unsignedPrerequisiteTransaction.endpoint, '/api/deployment/raydium/prepare-accounts');
+  assert.ok(config.poolDerivation.poolId);
+  assert.ok(config.poolDerivation.lpMint);
+  assert.deepEqual(config.blockers, []);
+  assert.equal(config.safety.noPumpFunDependency, true);
+});
+
+test('Raydium route config blocks signing path until native config and amounts exist', () => {
+  const raydiumProject = structuredClone(project);
+  raydiumProject.launchPath = 'raydium';
+  raydiumProject.tokenMint = validMintPublicKey;
+  raydiumProject.launchConfig = {
+    ...raydiumProject.launchConfig!,
+    route: {
+      ...raydiumProject.launchConfig!.route,
+      platform: 'raydium',
+      raydiumLiquiditySol: 0,
+      raydiumWithheldTokenPct: 10,
+      raydiumWithheldTokenAmount: 0,
+      burnLiquidity: true
+    }
+  };
+
+  const config = buildRaydiumRouteConfig(raydiumProject, [wallet]);
+  assert.equal(config.status, 'blocked');
+  assert.ok(config.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.ok(config.blockers.includes('base-amount-raw-required'));
+  assert.ok(config.blockers.includes('quote-amount-raw-required'));
+  assert.ok(!config.blockers.includes('client-mint-public-key-required'));
+  assert.equal(config.safety.noPumpFunDependency, true);
+});
+
 test('raydium original LP plan validates route inputs without provider calls', () => {
   const raydiumProject = structuredClone(project);
   raydiumProject.launchPath = 'raydium';
@@ -469,6 +544,8 @@ test('raydium original LP plan validates route inputs without provider calls', (
   assert.equal(plan.liquidityPolicy.initialTokenLiquidityMode, 'withheld-token-percent');
   assert.equal(plan.liquidityPolicy.burnLiquidity, true);
   assert.ok(plan.planHash.length === 64);
+  assert.equal(plan.routeConfig.contract, 'bondr-raydium-route-config-v1');
+  assert.equal(plan.routeConfig.route.independentOfPumpFun, true);
   assert.equal(plan.unsignedBuildContract.endpoint, '/api/deployment/raydium/build-lp');
   assert.equal(plan.unsignedBuildContract.method, 'makeCreateCpmmPoolInInstruction');
   assert.ok(plan.blockers.includes('raydium-cpmm-config-id-required'));
@@ -580,6 +657,16 @@ test('raydium CPMM adapter previews missing inputs without unsigned transaction'
   assert.equal(preview.transactionBase64, undefined);
 });
 
+test('raydium config route exposes read-only native config contract', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/deployment/raydium/config/route.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes('buildRaydiumRouteConfig'));
+  assert.ok(source.includes('GET(request: Request)'));
+  assert.ok(source.includes('POST(request: Request)'));
+  assert.ok(!source.includes('meridianAuthRequiredResponse'));
+  assert.ok(!source.includes('sendTransaction'));
+  assert.ok(!source.includes('signTransaction'));
+});
+
 test('raydium LP proof decodes AMM v4 LP mint and blocks unsupported owners', () => {
   const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
   const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
@@ -594,6 +681,52 @@ test('raydium LP proof decodes AMM v4 LP mint and blocks unsupported owners', ()
   const blocked = resolveRaydiumAmmV4LpMintProof(SystemProgram.programId.toBase58(), data);
   assert.equal(blocked.status, 'blocked');
   assert.ok(blocked.blockers.includes('raydium-amm-v4-owner-required'));
+});
+
+test('Raydium launch receipt requires pool and verified LP account proof', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const lpTokenAccount = 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP';
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const mintProof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  const proof = buildRaydiumLpTokenAccountProof({
+    expectedOwner: wallet.address,
+    lpTokenAccount,
+    lpTokenOwner: wallet.address,
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '1000000000',
+    mintProof
+  });
+  const receipt = normalizeRaydiumLaunchReceipt({
+    signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    tokenMint: validMintPublicKey,
+    poolId: '7aL2JQwYsYfS9yu2e9SYRSnSJg3XMqbe6LbkFGra6ATq',
+    lpMint: lpMint.toBase58(),
+    lpTokenAccount,
+    lpAmountRaw: '1000000000',
+    deployer: wallet.address,
+    confirmedAt: '2026-08-16T00:00:00.000Z',
+    lpTokenAccountProof: proof
+  });
+  assert.equal(receipt.contract, 'bondr-raydium-launch-receipt-v1');
+  assert.equal(receipt.status, 'confirmed');
+  assert.equal(receipt.route, 'raydium');
+  assert.equal(receipt.poolId, '7aL2JQwYsYfS9yu2e9SYRSnSJg3XMqbe6LbkFGra6ATq');
+  assert.equal(receipt.proofStatus, 'verified');
+  assert.deepEqual(receipt.blockers, []);
+  assert.equal(receipt.safety.noPumpFunDependency, true);
+
+  const blocked = normalizeRaydiumLaunchReceipt({
+    signature: receipt.signature!,
+    tokenMint: validMintPublicKey,
+    poolId: receipt.poolId!,
+    lpMint: lpMint.toBase58(),
+    lpTokenAccount,
+    lpAmountRaw: '1000000000',
+    deployer: wallet.address
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes('lp-token-account-proof-required'));
 });
 
 test('raydium LP token account proof verifies owner, mint, and positive balance before burn', () => {

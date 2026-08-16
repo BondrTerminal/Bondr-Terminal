@@ -139,6 +139,11 @@ function mergeLaunchConfig(project: Project, patch?: LaunchConfigPatch['launchCo
       raydiumLiquiditySol: numberField(patch?.route?.raydiumLiquiditySol, base.route.raydiumLiquiditySol, 0, 10000),
       raydiumWithheldTokenPct: numberField(patch?.route?.raydiumWithheldTokenPct, base.route.raydiumWithheldTokenPct, 0, 100),
       raydiumWithheldTokenAmount: numberField(patch?.route?.raydiumWithheldTokenAmount, base.route.raydiumWithheldTokenAmount, 0, 1_000_000_000_000),
+      raydiumCpmmConfigId: stringField(patch?.route?.raydiumCpmmConfigId, base.route.raydiumCpmmConfigId ?? '', 64) || undefined,
+      raydiumBaseDecimals: numberField(patch?.route?.raydiumBaseDecimals, base.route.raydiumBaseDecimals ?? 6, 0, 12),
+      raydiumQuoteDecimals: numberField(patch?.route?.raydiumQuoteDecimals, base.route.raydiumQuoteDecimals ?? 9, 0, 12),
+      raydiumBaseAmountRaw: stringField(patch?.route?.raydiumBaseAmountRaw, base.route.raydiumBaseAmountRaw ?? '', 40) || undefined,
+      raydiumQuoteAmountRaw: stringField(patch?.route?.raydiumQuoteAmountRaw, base.route.raydiumQuoteAmountRaw ?? '', 40) || undefined,
       burnLiquidity: typeof patch?.route?.burnLiquidity === 'boolean' ? patch.route.burnLiquidity : base.route.burnLiquidity
     },
     walletPlan: Array.isArray(patch?.walletPlan) ? patch.walletPlan.map((entry) => walletPlanEntry(entry)).filter((entry): entry is WalletPlanEntry => Boolean(entry)).slice(0, 50) : base.walletPlan,

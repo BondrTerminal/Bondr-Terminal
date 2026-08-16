@@ -53,6 +53,11 @@ export type LaunchConfig = {
     raydiumLiquiditySol: number;
     raydiumWithheldTokenPct: number;
     raydiumWithheldTokenAmount: number;
+    raydiumCpmmConfigId?: string;
+    raydiumBaseDecimals?: number;
+    raydiumQuoteDecimals?: number;
+    raydiumBaseAmountRaw?: string;
+    raydiumQuoteAmountRaw?: string;
     burnLiquidity: boolean;
   };
   walletPlan: WalletPlanEntry[];
