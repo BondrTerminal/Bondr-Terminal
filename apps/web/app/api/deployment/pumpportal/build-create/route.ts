@@ -1,9 +1,17 @@
 import { buildMeridianHubContext, resolveMeridianProjectContextId } from '../../../../../lib/meridian-context';
 import { getMeridianWalletStore } from '../../../../../lib/durable-wallet-store';
 import { getLiveActivationStatus } from '../../../../../lib/live-activation';
+import { meridianAuthRequiredResponse } from '../../../../../lib/meridian-auth';
+import { mutationBlockedResponse, sameOriginAllowed } from '../../../../../lib/mutation-safety';
 import { buildPumpPortalCreateTransaction } from '../../../../../lib/pumpportal-deploy-readiness';
 
 export const dynamic = 'force-dynamic';
+
+const BUILD_WINDOW_MS = 60_000;
+const BUILD_MAX_REQUESTS = 20;
+const globalForBuildCreate = globalThis as typeof globalThis & {
+  __bondrPumpBuildRateLimit?: Map<string, { count: number; resetAt: number }>;
+};
 
 type Body = {
   projectId?: unknown;
@@ -26,9 +34,48 @@ function inputFrom(request: Request, body?: Body | null) {
   };
 }
 
+function sensitiveBuildRequested(input: ReturnType<typeof inputFrom>) {
+  return input.confirmBuild || input.includeUnsignedTransaction || input.createIntent;
+}
+
+function clientKey(request: Request) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || request.headers.get('x-real-ip')?.trim() || 'unknown-client';
+}
+
+function rateLimitSensitiveBuild(request: Request) {
+  const now = Date.now();
+  const key = clientKey(request);
+  const store = globalForBuildCreate.__bondrPumpBuildRateLimit ??= new Map();
+  const current = store.get(key);
+  if (!current || current.resetAt <= now) {
+    store.set(key, { count: 1, resetAt: now + BUILD_WINDOW_MS });
+    return null;
+  }
+  current.count += 1;
+  if (current.count <= BUILD_MAX_REQUESTS) return null;
+  return Response.json({
+    status: 'blocked',
+    observedAt: new Date().toISOString(),
+    error: 'Pump.fun build-create rate limit exceeded.',
+    execution: 'build-create-rate-limited-no-provider-call-no-signing-no-broadcast',
+    retryAfterSeconds: Math.ceil((current.resetAt - now) / 1000)
+  }, { status: 429, headers: { 'cache-control': 'no-store', 'retry-after': String(Math.ceil((current.resetAt - now) / 1000)) } });
+}
+
 async function buildResponse(request: Request, body?: Body | null) {
   const observedAt = new Date().toISOString();
   const input = inputFrom(request, body);
+  if (sensitiveBuildRequested(input)) {
+    const authBlocked = await meridianAuthRequiredResponse(request);
+    if (authBlocked) return authBlocked;
+    const limited = rateLimitSensitiveBuild(request);
+    if (limited) return limited;
+    if (request.method !== 'GET') {
+      const origin = sameOriginAllowed(request);
+      if (!origin.allowed) return mutationBlockedResponse(origin.note);
+    }
+  }
   const store = await getMeridianWalletStore();
 
   if (input.projectId && !resolveMeridianProjectContextId(input.projectId, store)) {

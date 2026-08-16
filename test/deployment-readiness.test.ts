@@ -17,6 +17,7 @@ import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
+import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pumpportal/build-create/route.js';
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -627,6 +628,55 @@ test('pumpportal build-create can return explicit unsigned handoff and bound bro
     assert.deepEqual(result.intent?.requiredAccounts.sort(), [validMintPublicKey, wallet.address].sort());
     assert.deepEqual(result.intent?.allowedPrograms, result.build?.programs);
   });
+});
+
+test('pumpportal build-create sensitive POST requires Meridian operator auth before build', async () => {
+  const previous = {
+    VERCEL: process.env.VERCEL,
+    NODE_ENV: process.env.NODE_ENV,
+    LIVE_TRADING_ENABLED: process.env.LIVE_TRADING_ENABLED,
+    MERIDIAN_SESSION_SECRET: process.env.MERIDIAN_SESSION_SECRET,
+    MERIDIAN_OPERATOR_KEY: process.env.MERIDIAN_OPERATOR_KEY,
+    OPERATOR_SESSION_SECRET: process.env.OPERATOR_SESSION_SECRET,
+    TERMINAL_OPERATOR_TOKEN: process.env.TERMINAL_OPERATOR_TOKEN
+  };
+  try {
+    process.env.VERCEL = '1';
+    delete process.env.LIVE_TRADING_ENABLED;
+    delete process.env.MERIDIAN_SESSION_SECRET;
+    delete process.env.MERIDIAN_OPERATOR_KEY;
+    delete process.env.OPERATOR_SESSION_SECRET;
+    delete process.env.TERMINAL_OPERATOR_TOKEN;
+    const request = new Request('https://bondr.test/api/deployment/pumpportal/build-create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://bondr.test' },
+      body: JSON.stringify({
+        projectId: 'sda',
+        mintPublicKey: validMintPublicKey,
+        connectedSigner: wallet.address,
+        confirmBuild: true
+      })
+    });
+    const response = await pumpBuildCreatePost(request);
+    const json = await response.json() as { execution?: string };
+    assert.equal(response.status, 503);
+    assert.equal(json.execution, 'blocked-by-missing-meridian-auth-config');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key as keyof typeof process.env];
+      else process.env[key as keyof typeof process.env] = value;
+    }
+  }
+});
+
+test('pumpportal build-create route protects unsigned handoff and intent flags', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/deployment/pumpportal/build-create/route.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("import { meridianAuthRequiredResponse }"));
+  assert.ok(source.includes('sensitiveBuildRequested(input)'));
+  assert.ok(source.includes('input.confirmBuild || input.includeUnsignedTransaction || input.createIntent'));
+  assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
+  assert.ok(source.includes('rateLimitSensitiveBuild(request)'));
+  assert.ok(source.includes('build-create-rate-limited-no-provider-call-no-signing-no-broadcast'));
 });
 
 test('deployment launch builder stages signed PumpPortal create packets for signed review and gated broadcast', () => {
