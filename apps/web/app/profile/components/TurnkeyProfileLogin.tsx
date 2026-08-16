@@ -122,6 +122,19 @@ export function TurnkeyProfileLogin() {
     }
   }
 
+  async function loginWithWallet() {
+    setBusy(true);
+    try {
+      setSyncStatus('Looking for a Solana wallet through Turnkey…');
+      await account.loginWithExternalWallet();
+      setSyncStatus('Turnkey wallet login requested. Approve the wallet signature prompt to complete login.');
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Turnkey wallet login failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     setBusy(true);
     try {
@@ -166,6 +179,7 @@ export function TurnkeyProfileLogin() {
           <p>Your Turnkey identity unlocks the terminal. Your profile organizes the operator account. Browser-wallet signing remains separate from login.</p>
         </div>
         <div className="profileActions">
+          <button className="button" type="button" onClick={() => void loginWithWallet()} disabled={!account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Wallet auth active' : 'Log in with Solana wallet'}</button>
           <button className="button" type="button" onClick={() => void login()} disabled={!account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Logged in' : 'Log in with Turnkey'}</button>
           <button className="button secondary" type="button" onClick={() => void refresh()} disabled={!account.clientReady || busy}>Refresh Turnkey</button>
           <button className="button secondary" type="button" onClick={() => void loadProfile()} disabled={!account.authenticated || busy}>Reload profile</button>

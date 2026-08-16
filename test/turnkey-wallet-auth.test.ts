@@ -15,6 +15,10 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /walletConfig:\s*\{/);
   assert.match(providerSource, /auth:\s*true/);
   assert.match(providerSource, /solana:\s*\{\s*native:\s*true/s);
+  assert.match(providerSource, /walletConnectNamespaces:\s*\[\]/);
+  assert.match(providerSource, /loginWithExternalWallet/);
+  assert.match(providerSource, /fetchWalletProviders\('solana' as never\)/);
+  assert.match(providerSource, /loginOrSignupWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
   assert.match(providerSource, /externalWalletAddress/);
   assert.match(providerSource, /onAuthenticationSuccess:\s*\(\{ session, method, action, identifier \}\)/);
 });
@@ -31,6 +35,8 @@ test('verified BONDR profiles persist external wallet auth metadata separately f
 
 test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(profileUiSource, /Log in with Turnkey/);
+  assert.match(profileUiSource, /Log in with Solana wallet/);
+  assert.match(profileUiSource, /Looking for a Solana wallet through Turnkey/);
   assert.match(profileUiSource, /Choose wallet to authenticate with Phantom\/Solflare/);
   assert.match(profileUiSource, /External wallet/);
   assert.match(readinessSource, /externalWalletAuth:\s*'enabled-in-client-config'/);
