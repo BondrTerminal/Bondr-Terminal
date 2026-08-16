@@ -24,6 +24,10 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /const loadedProviders = turnkey\.walletProviders as TurnkeyWalletProviderLike\[\]/);
   assert.match(providerSource, /fetchWalletProviders\(preferredChain as never\)/);
   assert.match(providerSource, /loginOrSignupWithWallet\(\{\s*walletProvider: selectedProvider as never,\s*createSubOrgParams: walletAuthCreateSubOrgParams\(selectedProvider, preferredChain\) as never/s);
+  assert.match(providerSource, /function isTurnkeyCredentialConflict/);
+  assert.match(providerSource, /wallet-login-credential-conflict-retry/);
+  assert.match(providerSource, /loginWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
+  assert.match(providerSource, /Clean up the duplicate wallet-auth suborgs in the Turnkey dashboard/);
   assert.match(providerSource, /function walletAuthCreateSubOrgParams/);
   assert.match(providerSource, /function walletAuthConfigError/);
   assert.match(providerSource, /64-character API public key where the parent organization ID is required/);

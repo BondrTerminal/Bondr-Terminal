@@ -299,6 +299,32 @@ function detailedErrorMessage(value: unknown): string {
   return parts.join(' | ');
 }
 
+function errorText(value: unknown): string {
+  if (value instanceof Error) {
+    const cause = errorCause(value);
+    return [
+      value.message,
+      typeof cause === 'string' ? cause : null,
+      cause instanceof Error ? cause.message : null,
+      safeErrorCode(value),
+      cause instanceof Error ? safeErrorCode(cause) : null
+    ].filter(Boolean).join(' ');
+  }
+  return typeof value === 'string' ? value : '';
+}
+
+function isTurnkeyCredentialConflict(value: unknown) {
+  const text = errorText(value).toLowerCase();
+  return text.includes('credential_conflict')
+    || text.includes('more than one suborg associated with a public key')
+    || text.includes('more than one suborg associated with public key');
+}
+
+function credentialConflictMessage(address: string | null) {
+  const wallet = address ? ` for wallet ${address}` : '';
+  return `Turnkey found more than one sub-organization${wallet}. Clean up the duplicate wallet-auth suborgs in the Turnkey dashboard, or use a wallet that is attached to exactly one BONDR Turnkey account.`;
+}
+
 function addTimeline(current: AuthDebugState, event: string) {
   const stamp = new Date().toISOString().slice(11, 19);
   return [`${stamp} ${event}`, ...current.timeline].slice(0, 8);
@@ -509,10 +535,28 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
           createSubOrgParams: walletAuthCreateSubOrgParams(selectedProvider, preferredChain) as never
         }) as { sessionToken?: string; address?: string; action?: string } | undefined;
       } catch (error) {
-        const message = detailedErrorMessage(error);
-        setDebug((current) => ({ ...current, lastEvent: 'wallet-login-or-signup-failed', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet loginOrSignup failed') }));
-        sessionStorage.removeItem(PENDING_LOGIN_KEY);
-        throw new Error(message);
+        if (isTurnkeyCredentialConflict(error)) {
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-credential-conflict-retry', lastErrorCode: safeErrorCode(error), lastErrorMessage: detailedErrorMessage(error), timeline: addTimeline(current, 'wallet credential conflict; trying login-only') }));
+          try {
+            result = {
+              ...await turnkey.loginWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string },
+              action: 'login'
+            };
+          } catch (loginError) {
+            const conflictMessage = credentialConflictMessage(providerAddress(selectedProvider));
+            const message = isTurnkeyCredentialConflict(loginError)
+              ? conflictMessage
+              : `${conflictMessage} Login-only retry also failed: ${detailedErrorMessage(loginError)}`;
+            setDebug((current) => ({ ...current, lastEvent: 'wallet-login-credential-conflict', lastErrorCode: safeErrorCode(loginError) ?? safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet credential conflict') }));
+            sessionStorage.removeItem(PENDING_LOGIN_KEY);
+            throw new Error(message);
+          }
+        } else {
+          const message = detailedErrorMessage(error);
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-or-signup-failed', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet loginOrSignup failed') }));
+          sessionStorage.removeItem(PENDING_LOGIN_KEY);
+          throw new Error(message);
+        }
       }
       if (result?.address) {
         const walletAuthMethod = { ...nextAuthMethod, identifier: result.address };
