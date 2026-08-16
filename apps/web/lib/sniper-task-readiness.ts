@@ -1,6 +1,6 @@
 import type { LiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
-import type { Project, Wallet } from './meridian-store';
+import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import { buildWalletSigningReadiness } from './wallet-signing-readiness';
 
 type ReadinessStatus = 'ready' | 'rehearsal-only' | 'blocked' | 'missing-implementation';
@@ -159,7 +159,136 @@ export type TaskQueuePreviewInput = {
   cooldownSeconds?: number;
   riskRuleId?: string | null;
   paused?: boolean;
+  clockReady?: boolean;
+  completedRuns?: number;
+  lastRunSecondsAgo?: number | null;
+  priceChangePct?: number | null;
+  peakGainPct?: number | null;
+  drawdownFromPeakPct?: number | null;
 };
+
+export type TaskLifecycleState = 'queued' | 'armed' | 'waiting' | 'ready' | 'blocked' | 'signed-required' | 'completed' | 'failed' | 'expired' | 'cancelled';
+
+export type TaskLifecyclePreview = {
+  contract: 'bondr-task-lifecycle-preview-v1';
+  status: 'ready' | 'waiting' | 'blocked';
+  execution: 'task-lifecycle-preview-only-no-worker-no-trading';
+  rows: Array<{
+    walletId: string;
+    taskType: WalletPlanEntry['taskType'] | 'timed-buy';
+    state: TaskLifecycleState;
+    trigger: string;
+    side: 'buy' | 'sell' | 'observe';
+    maxSol: number;
+    sellPct: number;
+    blockers: string[];
+    nextAction: 'wait' | 'build-unsigned-transaction-after-policy' | 'operator-review-required';
+  }>;
+  blockers: string[];
+  safety: {
+    noAutonomousTrading: true;
+    noTransactionBuild: true;
+    noSigning: true;
+    noBroadcast: true;
+    noFakeVolume: true;
+  };
+};
+
+function selectedTaskPlans(project: Project | null, walletIds: string[]) {
+  const ids = new Set(walletIds);
+  return (project?.launchConfig?.walletPlan ?? []).filter((entry) => entry.participate && entry.executionPhase === 'task' && (!ids.size || ids.has(entry.walletId)));
+}
+
+function numberInput(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function taskTrigger(entry: WalletPlanEntry, input: TaskQueuePreviewInput) {
+  const taskType = entry.taskType ?? 'timed-buy';
+  const priceChangePct = numberInput(input.priceChangePct, 0);
+  const peakGainPct = numberInput(input.peakGainPct, 0);
+  const drawdownFromPeakPct = numberInput(input.drawdownFromPeakPct, 0);
+  if (taskType === 'stop-loss') return { ready: priceChangePct <= entry.stopLossPct, label: `price-change <= ${entry.stopLossPct}%` };
+  if (taskType === 'trailing-stop') return { ready: peakGainPct >= (entry.trailingStopPct || 0) && drawdownFromPeakPct >= entry.trailingStopPct, label: `peak >= activation and drawdown >= ${entry.trailingStopPct}%` };
+  if (taskType === 'auto-take-profit') {
+    const target = entry.takeProfitPercents[0] ?? 0;
+    return { ready: target > 0 && priceChangePct >= target, label: `price-change >= ${target}%` };
+  }
+  if (taskType === 'timed-sell') return { ready: Boolean(input.clockReady), label: 'scheduled sell time reached' };
+  if (taskType === 'smart-sell') return { ready: priceChangePct > 0 && Boolean(input.clockReady), label: 'smart sell clock and positive move' };
+  return { ready: Boolean(input.clockReady), label: 'scheduled buy time reached' };
+}
+
+export function buildTaskLifecyclePreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: TaskQueuePreviewInput = {}): TaskLifecyclePreview {
+  const walletIds = (input.walletIds ?? []).filter((walletId) => wallets.some((wallet) => wallet.id === walletId));
+  const plans = selectedTaskPlans(project, walletIds);
+  const completedRuns = numberInput(input.completedRuns, 0);
+  const maxRuns = numberInput(input.maxRuns, plans[0]?.taskMaxExecutions ?? 0);
+  const cooldownSeconds = numberInput(input.cooldownSeconds, plans[0]?.cooldownSeconds ?? 0);
+  const lastRunSecondsAgo = typeof input.lastRunSecondsAgo === 'number' && Number.isFinite(input.lastRunSecondsAgo) ? input.lastRunSecondsAgo : null;
+  const baseBlockers = [
+    project ? null : 'project-required',
+    plans.length ? null : 'task-plan-required',
+    input.paused === false ? null : 'task-paused-by-default',
+    maxRuns > 0 ? null : 'task-max-runs-required',
+    cooldownSeconds > 0 ? null : 'task-cooldown-required',
+    activation.broadcastEnabled ? null : 'broadcast-gate-closed'
+  ].filter((item): item is string => Boolean(item));
+  const rows = plans.map((entry) => {
+    const wallet = wallets.find((item) => item.id === entry.walletId) ?? null;
+    const trigger = taskTrigger(entry, input);
+    const cooldownActive = lastRunSecondsAgo !== null && cooldownSeconds > 0 && lastRunSecondsAgo < cooldownSeconds;
+    const completed = maxRuns > 0 && completedRuns >= maxRuns;
+    const blockers = [
+      ...baseBlockers,
+      wallet ? null : 'task-wallet-missing',
+      wallet?.custodyMode === 'watch-only' ? 'task-wallet-signing-session-missing' : null,
+      completed ? 'task-max-runs-complete' : null,
+      cooldownActive ? 'task-cooldown-active' : null
+    ].filter((item): item is string => Boolean(item));
+    const side: 'buy' | 'sell' | 'observe' = entry.taskType?.includes('sell') || entry.taskType === 'stop-loss' || entry.taskType === 'trailing-stop' || entry.taskType === 'auto-take-profit' ? 'sell' : 'buy';
+    const nonWaitingBlockers = blockers.filter((blocker) => ![
+      'broadcast-gate-closed',
+      'task-wallet-signing-session-missing',
+      'task-cooldown-active'
+    ].includes(blocker));
+    const state: TaskLifecycleState = completed
+      ? 'completed'
+      : nonWaitingBlockers.length
+        ? 'blocked'
+        : cooldownActive || !trigger.ready
+          ? 'waiting'
+          : activation.broadcastEnabled
+            ? 'signed-required'
+            : 'ready';
+    return {
+      walletId: entry.walletId,
+      taskType: entry.taskType ?? 'timed-buy',
+      state,
+      trigger: trigger.label,
+      side,
+      maxSol: Math.max(entry.taskAmountSol ?? 0, entry.taskBuyMaxSol ?? 0, entry.maxBuySol ?? 0),
+      sellPct: entry.taskSellPercent ?? entry.taskSellMaxPct ?? 0,
+      blockers: Array.from(new Set(blockers)),
+      nextAction: state === 'ready' || state === 'signed-required' ? 'build-unsigned-transaction-after-policy' as const : blockers.length ? 'operator-review-required' as const : 'wait' as const
+    };
+  });
+  const blockers = Array.from(new Set([...baseBlockers, ...rows.flatMap((row) => row.blockers)]));
+  return {
+    contract: 'bondr-task-lifecycle-preview-v1',
+    status: rows.some((row) => row.state === 'ready' || row.state === 'signed-required') ? 'ready' : blockers.length ? 'blocked' : 'waiting',
+    execution: 'task-lifecycle-preview-only-no-worker-no-trading',
+    rows,
+    blockers,
+    safety: {
+      noAutonomousTrading: true,
+      noTransactionBuild: true,
+      noSigning: true,
+      noBroadcast: true,
+      noFakeVolume: true
+    }
+  };
+}
 
 export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: TaskQueuePreviewInput = {}) {
   const readiness = buildTaskExecutionReadiness(project, wallets, activation);
@@ -200,6 +329,7 @@ export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[]
       cancel: 'required-before-live-worker'
     },
     readiness,
+    lifecyclePreview: buildTaskLifecyclePreview(project, wallets, activation, { ...input, walletIds }),
     blockers,
     safety: {
       noAutonomousTrading: true,

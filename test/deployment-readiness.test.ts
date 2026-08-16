@@ -7,13 +7,16 @@ import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engin
 import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson, pinataJwt } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
+import { buildJitoLaunchBundlePlan } from '../apps/web/lib/jito-launch-bundle-plan.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
-import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
+import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-plan.js';
+import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskLifecyclePreview, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
 import { buildLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
+import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
@@ -316,21 +319,23 @@ test('raydium route readiness recommends original LP burn adapter', () => {
   assert.equal(readiness.routeCompleteness.platform, 'raydium');
   assert.equal(readiness.routeCompleteness.status, 'not-developed');
   assert.equal(readiness.routeCompleteness.developed, false);
-  assert.equal(readiness.routeCompleteness.builderStatus, 'builder-missing');
+  assert.equal(readiness.routeCompleteness.builderStatus, 'lp-plan-ready-sdk-adapter-missing');
   assert.equal(readiness.raydiumLaunchReadiness.contract, 'bondr-raydium-launch-readiness-v1');
   assert.equal(readiness.raydiumLaunchReadiness.selected, true);
   assert.equal(readiness.raydiumLaunchReadiness.status, 'builder-missing');
   assert.equal(readiness.raydiumLaunchReadiness.developed, false);
-  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-original-lp-builder'));
+  assert.equal(readiness.raydiumLaunchReadiness.lpPlan.contract, 'bondr-raydium-original-lp-plan-v1');
+  assert.ok(readiness.raydiumLaunchReadiness.lpPlan.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
+  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-sdk-transaction-build-adapter'));
   assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('lp-burn-transaction-builder'));
-  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('lp-burn-transaction-builder'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-original-lp-plan'));
   assert.ok(readiness.raydiumLaunchReadiness.blockers.includes('verified-lp-token-account-required'));
   assert.deepEqual(readiness.routeCompleteness.missingBuilders, [
-    'raydium-original-lp-builder',
+    'raydium-sdk-transaction-build-adapter',
     'lp-token-account-derivation',
     'lp-burn-simulation-proof'
   ]);
-  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['lp-burn-transaction-builder']);
+  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'lp-burn-transaction-builder']);
   assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
@@ -377,6 +382,10 @@ test('deployment engine launch bundle readiness models legs, caps, signing order
   assert.equal(engines.launchBundle.implementationStatus, 'rehearsal-contract-only');
   assert.equal(engines.launchBundle.execution, 'preflight-only-no-jito-submit-no-broadcast');
   assert.deepEqual(engines.launchBundle.legs.map((leg) => leg.id), ['create', 'dev-buy', 'bundle-buys', 'sniper-rails', 'task-rails']);
+  assert.equal(engines.launchBundle.bundlePlan.contract, 'bondr-jito-launch-bundle-plan-v1');
+  assert.equal(engines.launchBundle.bundlePlan.execution, 'launch-bundle-plan-only-no-signing-no-relay-submit');
+  assert.ok(engines.launchBundle.bundlePlan.legs.some((leg) => leg.id === 'jito-tip'));
+  assert.equal(engines.launchBundle.bundlePlan.safety.noRelaySubmit, true);
   assert.ok(engines.launchBundle.signingOrder.includes(wallet.address));
   assert.equal(engines.launchBundle.caps.maxTotalSol, 0.01);
   assert.ok(engines.launchBundle.antiAbuseChecks.includes('no-self-trade-loop'));
@@ -421,12 +430,43 @@ test('deployment engine LP readiness marks Raydium route builder-missing', () =>
   const engines = buildDeploymentEngineReadiness(raydiumProject, [wallet], activation);
   assert.equal(engines.createLp.routePlatform, 'raydium');
   assert.equal(engines.createLp.selectedAdapterId, 'raydium-original-lp-burn');
-  assert.equal(engines.createLp.status, 'protocol-sdk-required');
-  assert.equal(engines.createLp.implementationStatus, 'adapter-missing');
-  assert.ok(engines.createLp.blockers.includes('raydium-original-lp-builder-missing'));
+  assert.equal(engines.createLp.status, 'rehearsal-contract-ready');
+  assert.equal(engines.createLp.implementationStatus, 'rehearsal-contract-only');
+  assert.equal(engines.createLp.raydiumPlan.contract, 'bondr-raydium-original-lp-plan-v1');
+  assert.ok(engines.createLp.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
   assert.ok(engines.createLp.blockers.includes('verified-lp-token-account-required'));
   assert.ok(!engines.createLp.blockers.includes('lp-burn-transaction-builder-missing'));
-  assert.ok(engines.createLp.blockers.includes('lp-burn-simulation-proof-missing'));
+  assert.ok(engines.createLp.blockers.includes('lp-burn-simulation-proof-required'));
+});
+
+test('raydium original LP plan validates route inputs without provider calls', () => {
+  const raydiumProject = structuredClone(project);
+  raydiumProject.launchPath = 'raydium';
+  raydiumProject.tokenMint = validMintPublicKey;
+  raydiumProject.launchConfig = {
+    ...raydiumProject.launchConfig!,
+    route: {
+      ...raydiumProject.launchConfig!.route,
+      platform: 'raydium',
+      raydiumLiquiditySol: 1,
+      raydiumWithheldTokenPct: 10,
+      burnLiquidity: true
+    }
+  };
+  const plan = buildRaydiumOriginalLpPlan(raydiumProject, [wallet], activation);
+  assert.equal(plan.contract, 'bondr-raydium-original-lp-plan-v1');
+  assert.equal(plan.execution, 'raydium-lp-plan-only-no-sdk-call-no-signing-no-broadcast');
+  assert.equal(plan.baseMint, validMintPublicKey);
+  assert.equal(plan.quoteMint, 'So11111111111111111111111111111111111111112');
+  assert.equal(plan.deployer, wallet.address);
+  assert.equal(plan.liquidityPolicy.quoteLiquiditySol, 1);
+  assert.equal(plan.liquidityPolicy.initialTokenLiquidityMode, 'withheld-token-percent');
+  assert.equal(plan.liquidityPolicy.burnLiquidity, true);
+  assert.ok(plan.planHash.length === 64);
+  assert.ok(plan.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
+  assert.ok(plan.blockers.includes('deployment-gate-closed'));
+  assert.equal(plan.safety.noProviderCall, true);
+  assert.equal(plan.safety.requiresVerifiedLpAccountBeforeBurn, true);
 });
 
 test('LP burn builder creates unsigned transaction only from verified LP inputs', () => {
@@ -749,6 +789,70 @@ test('launch receipt normalization rejects invalid mint public keys', () => {
   assert.equal(invalid.error, 'Valid launched token mint is required.');
 });
 
+test('launch reconciliation blocks without a launch receipt', async () => {
+  const result = await buildLaunchReconciliation(project, 'https://bondr.test', async () => {
+    throw new Error('fetch should not be called without a launch receipt');
+  });
+  assert.equal(result.contract, 'bondr-launch-reconciliation-v1');
+  assert.equal(result.status, 'blocked');
+  assert.ok(result.blockers.includes('launch-receipt-missing'));
+  assert.equal(result.execution, 'read-only-launch-reconciliation-no-signing-no-broadcast');
+});
+
+test('launch reconciliation uses receipt mint and normalizes provider evidence', async () => {
+  const launched = structuredClone(project);
+  launched.status = 'deployed';
+  launched.tokenMint = 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu';
+  launched.launchReceipt = {
+    status: 'confirmed',
+    signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    explorerUrl: 'https://solscan.io/tx/2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    tokenMint: launched.tokenMint,
+    pool: null,
+    deployer: wallet.address,
+    route: 'pump.fun',
+    provider: 'quicknode',
+    observedAt: '2026-08-15T22:40:53.000Z',
+    confirmedAt: '2026-08-15T22:40:53.000Z'
+  };
+  const calls: string[] = [];
+  const result = await buildLaunchReconciliation(launched, 'https://bondr.test', async (input) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/api/token-market-feed')) {
+      return Response.json({ status: 'ok', bestPair: { dex: 'pumpfun', pairAddress: 'pair111111111111111111111111111111111111111', url: 'https://dexscreener.com/solana/pair', liquidityUsd: 2100, volume24h: 333, priceUsd: '0.0000021' } });
+    }
+    if (url.includes('/api/token-stats')) {
+      return Response.json({
+        status: 'ok',
+        supply: { uiAmount: 1_000_000_000, decimals: 6, raw: '1000000000000000' },
+        holders: { totalHolders: 7, returnedRows: 2, rows: [{ owner: wallet.address, uiAmount: 100 }] },
+        concentration: { top10Pct: 32 },
+        devHolding: { amount: 100, pct: 0.01, status: 'ok' },
+        rugcheck: { mintAuthority: null, freezeAuthority: null }
+      });
+    }
+    if (url.includes('/api/pumpfun/token')) {
+      return Response.json({ status: 'ok', migration: { complete: false, raydiumPool: null, marketCap: 2100, virtualSolReserves: 30 } });
+    }
+    if (url.includes('/api/token-transactions')) {
+      return Response.json({ status: 'ok', trades: [{ wallet: wallet.address, side: 'buy', volumeUsd: 25, timestamp: '2026-08-15T22:41:00.000Z' }] });
+    }
+    return Response.json({ status: 'error' }, { status: 404 });
+  });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.mint, launched.tokenMint);
+  assert.equal(result.receipt.status, 'confirmed');
+  assert.equal(result.pair.value?.liquidityUsd, 2100);
+  assert.equal(result.market.value?.marketCap, 2100);
+  assert.equal(result.holders.value?.totalHolders, 7);
+  assert.equal(result.topTraders.value.rows[0]?.wallet, wallet.address);
+  assert.deepEqual(result.blockers, []);
+  assert.deepEqual(result.warnings, []);
+  assert.ok(calls.some((url) => url.includes('/api/token-market-feed')));
+  assert.ok(calls.some((url) => url.includes('/api/token-transactions')));
+});
+
 test('pumpportal build-create blocks returned transaction missing mint signer', async () => {
   await withProviderBuild(async (calls) => {
     const result = await buildPumpPortalCreateTransaction(ipfsReadyProject(), [wallet], activation, { mintPublicKey: validMintPublicKey, connectedSigner: wallet.address, confirmBuild: true });
@@ -885,6 +989,30 @@ test('jito bundle preview enforces tip cap and transaction count', () => {
   assert.ok(preview.blockers.some((blocker) => blocker.includes('transaction-limit')));
   assert.ok(preview.blockers.includes('jito-tip-exceeds-cap'));
   assert.equal(preview.policy.tipLamports, 1_000_000_000);
+});
+
+test('jito launch bundle plan models legs, hashes, signing, and closed relay gates', () => {
+  const plan = buildJitoLaunchBundlePlan(project, [wallet], activation, { expectedMint: validMintPublicKey });
+  assert.equal(plan.contract, 'bondr-jito-launch-bundle-plan-v1');
+  assert.equal(plan.execution, 'launch-bundle-plan-only-no-signing-no-relay-submit');
+  assert.ok(plan.legs.some((leg) => leg.rail === 'deployment'));
+  assert.ok(plan.legs.some((leg) => leg.id === 'jito-tip'));
+  assert.equal(plan.legHashes.length, plan.legs.length);
+  assert.equal(plan.bundleHash.length, 64);
+  assert.ok(plan.signingOrder.includes(wallet.address));
+  assert.ok(plan.blockers.includes('broadcast-gate-closed'));
+  assert.ok(plan.blockers.includes('jito-relay-disabled'));
+  assert.ok(plan.blockers.includes('simulation-proof-required'));
+  assert.equal(plan.safety.noSigning, true);
+  assert.equal(plan.safety.noRelaySubmit, true);
+  assert.equal(plan.antiAbuse.noWashTrading, true);
+});
+
+test('jito launch bundle plan blocks over-cap tips before relay submit', () => {
+  const plan = buildJitoLaunchBundlePlan(project, [wallet], activation, { expectedMint: validMintPublicKey, tipLamports: 10_000_000_000 });
+  assert.equal(plan.status, 'blocked');
+  assert.ok(plan.blockers.includes('jito-tip-exceeds-cap'));
+  assert.equal(plan.safety.noRelaySubmit, true);
 });
 
 test('jito send bundle response remains blocked until live implementation exists', () => {
@@ -1090,24 +1218,51 @@ test('task queue preview models queue records without worker execution', () => {
   assert.ok(preview.blockers.includes('task-name-required'));
   assert.ok(preview.blockers.includes('task-wallet-allowlist-required'));
   assert.ok(preview.blockers.includes('durable-task-worker-missing'));
+  assert.equal(preview.lifecyclePreview.contract, 'bondr-task-lifecycle-preview-v1');
+  assert.equal(preview.lifecyclePreview.safety.noTransactionBuild, true);
   assert.equal(preview.safety.noAutonomousTrading, true);
 });
 
 test('task queue preview accepts safe task shape but keeps worker and broadcast blocked', () => {
-  const preview = buildTaskQueuePreview(project, [wallet], activation, {
+  const taskProject = structuredClone(project);
+  taskProject.launchConfig!.walletPlan = [
+    ...taskProject.launchConfig!.walletPlan,
+    { walletId: 'dev-wallet', role: 'task wallet', participate: true, executionPhase: 'task', taskType: 'auto-take-profit', plannedBuySol: 0, maxBuySol: 0.01, maxSlippageBps: 100, takeProfitPercents: [35], stopLossPct: -18, trailingStopPct: 22, perTxSellCapPct: 25, cooldownSeconds: 60, taskMaxExecutions: 3 }
+  ];
+  const preview = buildTaskQueuePreview(taskProject, [wallet], activation, {
     taskName: 'standard rehearsal task',
     walletIds: ['dev-wallet'],
     schedule: 'interval',
     intervalSeconds: 60,
     maxRuns: 3,
     cooldownSeconds: 60,
-    riskRuleId: 'standard-launch-rehearsal'
+    riskRuleId: 'standard-launch-rehearsal',
+    paused: false,
+    clockReady: true,
+    priceChangePct: 40
   });
   assert.equal(preview.status, 'preview-ready');
   assert.ok(preview.blockers.includes('durable-task-worker-missing'));
   assert.ok(preview.blockers.includes('task-queue-persistence-missing'));
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
-  assert.equal(preview.task.paused, true);
+  assert.equal(preview.task.paused, false);
+  assert.equal(preview.lifecyclePreview.rows[0]?.state, 'ready');
+  assert.equal(preview.lifecyclePreview.rows[0]?.nextAction, 'build-unsigned-transaction-after-policy');
+  assert.equal(preview.lifecyclePreview.safety.noBroadcast, true);
+});
+
+test('task lifecycle preview waits during cooldown and completes at max runs', () => {
+  const taskProject = structuredClone(project);
+  taskProject.launchConfig!.walletPlan = [
+    { walletId: 'dev-wallet', role: 'task wallet', participate: true, executionPhase: 'task', taskType: 'stop-loss', plannedBuySol: 0, maxBuySol: 0.01, maxSlippageBps: 100, takeProfitPercents: [35], stopLossPct: -18, trailingStopPct: 22, perTxSellCapPct: 25, cooldownSeconds: 60, taskMaxExecutions: 2 }
+  ];
+  const waiting = buildTaskLifecyclePreview(taskProject, [wallet], activation, { walletIds: ['dev-wallet'], paused: false, maxRuns: 2, cooldownSeconds: 60, lastRunSecondsAgo: 10, priceChangePct: -20 });
+  assert.equal(waiting.rows[0]?.state, 'waiting');
+  assert.ok(waiting.rows[0]?.blockers.includes('task-cooldown-active'));
+  const completed = buildTaskLifecyclePreview(taskProject, [wallet], activation, { walletIds: ['dev-wallet'], paused: false, maxRuns: 2, completedRuns: 2, cooldownSeconds: 60, priceChangePct: -20 });
+  assert.equal(completed.rows[0]?.state, 'completed');
+  assert.ok(completed.rows[0]?.blockers.includes('task-max-runs-complete'));
+  assert.equal(completed.safety.noAutonomousTrading, true);
 });
 
 test('execution recovery readiness reports monitor gaps and no-blind-retry policy', () => {

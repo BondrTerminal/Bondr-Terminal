@@ -1,5 +1,6 @@
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
+import { buildRaydiumOriginalLpPlan } from './raydium-original-lp-plan';
 
 type RaydiumStageStatus = 'implemented' | 'config-ready' | 'builder-missing' | 'blocked';
 
@@ -16,6 +17,7 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
   const route = project?.launchConfig?.route ?? null;
   const deployer = project ? devWallet(project, wallets) : null;
   const raydiumSelected = project?.launchPath === 'raydium' || route?.platform === 'raydium';
+  const lpPlan = buildRaydiumOriginalLpPlan(project, wallets, activation);
   const configBlockers = [
     project ? null : 'project-required',
     deployer?.address ? null : 'deployer-wallet-required',
@@ -24,11 +26,11 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     route?.burnLiquidity ? null : 'lp-burn-policy-required'
   ].filter((item): item is string => Boolean(item));
   const missingBuilderIds = [
-    'raydium-original-lp-builder',
+    'raydium-sdk-transaction-build-adapter',
     'lp-token-account-derivation',
     'raydium-lp-burn-simulation-proof'
   ];
-  const gatedBuilderIds = ['lp-burn-transaction-builder'];
+  const gatedBuilderIds = ['raydium-original-lp-plan', 'lp-burn-transaction-builder'];
 
   return {
     contract: 'bondr-raydium-launch-readiness-v1' as const,
@@ -36,6 +38,7 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     status: missingBuilderIds.length ? 'builder-missing' as const : 'ready',
     developed: false,
     execution: 'readiness-only-no-raydium-transaction-no-lp-creation' as const,
+    lpPlan,
     routeConfig: {
       raydiumLiquiditySol: route?.raydiumLiquiditySol ?? null,
       raydiumWithheldTokenPct: route?.raydiumWithheldTokenPct ?? null,
@@ -59,7 +62,7 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
       {
         id: 'raydium-lp-add',
         label: 'Raydium original LP add',
-        status: 'builder-missing' as RaydiumStageStatus,
+        status: 'config-ready' as RaydiumStageStatus,
         builder: '@raydium-io/raydium-sdk-v2 or verified Raydium pool transaction API',
         requiredInputs: ['base token mint', 'SOL/quote mint', 'initial token liquidity', 'initial SOL liquidity', 'deployer wallet', 'pool config'],
         outputProof: ['unsigned pool/liquidity transaction', 'exact writable accounts', 'LP mint/account evidence']
@@ -95,7 +98,7 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     gatedBuilderIds,
     blockers: [
       ...configBlockers,
-      ...missingBuilderIds,
+      ...lpPlan.blockers,
       'verified-lp-token-account-required',
       activation.deploymentEnabled ? null : 'deployment-gate-closed',
       activation.broadcastEnabled ? null : 'broadcast-gate-closed'

@@ -146,11 +146,11 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       selectable: true,
       developed: false,
       adapterId: selectedRouteAdapter.id,
-      builderStatus: selectedRouteAdapter.builderStatus,
-      missingBuilders: ['raydium-original-lp-builder', 'lp-token-account-derivation', 'lp-burn-simulation-proof'],
-      gatedBuilders: ['lp-burn-transaction-builder'],
-      blockers: selectedRouteAdapter.blockedUntil,
-      summary: 'Raydium is selectable for config, but it is not launch-developed until BONDR can build, verify, and simulate the Raydium LP add plus LP burn transactions.'
+      builderStatus: 'lp-plan-ready-sdk-adapter-missing' as const,
+      missingBuilders: ['raydium-sdk-transaction-build-adapter', 'lp-token-account-derivation', 'lp-burn-simulation-proof'],
+      gatedBuilders: ['raydium-original-lp-plan', 'lp-burn-transaction-builder'],
+      blockers: raydiumLaunchReadiness.lpPlan.blockers,
+      summary: 'Raydium is selectable and has a deterministic LP lifecycle plan, but it is not launch-developed until the SDK transaction adapter, LP account proof, and LP burn simulation are implemented.'
     }
     : {
       platform: 'pump' as const,

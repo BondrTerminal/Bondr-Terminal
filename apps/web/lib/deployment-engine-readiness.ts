@@ -1,6 +1,8 @@
 import type { LiveActivationStatus } from './live-activation';
 import type { Project, Wallet, WalletPlanEntry } from './meridian-store';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
+import { buildJitoLaunchBundlePlan } from './jito-launch-bundle-plan';
+import { buildRaydiumOriginalLpPlan } from './raydium-original-lp-plan';
 
 type EngineStatus = 'transaction-builder-ready' | 'deployment-disabled' | 'rehearsal-contract-ready' | 'protocol-sdk-required' | 'not-required';
 type ImplementationStatus = 'builder-implemented' | 'rehearsal-contract-only' | 'adapter-missing' | 'not-required';
@@ -52,6 +54,7 @@ export function buildTokenMintEngineReadiness(project: Project | null, wallets: 
 
 export function buildLaunchBundleEngineReadiness(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus) {
   const relay = getJitoRelayReadiness();
+  const bundlePlan = buildJitoLaunchBundlePlan(project, wallets, activation, { relay });
   const dev = project ? devWallet(project, wallets) : null;
   const bundlePlans = project ? planByPhase(project, 'bundle') : [];
   const sniperPlans = project ? planByPhase(project, 'sniper') : [];
@@ -115,6 +118,7 @@ export function buildLaunchBundleEngineReadiness(project: Project | null, wallet
       relayEnabled: relay.relayEnabled,
       requiredEnv: relay.requiredEnv
     },
+    bundlePlan,
     safety: {
       noSigning: true,
       noBroadcast: true,
@@ -149,24 +153,25 @@ export const LP_ADAPTER_READINESS = [
   }
 ] as const;
 
-export function buildCreateLpEngineReadiness(project: Project | null) {
+export function buildCreateLpEngineReadiness(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus) {
   const routePlatform = project?.launchPath === 'raydium' || project?.launchConfig?.route.platform === 'raydium' ? 'raydium' : 'pump';
+  const raydiumPlan = buildRaydiumOriginalLpPlan(project, wallets, activation);
   const selectedAdapter = routePlatform === 'raydium'
     ? LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!
     : LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'pumpfun-pumpportal-launch')!;
-  const raydiumBlockers = LP_ADAPTER_READINESS.find((adapter) => adapter.id === 'raydium-original-lp-burn')!.blockers;
 
   return {
     contract: 'bondr-create-lp-engine-readiness-v1' as const,
     routePlatform,
     selectedAdapterId: selectedAdapter.id,
-    status: routePlatform === 'raydium' ? 'protocol-sdk-required' as EngineStatus : 'not-required' as EngineStatus,
-    implementationStatus: routePlatform === 'raydium' ? 'adapter-missing' as ImplementationStatus : 'not-required' as ImplementationStatus,
+    status: routePlatform === 'raydium' ? 'rehearsal-contract-ready' as EngineStatus : 'not-required' as EngineStatus,
+    implementationStatus: routePlatform === 'raydium' ? 'rehearsal-contract-only' as ImplementationStatus : 'not-required' as ImplementationStatus,
     execution: 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction' as const,
     adapters: LP_ADAPTER_READINESS,
-    blockers: routePlatform === 'raydium' ? Array.from(raydiumBlockers) : [],
+    blockers: routePlatform === 'raydium' ? raydiumPlan.blockers : [],
+    raydiumPlan,
     routeSummary: routePlatform === 'raydium'
-      ? 'Raydium launch is config-only until the original LP add builder, LP token verification, LP burn builder, and simulations are implemented.'
+      ? 'Raydium launch now has a deterministic LP lifecycle plan; it still needs the SDK transaction adapter and chain proofs before any LP add or burn can be signed.'
       : 'Pump.fun launch does not require BONDR-created LP at launch; LP creation is not a blocker for the Pump.fun route.',
     safety: {
       noFakeLpCreation: true,
@@ -182,6 +187,6 @@ export function buildDeploymentEngineReadiness(project: Project | null, wallets:
     contract: 'bondr-deployment-engine-readiness-v1' as const,
     tokenMint: buildTokenMintEngineReadiness(project, wallets, activation),
     launchBundle: buildLaunchBundleEngineReadiness(project, wallets, activation),
-    createLp: buildCreateLpEngineReadiness(project)
+    createLp: buildCreateLpEngineReadiness(project, wallets, activation)
   };
 }

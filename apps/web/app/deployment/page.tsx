@@ -29,6 +29,7 @@ const routeMap = [
   ['/api/deployment-readiness', 'Dev-wallet launch readiness + rail checks', 'real'],
   ['/api/deployment-engine', 'Launch snapshot + gated SPL builder', 'real-gated'],
   ['/api/projects/[id]/launch-receipt', 'Post-launch receipt reconciliation', 'real'],
+  ['/api/projects/[id]/launch-reconciliation', 'Read-only market reconciliation from launch receipt', 'real'],
   ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
   ['/api/relay/jito/bundle-preview', 'Jito signed-bundle policy preview', 'preview'],
   ['/api/relay/jito/send-bundle', 'Blocked Jito sendBundle stub', 'closed'],
