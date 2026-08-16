@@ -179,6 +179,27 @@ test('deployment context normalizes wallet links and launch route defaults', () 
   assert.equal(context.launchConfig.route.buyMode, 'snipe');
 });
 
+test('deployment context upgrades partial durable project rows without crashing', () => {
+  const partialProject = {
+    id: 'partial-project',
+    name: 'Partial Project',
+    ticker: 'PART',
+    status: 'draft',
+    walletGroupId: 'operator-wallets',
+    launchConfig: { walletPlan: 'legacy-bad-shape' }
+  } as unknown as Project;
+
+  const context = buildMeridianProjectContext(partialProject, { ...store, projects: [partialProject] }, '2026-08-16T06:00:00.000Z');
+  assert.equal(context.project.id, 'partial-project');
+  assert.equal(context.project.metadata.symbol, 'PART');
+  assert.equal(context.project.fundingPlan.budgetSol, 0);
+  assert.equal(context.project.deploymentState.stage, 'configuration');
+  assert.equal(context.project.moduleLinks.deployment, '/deployment?project=partial-project');
+  assert.equal(context.project.moduleLinks.wallets, '/portfolio?view=wallets&project=partial-project');
+  assert.equal(context.launchConfig.route.platform, 'pump');
+  assert.ok(Array.isArray(context.launchConfig.walletPlan));
+});
+
 test('raydium pre-live dry-run stays blocked until config, LP proof, and burn simulation exist', () => {
   const raydiumProject = structuredClone(project);
   raydiumProject.launchPath = 'raydium';

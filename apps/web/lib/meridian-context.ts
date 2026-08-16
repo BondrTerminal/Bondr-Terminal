@@ -135,6 +135,33 @@ function defaultWalletPlan(wallets: Wallet[]): WalletPlanEntry[] {
   }));
 }
 
+function numberValue(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function stringValue(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function defaultModuleLinks(projectId: string): Project['moduleLinks'] {
+  const encoded = encodeURIComponent(projectId);
+  return {
+    deployment: `/deployment?project=${encoded}`,
+    wallets: portfolioWalletHref(projectId),
+    sniper: `/sniper?project=${encoded}`,
+    dashboard: `/project-dashboard?project=${encoded}`,
+    liquidity: `/liquidity?project=${encoded}`
+  };
+}
+
+function defaultMonitor(): Project['monitor'] {
+  return { holders: [], orders: [], positions: [], topTraders: [], devTokens: [] };
+}
+
 function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchConfig {
   return {
     route: {
@@ -169,27 +196,69 @@ function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchCo
   };
 }
 
-function normalizedProject(project: Project): Project {
-  return {
-    ...project,
-    moduleLinks: {
-      ...project.moduleLinks,
-      wallets: portfolioWalletHref(project.id)
-    }
-  };
-}
-
 function normalizedLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchConfig {
   const fallback = defaultLaunchConfig(project, wallets);
-  const saved = project.launchConfig;
-  const savedById = new Map((saved?.walletPlan ?? []).map((entry) => [entry.walletId, entry]));
+  const saved = recordValue(project.launchConfig) as Partial<LaunchConfig>;
+  const savedWalletPlan = Array.isArray(saved.walletPlan) ? saved.walletPlan : [];
+  const savedById = new Map(savedWalletPlan.map((entry) => [entry.walletId, entry]));
   return {
     ...fallback,
     ...(saved ?? {}),
-    route: { ...fallback.route, ...(saved?.route ?? {}) },
-    walletPlan: wallets.length ? wallets.map((wallet) => ({ ...(fallback.walletPlan.find((entry) => entry.walletId === wallet.id)!), ...(savedById.get(wallet.id) ?? {}), walletId: wallet.id, role: wallet.role })) : (saved?.walletPlan ?? fallback.walletPlan),
-    devWalletRules: { ...fallback.devWalletRules, ...(saved?.devWalletRules ?? {}) }
+    route: { ...fallback.route, ...recordValue(saved.route) },
+    walletPlan: wallets.length ? wallets.map((wallet) => ({ ...(fallback.walletPlan.find((entry) => entry.walletId === wallet.id)!), ...(savedById.get(wallet.id) ?? {}), walletId: wallet.id, role: wallet.role })) : (savedWalletPlan.length ? savedWalletPlan : fallback.walletPlan),
+    devWalletRules: { ...fallback.devWalletRules, ...recordValue(saved.devWalletRules) }
   };
+}
+
+function normalizedProject(project: Project): Project {
+  const raw = project as Partial<Project>;
+  const id = stringValue(raw.id, 'project-unknown');
+  const ticker = stringValue(raw.ticker, stringValue(raw.metadata?.symbol, 'TKN'));
+  const name = stringValue(raw.name, stringValue(raw.metadata?.name, ticker));
+  const metadata = recordValue(raw.metadata);
+  const fundingPlan = recordValue(raw.fundingPlan);
+  const deploymentState = recordValue(raw.deploymentState);
+  const moduleLinks = { ...defaultModuleLinks(id), ...recordValue(raw.moduleLinks), wallets: portfolioWalletHref(id) };
+  const monitor = { ...defaultMonitor(), ...recordValue(raw.monitor) };
+  const normalized = {
+    ...raw,
+    id,
+    name,
+    ticker,
+    status: raw.status ?? 'draft',
+    launchPath: stringValue(raw.launchPath, 'unselected'),
+    tokenMint: typeof raw.tokenMint === 'string' ? raw.tokenMint : null,
+    pool: typeof raw.pool === 'string' ? raw.pool : null,
+    metadata: {
+      name: stringValue(metadata.name, name),
+      symbol: stringValue(metadata.symbol, ticker),
+      description: stringValue(metadata.description),
+      imageUrl: stringValue(metadata.imageUrl),
+      metadataUri: typeof metadata.metadataUri === 'string' ? metadata.metadataUri : undefined,
+      imageDataUrl: typeof metadata.imageDataUrl === 'string' ? metadata.imageDataUrl : undefined,
+      imageContentType: typeof metadata.imageContentType === 'string' ? metadata.imageContentType : undefined,
+      imageUpdatedAt: typeof metadata.imageUpdatedAt === 'string' ? metadata.imageUpdatedAt : undefined,
+      website: stringValue(metadata.website),
+      twitter: stringValue(metadata.twitter),
+      telegram: stringValue(metadata.telegram)
+    },
+    walletGroupId: stringValue(raw.walletGroupId, `group-${id}`),
+    fundingPlan: {
+      budgetSol: numberValue(fundingPlan.budgetSol),
+      feeReserveSol: numberValue(fundingPlan.feeReserveSol),
+      liquiditySol: numberValue(fundingPlan.liquiditySol),
+      devBuySol: numberValue(fundingPlan.devBuySol),
+      collectionWalletId: stringValue(fundingPlan.collectionWalletId)
+    },
+    deploymentState: {
+      stage: stringValue(deploymentState.stage, 'configuration'),
+      ready: deploymentState.ready === true,
+      disabledReason: stringValue(deploymentState.disabledReason, 'Deployment remains gated until project setup is complete and explicitly approved.')
+    },
+    monitor,
+    moduleLinks
+  } as Project;
+  return normalized;
 }
 
 function source(status: SourceStatus['status'], sourceName: string, observedAt: string, note?: string | null): SourceStatus {
@@ -252,9 +321,10 @@ function terminalHandoff(project: Project, wallets: Wallet[]): TerminalHandoff {
 }
 
 export function buildMeridianProjectContext(project: Project, store: MeridianStore, observedAt = new Date().toISOString()): MeridianProjectContext {
-  const currentProject = normalizedProject(project);
-  const walletGroup = store.walletGroups.find((group) => group.id === currentProject.walletGroupId) ?? null;
-  const wallets = walletsForGroup(currentProject.walletGroupId, store).filter((wallet) => !wallet.archived);
+  const normalizedBaseProject = normalizedProject(project);
+  const walletGroup = store.walletGroups.find((group) => group.id === normalizedBaseProject.walletGroupId) ?? null;
+  const wallets = walletsForGroup(normalizedBaseProject.walletGroupId, store).filter((wallet) => !wallet.archived);
+  const currentProject = { ...normalizedBaseProject, launchConfig: normalizedLaunchConfig(normalizedBaseProject, wallets) };
   const readiness = readinessScore(currentProject, store);
   const preflight = launchPreflight(currentProject, store);
   const blockers = preflight.filter((check) => check.status === 'blocked').map((check) => `${check.label}: ${check.detail}`);
