@@ -15,7 +15,7 @@ import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExec
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
-import { buildLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
+import { buildLpBurnTransaction, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
 import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
@@ -534,6 +534,44 @@ test('LP burn builder creates unsigned transaction only from verified LP inputs'
   assert.equal(typeof burn.transactionBase64, 'string');
   assert.equal(burn.safety.noSigning, true);
   assert.equal(burn.safety.requiresVerifiedLpAccount, true);
+});
+
+test('verified LP burn builder requires Raydium LP token account proof', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const mintProof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  const proof = buildRaydiumLpTokenAccountProof({
+    expectedOwner: wallet.address,
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    lpTokenOwner: wallet.address,
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '1000000000',
+    mintProof
+  });
+  const burn = buildVerifiedLpBurnTransaction({
+    owner: wallet.address,
+    lpMint: lpMint.toBase58(),
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    amount: 1,
+    decimals: 9,
+    recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87',
+    proof
+  });
+  assert.equal(burn.execution, 'unsigned-verified-lp-burn-transaction-built-no-signing-no-broadcast');
+  assert.equal(burn.proofContract, 'bondr-raydium-lp-token-account-proof-v1');
+  assert.equal(burn.safety.proofBoundBeforeBuild, true);
+
+  const blockedProof = { ...proof, status: 'blocked' as const, blockers: ['lp-token-account-owner-mismatch'] };
+  assert.throws(() => buildVerifiedLpBurnTransaction({
+    owner: wallet.address,
+    lpMint: lpMint.toBase58(),
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    amount: 1,
+    decimals: 9,
+    recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87',
+    proof: blockedProof
+  }), /verified LP token account proof/);
 });
 
 test('LP burn builder rejects missing verified LP token account', () => {

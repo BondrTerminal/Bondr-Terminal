@@ -1,4 +1,5 @@
 import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import type { RaydiumLpTokenAccountProof } from './raydium-lp-proof';
 
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -73,6 +74,25 @@ export function buildLpBurnTransaction(input: LpBurnBuildInput) {
       noBroadcast: true,
       requiresVerifiedLpAccount: true,
       requiresSimulationBeforeSigning: true
+    }
+  };
+}
+
+export function buildVerifiedLpBurnTransaction(input: LpBurnBuildInput & { proof: RaydiumLpTokenAccountProof }) {
+  if (input.proof.status !== 'verified') throw new Error('verified LP token account proof is required.');
+  if (input.proof.owner !== input.owner) throw new Error('LP proof owner does not match burn owner.');
+  if (input.proof.lpMint !== input.lpMint) throw new Error('LP proof mint does not match burn mint.');
+  if (input.proof.lpTokenAccount !== input.lpTokenAccount) throw new Error('LP proof token account does not match burn source.');
+  const transaction = buildLpBurnTransaction(input);
+  return {
+    ...transaction,
+    proofContract: input.proof.contract,
+    proofStatus: input.proof.status,
+    execution: 'unsigned-verified-lp-burn-transaction-built-no-signing-no-broadcast' as const,
+    safety: {
+      ...transaction.safety,
+      requiresVerifiedLpAccount: true,
+      proofBoundBeforeBuild: true as const
     }
   };
 }
