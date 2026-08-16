@@ -33,22 +33,23 @@ function currentPath(pathname: string, search: string) {
   return `${pathname}${search ? `?${search}` : ''}`;
 }
 
-function safeNextPath(value: string | null | undefined) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
-  if (value.startsWith('/api/')) return '/';
+function safeNextPath(value: string | null | undefined, fallback: string | null = '/') {
+  if (!value) return fallback;
+  if (!value.startsWith('/') || value.startsWith('//')) return fallback ?? '/';
+  if (value.startsWith('/api/')) return fallback ?? '/';
   try {
     const parsed = new URL(value, 'https://bondr.local');
-    if (parsed.origin !== 'https://bondr.local') return '/';
+    if (parsed.origin !== 'https://bondr.local') return fallback ?? '/';
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return '/';
+    return fallback ?? '/';
   }
 }
 
 
-function resolveStoredNextPath() {
-  if (typeof window === 'undefined') return '/';
-  const next = safeNextPath(sessionStorage.getItem(NEXT_KEY));
+function resolveStoredNextPath(fallback: string | null = '/') {
+  if (typeof window === 'undefined') return fallback;
+  const next = safeNextPath(sessionStorage.getItem(NEXT_KEY), fallback);
   sessionStorage.removeItem(NEXT_KEY);
   return next;
 }
@@ -96,7 +97,7 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return;
 
     function completeTurnkeyAuthRedirect() {
-      const next = resolveStoredNextPath();
+      const next = resolveStoredNextPath('/') ?? '/';
       redirectedRef.current = true;
       router.replace(next);
       window.setTimeout(() => {
@@ -123,7 +124,8 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     }
 
     if (redirectedRef.current) return;
-    const next = resolveStoredNextPath();
+    const next = resolveStoredNextPath(null);
+    if (!next) return;
     redirectedRef.current = true;
 
     if (next !== path) {

@@ -147,6 +147,9 @@ test('authenticated shell navigation uses document loads after Turnkey subject c
   assert.match(platformShellSource, /router\.replace\(next\)/);
   assert.match(platformShellSource, /window\.location\.href = next/);
   assert.match(platformShellSource, /sessionStorage\.setItem\(NEXT_KEY, '\/'\)/);
+  assert.match(platformShellSource, /resolveStoredNextPath\(null\)/);
+  assert.match(platformShellSource, /if \(!next\) return/);
+  assert.match(platformShellSource, /resolveStoredNextPath\('\/'\) \?\? '\/'/);
   assert.match(platformShellSource, /<a className="bondrWordmark" href="\/"/);
   assert.match(platformShellSource, /<a key=\{item\.href\} href=\{item\.href\}>/);
   assert.match(accountNavButtonSource, /<a href="\/profile">Profile<\/a>/);
