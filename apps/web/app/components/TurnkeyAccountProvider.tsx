@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AuthState, ClientState, TurnkeyProvider, type TurnkeyProviderConfig, useTurnkey } from '@turnkey/react-wallet-kit';
+import { profileSubjectKey, setActiveProfileSubject, setProfileScopedActiveWallet } from '../../lib/profile-scoped-browser-state';
 
 const TURNKEY_ORGANIZATION_ID_SHAPE = /^[0-9a-f-]{36}$/i;
 const TURNKEY_API_PUBLIC_KEY_SHAPE = /^[0-9a-f]{64}$/i;
@@ -136,11 +137,6 @@ type TurnkeyWalletProviderLike = {
   connectedAddresses?: string[];
 };
 
-type WalletAuthCreateSubOrgParams = {
-  userName: string;
-  subOrgName: string;
-};
-
 const defaultDebugState: AuthDebugState = {
   lastEvent: 'not-started',
   callbackFired: false,
@@ -182,8 +178,8 @@ function decodeBase64UrlJson(segment: string): Record<string, unknown> | null {
 function sessionFromJwt(token: string): VerifiedTurnkeySession | null {
   const payload = decodeBase64UrlJson(token.split('.')[1] ?? '');
   if (!payload) return null;
-  const userId = maybeString(payload.user_id);
-  const organizationId = maybeString(payload.organization_id);
+  const userId = maybeString(payload.user_id) ?? maybeString(payload.userId);
+  const organizationId = maybeString(payload.organization_id) ?? maybeString(payload.organizationId);
   const expiry = typeof payload.exp === 'number' && Number.isFinite(payload.exp) ? payload.exp : undefined;
   if (!userId || !organizationId) return null;
   return normalizeVerifiedSession({
@@ -191,7 +187,7 @@ function sessionFromJwt(token: string): VerifiedTurnkeySession | null {
     organizationId,
     expiry,
     token,
-    publicKey: maybeString(payload.public_key) ?? undefined
+    publicKey: maybeString(payload.public_key) ?? maybeString(payload.publicKey) ?? undefined
   });
 }
 
@@ -240,6 +236,12 @@ function storeVerifiedSession(session: VerifiedTurnkeySession) {
     token: session.token,
     publicKey: session.publicKey
   }));
+}
+
+function activateVerifiedSubject(session: VerifiedTurnkeySession, activeWalletAddress?: string | null) {
+  const subject = profileSubjectKey({ userId: session.userId, organizationId: session.organizationId });
+  setActiveProfileSubject(subject);
+  if (activeWalletAddress?.trim()) setProfileScopedActiveWallet(activeWalletAddress, subject);
 }
 
 function clearStoredVerifiedSession() {
@@ -367,22 +369,6 @@ function selectWalletProvider(providers: TurnkeyWalletProviderLike[], preferredC
     ?? null;
 }
 
-function shortWalletIdentifier(address: string | null, fallback: string) {
-  if (!address) return fallback;
-  const compact = address.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (compact.length <= 16) return compact || fallback;
-  return `${compact.slice(0, 8)}-${compact.slice(-8)}`;
-}
-
-function walletAuthCreateSubOrgParams(provider: TurnkeyWalletProviderLike, chain: 'solana' | 'ethereum'): WalletAuthCreateSubOrgParams {
-  const providerLabel = providerName(provider).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'wallet';
-  const walletId = shortWalletIdentifier(providerAddress(provider), providerLabel);
-  return {
-    userName: `bondr-${chain}-${walletId}`,
-    subOrgName: `bondr-${chain}-${walletId}`
-  };
-}
-
 function walletAuthConfigError() {
   if (!organizationId) return 'Turnkey wallet auth is missing NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID.';
   if (TURNKEY_API_PUBLIC_KEY_SHAPE.test(organizationId)) {
@@ -456,13 +442,21 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
     if (!verified) return;
     if (verifiedSession?.userId === verified.userId && verifiedSession.organizationId === verified.organizationId) return;
     setVerifiedSession(verified);
+    activateVerifiedSubject(verified, verifiedAuthMethod?.method === 'wallet' ? verifiedAuthMethod.identifier : null);
     setDebug((current) => ({ ...current, lastEvent: 'turnkey-session-observed', hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'session observed') }));
     storeVerifiedSession(verified);
     if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
       sessionStorage.removeItem(PENDING_LOGIN_KEY);
       window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
     }
-  }, [setDebug, setVerifiedSession, turnkey.session, verifiedSession?.organizationId, verifiedSession?.userId]);
+  }, [setDebug, setVerifiedSession, turnkey.session, verifiedAuthMethod?.identifier, verifiedAuthMethod?.method, verifiedSession?.organizationId, verifiedSession?.userId]);
+
+  useEffect(() => {
+    setActiveProfileSubject(profileSubjectKey({
+      userId: sessionUserId ?? verifiedSession?.userId ?? null,
+      organizationId: sessionOrganizationId ?? verifiedSession?.organizationId ?? null
+    }));
+  }, [sessionOrganizationId, sessionUserId, verifiedSession?.organizationId, verifiedSession?.userId]);
 
   const value = useMemo<BondrTurnkeyAccount>(() => ({
     configured: true,
@@ -487,7 +481,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
     externalWalletProvider,
     externalWalletChain,
     sessionExpiresAt: sessionExpiryIso(session?.expiry) ?? maybeString(session?.expiresAt) ?? sessionExpiryIso(verifiedSession?.expiry),
-    sessionJwt: maybeString(session?.token) ?? maybeString(session?.jwt) ?? maybeString(session?.sessionJwt) ?? verifiedSession?.token ?? null,
+    sessionJwt: maybeString(session?.token) ?? maybeString(session?.sessionToken) ?? maybeString(session?.jwt) ?? maybeString(session?.sessionJwt) ?? verifiedSession?.token ?? null,
     debug: {
       ...debug,
       hasTurnkeySession: Boolean(turnkey.session),
@@ -525,35 +519,22 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
         provider: providerName(selectedProvider),
         chain: preferredChain
       };
-      setVerifiedAuthMethod(nextAuthMethod);
-      storeVerifiedAuthMethod(nextAuthMethod);
-      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login-or-signup', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet login ${nextAuthMethod.provider}`) }));
+      setDebug((current) => ({ ...current, lastEvent: 'wallet-login-requested', callbackMethod: 'wallet', callbackAction: 'login', lastErrorCode: null, lastErrorMessage: null, timeline: addTimeline(current, `${preferredChain} wallet login ${nextAuthMethod.provider}`) }));
       let result: { sessionToken?: string; address?: string; action?: string } | undefined;
       try {
-        result = await turnkey.loginOrSignupWithWallet({
-          walletProvider: selectedProvider as never,
-          createSubOrgParams: walletAuthCreateSubOrgParams(selectedProvider, preferredChain) as never
-        }) as { sessionToken?: string; address?: string; action?: string } | undefined;
+        result = {
+          ...await turnkey.loginWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string },
+          action: 'login'
+        };
       } catch (error) {
         if (isTurnkeyCredentialConflict(error)) {
-          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-credential-conflict-retry', lastErrorCode: safeErrorCode(error), lastErrorMessage: detailedErrorMessage(error), timeline: addTimeline(current, 'wallet credential conflict; trying login-only') }));
-          try {
-            result = {
-              ...await turnkey.loginWithWallet({ walletProvider: selectedProvider as never }) as { sessionToken?: string; address?: string },
-              action: 'login'
-            };
-          } catch (loginError) {
-            const conflictMessage = credentialConflictMessage(providerAddress(selectedProvider));
-            const message = isTurnkeyCredentialConflict(loginError)
-              ? conflictMessage
-              : `${conflictMessage} Login-only retry also failed: ${detailedErrorMessage(loginError)}`;
-            setDebug((current) => ({ ...current, lastEvent: 'wallet-login-credential-conflict', lastErrorCode: safeErrorCode(loginError) ?? safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet credential conflict') }));
-            sessionStorage.removeItem(PENDING_LOGIN_KEY);
-            throw new Error(message);
-          }
+          const message = credentialConflictMessage(providerAddress(selectedProvider));
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-credential-conflict', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet credential conflict') }));
+          sessionStorage.removeItem(PENDING_LOGIN_KEY);
+          throw new Error(message);
         } else {
-          const message = detailedErrorMessage(error);
-          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-or-signup-failed', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet loginOrSignup failed') }));
+          const message = `Wallet login is restricted to an existing BONDR Turnkey account. Unknown wallets cannot create a new operator profile from this button. Use the original Turnkey email/passkey login, or bind this wallet to the intended Turnkey account before using wallet login. Details: ${detailedErrorMessage(error)}`;
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-failed-closed', lastErrorCode: safeErrorCode(error), lastErrorMessage: message, timeline: addTimeline(current, 'wallet login failed closed') }));
           sessionStorage.removeItem(PENDING_LOGIN_KEY);
           throw new Error(message);
         }
@@ -562,15 +543,19 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
         const walletAuthMethod = { ...nextAuthMethod, identifier: result.address };
         setVerifiedAuthMethod(walletAuthMethod);
         storeVerifiedAuthMethod(walletAuthMethod);
+      } else {
+        setVerifiedAuthMethod(nextAuthMethod);
+        storeVerifiedAuthMethod(nextAuthMethod);
       }
       if (result?.sessionToken) {
         const verified = sessionFromJwt(result.sessionToken);
         if (verified) {
           setVerifiedSession(verified);
           storeVerifiedSession(verified);
+          activateVerifiedSubject(verified, result.address ?? nextAuthMethod.identifier);
           sessionStorage.removeItem(PENDING_LOGIN_KEY);
           window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
-          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-session-stored', callbackMethod: 'wallet', callbackAction: result.action ?? 'login-or-signup', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet session stored') }));
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-session-stored', callbackMethod: 'wallet', callbackAction: result.action ?? 'login', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet session stored') }));
         }
       }
       await Promise.allSettled([turnkey.refreshUser(), turnkey.refreshWallets()]);
@@ -579,9 +564,10 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
         if (verified) {
           setVerifiedSession(verified);
           storeVerifiedSession(verified);
+          activateVerifiedSubject(verified, result?.address ?? nextAuthMethod.identifier);
           sessionStorage.removeItem(PENDING_LOGIN_KEY);
           window.dispatchEvent(new CustomEvent(AUTH_SUCCESS_EVENT));
-          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-refreshed-session-stored', callbackMethod: 'wallet', callbackAction: result?.action ?? 'login-or-signup', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet refreshed session stored') }));
+          setDebug((current) => ({ ...current, lastEvent: 'wallet-login-refreshed-session-stored', callbackMethod: 'wallet', callbackAction: result?.action ?? 'login', callbackHadSession: true, callbackHadUserOrg: true, hasTurnkeySession: true, hasSessionUserOrg: true, timeline: addTimeline(current, 'wallet refreshed session stored') }));
           return;
         }
         sessionStorage.removeItem(PENDING_LOGIN_KEY);
@@ -594,6 +580,7 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
       clearVerifiedSession();
       setDebug(() => ({ ...defaultDebugState, lastEvent: 'logout' }));
       clearStoredVerifiedSession();
+      setActiveProfileSubject(null);
       await turnkey.logout();
     },
     refresh: async () => {
@@ -643,6 +630,7 @@ export function TurnkeyAccountProvider({ children }: { children: ReactNode }) {
           if (!verified) return;
           setVerifiedSession(verified);
           storeVerifiedSession(verified);
+          activateVerifiedSubject(verified, String(method) === 'wallet' ? maybeString(identifier) : null);
           if (sessionStorage.getItem(PENDING_LOGIN_KEY) === 'true') {
             sessionStorage.removeItem(PENDING_LOGIN_KEY);
             window.setTimeout(() => {

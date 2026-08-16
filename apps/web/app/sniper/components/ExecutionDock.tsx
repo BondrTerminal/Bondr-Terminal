@@ -3,6 +3,7 @@
 import { VersionedTransaction } from '@solana/web3.js';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { getProfileScopedActiveWallet, setProfileScopedActiveWallet } from '../../../lib/profile-scoped-browser-state';
 import type { TransactionPreview } from '../../../lib/transaction-preview';
 
 type ExecutionQuote = {
@@ -179,20 +180,26 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
       const next = typeof pubkey === 'object' && pubkey && 'toString' in pubkey && typeof pubkey.toString === 'function' ? pubkey.toString() : ((window as BrowserWindowWithSolana).solana?.publicKey?.toBase58?.() ?? (window as BrowserWindowWithSolana).solana?.publicKey?.toString?.() ?? null);
       setWalletPublicKey(next || null);
       if (next) {
-        window.localStorage.setItem('bondr.activeWallet', next);
-        window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: next } }));
+        setProfileScopedActiveWallet(next);
       }
     };
     const onActiveWalletChanged = (event: Event) => {
       const custom = event as CustomEvent<{ address?: string }>;
-      const next = custom.detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? null;
+      const next = (custom.detail?.address ?? getProfileScopedActiveWallet()) || null;
       if (next) setSelectedWalletId(wallets.find((wallet) => wallet.address === next)?.id ?? 'browser-wallet');
+    };
+    const onProfileSubjectChanged = () => {
+      setWalletPublicKey(null);
+      const next = getProfileScopedActiveWallet();
+      setSelectedWalletId(next ? wallets.find((wallet) => wallet.address === next)?.id ?? 'browser-wallet' : wallets[0]?.id ?? 'browser-wallet');
     };
     provider?.on?.('accountChanged', onAccount);
     window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+    window.addEventListener('bondr-profile-subject-changed', onProfileSubjectChanged);
     return () => {
       provider?.off?.('accountChanged', onAccount);
       window.removeEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
+      window.removeEventListener('bondr-profile-subject-changed', onProfileSubjectChanged);
     };
   }, [wallets]);
   useEffect(() => {
@@ -210,7 +217,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
     });
   }, [clientWallets, wallets]);
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('bondr.activeWallet') ?? '' : '';
+    const stored = typeof window !== 'undefined' ? getProfileScopedActiveWallet() : '';
     setSelectedWalletId((current) => {
       if (current === 'browser-wallet') return current;
       if (renderedWallets.some((wallet) => wallet.id === current)) return current;
@@ -276,8 +283,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
     if (!address) { setLiveMessage('Connect a Solana browser wallet first.'); return; }
     const saved = renderedWallets.find((wallet) => wallet.address === address);
     setSelectedWalletId(saved?.id ?? 'browser-wallet');
-    window.localStorage.setItem('bondr.activeWallet', address);
-    window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address } }));
+    setProfileScopedActiveWallet(address);
     setLiveMessage(saved ? `Connected signer ${compact(address)} is now the active wallet.` : `Connected signer ${compact(address)} is active for this browser. Add it as watch-only to save the public record in Wallet Ops.`);
   }
 

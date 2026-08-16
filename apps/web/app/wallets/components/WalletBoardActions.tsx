@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getProfileScopedActiveWallet, getProfileScopedWalletRailDraft, setProfileScopedActiveWallet, setProfileScopedWalletRailDraft } from '../../../lib/profile-scoped-browser-state';
 
 type WalletAction = 'phantom' | 'track' | 'send' | 'receive' | 'archive' | 'group' | 'export' | null;
 type WalletFilter = 'all' | 'project' | 'global' | 'trading' | 'treasury' | 'archived' | 'deployer' | 'launch' | 'reserve';
@@ -257,13 +258,18 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setActiveWalletAddress(window.localStorage.getItem('bondr.activeWallet') ?? '');
+    setActiveWalletAddress(getProfileScopedActiveWallet());
     const updateActiveWallet = (event: Event) => {
       const detail = (event as CustomEvent<{ address?: string }>).detail;
-      setActiveWalletAddress(detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? '');
+      setActiveWalletAddress(detail?.address ?? getProfileScopedActiveWallet());
     };
+    const updateProfileSubject = () => setActiveWalletAddress(getProfileScopedActiveWallet());
     window.addEventListener('bondr-active-wallet-changed', updateActiveWallet);
-    return () => window.removeEventListener('bondr-active-wallet-changed', updateActiveWallet);
+    window.addEventListener('bondr-profile-subject-changed', updateProfileSubject);
+    return () => {
+      window.removeEventListener('bondr-active-wallet-changed', updateActiveWallet);
+      window.removeEventListener('bondr-profile-subject-changed', updateProfileSubject);
+    };
   }, []);
 
   useEffect(() => {
@@ -338,8 +344,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
       setPhantomAddress(address);
       setPhantomStatus(address ? 'connected' : 'available');
       if (address && typeof window !== 'undefined') {
-        window.localStorage.setItem('bondr.activeWallet', address);
-        window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address } }));
+        setProfileScopedActiveWallet(address);
       }
       setAddressInput(address);
       setMessage({ type: 'ok', text: address ? `Phantom connected and set active: ${address.slice(0, 4)}…${address.slice(-4)}. No transaction signature requested. Use Track Address to save it as watch-only if missing.` : 'Phantom opened. No transaction signature requested.' });
@@ -401,8 +406,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
 
   function selectWallet(wallet: BoardWallet) {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('bondr.activeWallet', wallet.address);
-      window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } }));
+      setProfileScopedActiveWallet(wallet.address);
       setActiveWalletAddress(wallet.address);
     }
     setFromWalletId(wallet.id);
@@ -442,13 +446,13 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   function saveRailDraftToBrowser() {
     if (typeof window === 'undefined') return;
     const payload = { projectId: selectedProjectId ?? null, savedAt: new Date().toISOString(), railDraft };
-    window.localStorage.setItem(`bondr.walletRailDraft.${selectedProjectId ?? 'global'}`, JSON.stringify(payload));
+    setProfileScopedWalletRailDraft(selectedProjectId ?? 'global', JSON.stringify(payload));
     setMessage({ type: 'ok', text: 'Wallet rail draft saved in this browser. No launch config, funding, signing, or broadcast changed.' });
   }
 
   function loadRailDraftFromBrowser() {
     if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(`bondr.walletRailDraft.${selectedProjectId ?? 'global'}`);
+    const raw = getProfileScopedWalletRailDraft(selectedProjectId ?? 'global');
     if (!raw) {
       setMessage({ type: 'warn', text: 'No saved wallet rail draft found in this browser.' });
       return;

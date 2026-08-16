@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { decodeSessionJwt } from '../apps/web/lib/turnkey-session-auth';
 
 const providerSource = readFileSync(new URL('../apps/web/app/components/TurnkeyAccountProvider.tsx', import.meta.url), 'utf8');
 const profileRouteSource = readFileSync(new URL('../apps/web/app/api/account/profile/route.ts', import.meta.url), 'utf8');
@@ -9,6 +10,20 @@ const profileUiSource = readFileSync(new URL('../apps/web/app/profile/components
 const landingSource = readFileSync(new URL('../apps/web/app/components/BondrLandingPage.tsx', import.meta.url), 'utf8');
 const readinessSource = readFileSync(new URL('../apps/web/app/api/account/readiness/route.ts', import.meta.url), 'utf8');
 const envExampleSource = readFileSync(new URL('../apps/web/.env.example', import.meta.url), 'utf8');
+const profileScopedStateSource = readFileSync(new URL('../apps/web/lib/profile-scoped-browser-state.ts', import.meta.url), 'utf8');
+const headerWalletChipSource = readFileSync(new URL('../apps/web/app/components/HeaderWalletChip.tsx', import.meta.url), 'utf8');
+const walletRailStatusSource = readFileSync(new URL('../apps/web/app/components/WalletRailStatus.tsx', import.meta.url), 'utf8');
+const walletBoardSource = readFileSync(new URL('../apps/web/app/wallets/components/WalletBoardActions.tsx', import.meta.url), 'utf8');
+const executionDockSource = readFileSync(new URL('../apps/web/app/sniper/components/ExecutionDock.tsx', import.meta.url), 'utf8');
+const walletSelectionDeskSource = readFileSync(new URL('../apps/web/app/sniper/components/WalletSelectionDesk.tsx', import.meta.url), 'utf8');
+const createProjectLauncherSource = readFileSync(new URL('../apps/web/app/components/CreateProjectLauncher.tsx', import.meta.url), 'utf8');
+const launchConfigEditorSource = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
+const deploymentBuilderSource = readFileSync(new URL('../apps/web/app/deployment/components/DeploymentLaunchBuilderPanel.tsx', import.meta.url), 'utf8');
+
+function fakeJwt(payload: Record<string, unknown>) {
+  const encode = (value: Record<string, unknown> | string) => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'ES256', typ: 'JWT' })}.${encode(payload)}.${encode('signature')}`;
+}
 
 test('Turnkey provider exposes Solana wallet auth as an identity login method', () => {
   assert.match(providerSource, /walletAuthEnabled:\s*true/);
@@ -23,18 +38,19 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /loginWithExternalWallet:\s*async\s*\(preferredChain = 'solana'\)/);
   assert.match(providerSource, /const loadedProviders = turnkey\.walletProviders as TurnkeyWalletProviderLike\[\]/);
   assert.match(providerSource, /fetchWalletProviders\(preferredChain as never\)/);
-  assert.match(providerSource, /loginOrSignupWithWallet\(\{\s*walletProvider: selectedProvider as never,\s*createSubOrgParams: walletAuthCreateSubOrgParams\(selectedProvider, preferredChain\) as never/s);
+  assert.doesNotMatch(providerSource, /loginOrSignupWithWallet\(/);
   assert.match(providerSource, /function isTurnkeyCredentialConflict/);
-  assert.match(providerSource, /wallet-login-credential-conflict-retry/);
   assert.match(providerSource, /loginWithWallet\(\{ walletProvider: selectedProvider as never \}\)/);
   assert.match(providerSource, /Clean up the duplicate wallet-auth suborgs in the Turnkey dashboard/);
-  assert.match(providerSource, /function walletAuthCreateSubOrgParams/);
+  assert.match(providerSource, /Wallet login is restricted to an existing BONDR Turnkey account/);
+  assert.match(providerSource, /Unknown wallets cannot create a new operator profile/);
   assert.match(providerSource, /function walletAuthConfigError/);
   assert.match(providerSource, /64-character API public key where the parent organization ID is required/);
   assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
   assert.match(providerSource, /wallet-login-session-stored/);
   assert.match(providerSource, /wallet-login-missing-session-token/);
   assert.match(providerSource, /token:\s*session\.token/);
+  assert.match(providerSource, /activateVerifiedSubject\(verified,\s*result\.address \?\? nextAuthMethod\.identifier\)/);
   assert.match(providerSource, /externalWalletAddress/);
   assert.match(providerSource, /onAuthenticationSuccess:\s*\(\{ session, method, action, identifier \}\)/);
 });
@@ -49,6 +65,37 @@ test('verified BONDR profiles persist external wallet auth metadata separately f
   assert.match(profileStoreSource, /auth_method = coalesce\(excluded\.auth_method, bondr_profiles\.auth_method\)/);
 });
 
+test('Turnkey session JWT decoding accepts signed-in user claim naming variants', () => {
+  const expiry = Math.floor(Date.now() / 1000) + 600;
+  assert.deepEqual(decodeSessionJwt(fakeJwt({
+    exp: expiry,
+    public_key: 'pub-snake',
+    session_type: 'SESSION_TYPE_READ_ONLY',
+    user_id: 'user-snake',
+    organization_id: 'org-snake'
+  })), {
+    expiry,
+    publicKey: 'pub-snake',
+    sessionType: 'SESSION_TYPE_READ_ONLY',
+    userId: 'user-snake',
+    organizationId: 'org-snake'
+  });
+
+  assert.deepEqual(decodeSessionJwt(fakeJwt({
+    exp: expiry,
+    publicKey: 'pub-camel',
+    sessionType: 'SESSION_TYPE_READ_WRITE',
+    userId: 'user-camel',
+    organizationId: 'org-camel'
+  })), {
+    expiry,
+    publicKey: 'pub-camel',
+    sessionType: 'SESSION_TYPE_READ_WRITE',
+    userId: 'user-camel',
+    organizationId: 'org-camel'
+  });
+});
+
 test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(profileUiSource, /Log in with Turnkey/);
   assert.match(profileUiSource, /Log in with Solana wallet/);
@@ -58,7 +105,8 @@ test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(landingSource, /EVM wallet/);
   assert.match(landingSource, /account\.debug\.lastErrorMessage/);
   assert.doesNotMatch(landingSource, /async function continueWithWallet[\s\S]*await waitForModalUnmount\(\);/);
-  assert.match(profileUiSource, /Choose wallet to authenticate with Phantom\/Solflare/);
+  assert.match(profileUiSource, /wallet login is restricted to wallets already bound to this operator account/);
+  assert.match(profileUiSource, /Unknown wallets fail closed and cannot create a new BONDR operator profile/);
   assert.match(profileUiSource, /Turnkey debug:/);
   assert.match(profileUiSource, /External wallet/);
   assert.match(readinessSource, /externalWalletAuth:\s*'enabled-in-client-config'/);
@@ -66,4 +114,47 @@ test('profile UI and readiness describe wallet auth as identity-only', () => {
   assert.match(readinessSource, /walletAuthChains:\s*\['solana', 'ethereum'\]/);
   assert.match(envExampleSource, /Wallet auth is enabled client-side for Solana and injected EVM wallets/);
   assert.match(envExampleSource, /Transaction signing still requires explicit browser review/);
+});
+
+test('profile-scoped browser wallet state prevents cross-profile active wallet leakage', () => {
+  assert.match(profileScopedStateSource, /const ACTIVE_SUBJECT_KEY = 'bondr\.activeSubject'/);
+  assert.match(profileScopedStateSource, /profileSubjectKey/);
+  assert.match(profileScopedStateSource, /setActiveProfileSubject/);
+  assert.match(profileScopedStateSource, /clearLegacyProfileState/);
+  assert.match(profileScopedStateSource, /window\.localStorage\.removeItem\(LEGACY_ACTIVE_WALLET_KEY\)/);
+  assert.match(profileScopedStateSource, /bondr-profile-subject-changed/);
+  assert.match(profileScopedStateSource, /bondr-active-wallet-changed/);
+  assert.match(profileScopedStateSource, /function scopedKeyForSubject/);
+  assert.match(profileScopedStateSource, /\$\{base\}\.\$\{subject\}/);
+  assert.match(profileScopedStateSource, /setProfileScopedActiveWallet\(address: string, subjectOverride\?: string \| null\)/);
+
+  for (const [label, source] of [
+    ['HeaderWalletChip', headerWalletChipSource],
+    ['WalletRailStatus', walletRailStatusSource],
+    ['WalletBoardActions', walletBoardSource],
+    ['ExecutionDock', executionDockSource],
+    ['WalletSelectionDesk', walletSelectionDeskSource],
+    ['CreateProjectLauncher', createProjectLauncherSource],
+    ['LaunchConfigEditor', launchConfigEditorSource]
+  ] as const) {
+    assert.match(source, /getProfileScopedActiveWallet/, `${label} must read active wallet through profile scope`);
+    assert.doesNotMatch(source, /localStorage\.getItem\('bondr\.activeWallet'\)/, `${label} must not read the legacy global active wallet`);
+  }
+
+  for (const [label, source] of [
+    ['WalletRailStatus', walletRailStatusSource],
+    ['WalletBoardActions', walletBoardSource],
+    ['ExecutionDock', executionDockSource],
+    ['WalletSelectionDesk', walletSelectionDeskSource],
+    ['LaunchConfigEditor', launchConfigEditorSource],
+    ['DeploymentLaunchBuilderPanel', deploymentBuilderSource]
+  ] as const) {
+    assert.match(source, /bondr-profile-subject-changed/, `${label} must react to Turnkey subject changes`);
+  }
+
+  assert.match(deploymentBuilderSource, /providerSigner !== connectedSigner/);
+  assert.match(deploymentBuilderSource, /const expectedSigner = pumpPortalBuild\.result\.intent\?\.expectedSigner/);
+  assert.match(deploymentBuilderSource, /!expectedSigner/);
+  assert.match(deploymentBuilderSource, /providerSigner !== expectedSigner/);
+  assert.match(deploymentBuilderSource, /Browser signer proof is stale or mismatched/);
 });

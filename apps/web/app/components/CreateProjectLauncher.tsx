@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { AccountGatePrompt, useRequireTurnkeyAccount } from './RequireAccountAction';
+import { getProfileScopedActiveWallet } from '../../lib/profile-scoped-browser-state';
 
 type Step = 'basics' | 'launch' | 'wallet' | 'budget' | 'review';
 type LauncherMode = 'modal' | 'inline' | 'compact';
@@ -93,7 +94,7 @@ export function CreateProjectLauncher({
 
   useEffect(() => {
     if (!open) return;
-    const selected = typeof window !== 'undefined' ? window.localStorage.getItem('bondr.activeWallet') ?? '' : '';
+    const selected = typeof window !== 'undefined' ? getProfileScopedActiveWallet() : '';
     const params = new URLSearchParams();
     if (selected) params.set('selectedWallet', selected);
     void Promise.all([

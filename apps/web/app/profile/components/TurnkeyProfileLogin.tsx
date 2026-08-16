@@ -114,7 +114,7 @@ export function TurnkeyProfileLogin() {
     setBusy(true);
     try {
       await account.login();
-      setSyncStatus('Turnkey login opened. Choose wallet to authenticate with Phantom/Solflare, or email/passkey if needed.');
+      setSyncStatus('Turnkey login opened. Use email/passkey for account access; wallet login is restricted to wallets already bound to this operator account.');
     } catch (error) {
       setSyncStatus(error instanceof Error ? error.message : 'Turnkey login failed.');
     } finally {
@@ -127,7 +127,7 @@ export function TurnkeyProfileLogin() {
     try {
       setSyncStatus('Looking for a Solana wallet through Turnkey…');
       await account.loginWithExternalWallet();
-      setSyncStatus('Turnkey wallet login requested. Approve the wallet signature prompt to complete login.');
+      setSyncStatus('Turnkey wallet login requested. Unknown wallets fail closed and cannot create a new BONDR operator profile.');
     } catch (error) {
       setSyncStatus(error instanceof Error ? error.message : 'Turnkey wallet login failed.');
     } finally {
@@ -176,7 +176,7 @@ export function TurnkeyProfileLogin() {
         <div>
           <div className="eyebrow">BONDR operator profile</div>
           <h1>{profile?.displayName ?? account.userName ?? 'Operator profile'}</h1>
-          <p>Your Turnkey identity unlocks the terminal. Your profile organizes the operator account. Browser-wallet signing remains separate from login.</p>
+          <p>Your Turnkey identity unlocks the terminal. Your profile organizes the operator account. Wallet login is login-only; browser-wallet signing remains separate.</p>
         </div>
         <div className="profileActions">
           <button className="button" type="button" onClick={() => void loginWithWallet()} disabled={!account.clientReady || account.authenticated || busy}>{account.authenticated ? 'Wallet auth active' : 'Log in with Solana wallet'}</button>

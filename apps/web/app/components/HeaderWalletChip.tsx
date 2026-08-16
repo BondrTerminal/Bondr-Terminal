@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getProfileScopedActiveWallet } from '../../lib/profile-scoped-browser-state';
 
 type SolanaProvider = {
   publicKey?: { toBase58?(): string; toString(): string };
@@ -36,7 +37,7 @@ export function HeaderWalletChip() {
   }, [activeWallet, signer]);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('bondr.activeWallet') ?? '';
+    const stored = getProfileScopedActiveWallet();
     setActiveWallet(stored);
     const provider = (window as WindowWithSolana).solana;
     const existing = provider?.publicKey?.toBase58?.() ?? provider?.publicKey?.toString?.() ?? '';
@@ -45,20 +46,22 @@ export function HeaderWalletChip() {
     const onAccount = (pubkey?: unknown) => {
       const next = typeof pubkey === 'object' && pubkey && 'toBase58' in pubkey && typeof pubkey.toBase58 === 'function' ? pubkey.toBase58() : (window as WindowWithSolana).solana?.publicKey?.toBase58?.() ?? '';
       setSigner(next);
-      void refresh(next, window.localStorage.getItem('bondr.activeWallet') ?? next);
+      void refresh(next, getProfileScopedActiveWallet() || next);
     };
     const onActiveWalletChanged = (event: Event) => {
-      const next = (event as CustomEvent<{ address?: string }>).detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? '';
+      const next = (event as CustomEvent<{ address?: string }>).detail?.address ?? getProfileScopedActiveWallet();
       setActiveWallet(next);
       void refresh(signer || existing, next);
     };
     provider?.on?.('accountChanged', onAccount);
     window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
     window.addEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+    window.addEventListener('bondr-profile-subject-changed', onActiveWalletChanged);
     return () => {
       provider?.off?.('accountChanged', onAccount);
       window.removeEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
       window.removeEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+      window.removeEventListener('bondr-profile-subject-changed', onActiveWalletChanged);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

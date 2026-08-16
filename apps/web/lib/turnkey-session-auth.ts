@@ -27,6 +27,14 @@ function decodeBase64UrlJson(segment: string): unknown {
   return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
 }
 
+function stringClaim(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return null;
+}
+
 export function getBearerToken(request: Request): string | null {
   const authorization = request.headers.get('authorization') ?? '';
   const match = authorization.match(/^Bearer\s+(.+)$/i);
@@ -46,10 +54,10 @@ export function decodeSessionJwt(token: string): Omit<VerifiedTurnkeySession, 'j
 
   const payload = decoded as Record<string, unknown>;
   const expiry = payload.exp;
-  const publicKey = payload.public_key;
-  const sessionType = payload.session_type;
-  const userId = payload.user_id;
-  const organizationId = payload.organization_id;
+  const publicKey = stringClaim(payload, 'public_key', 'publicKey');
+  const sessionType = stringClaim(payload, 'session_type', 'sessionType');
+  const userId = stringClaim(payload, 'user_id', 'userId');
+  const organizationId = stringClaim(payload, 'organization_id', 'organizationId');
 
   if (typeof expiry !== 'number' || !Number.isFinite(expiry)) {
     throw new TurnkeySessionAuthError('missing-expiry', 'JWT payload missing required exp field');

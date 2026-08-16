@@ -117,7 +117,7 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
 
     if (!account.authenticated) {
       if (account.authResolved && !account.authHydrating) {
-        sessionStorage.setItem(NEXT_KEY, safeNextPath(path));
+        sessionStorage.setItem(NEXT_KEY, '/');
         redirectedRef.current = false;
       }
       return;

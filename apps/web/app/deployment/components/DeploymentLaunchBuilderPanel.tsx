@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Keypair, VersionedTransaction } from '@solana/web3.js';
 
 type BuildState = {
@@ -211,6 +211,19 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   const [connectedSigner, setConnectedSigner] = useState('');
   const [signerProofMessage, setSignerProofMessage] = useState('Connect browser wallet to prove the deployer signer before building.');
 
+  useEffect(() => {
+    const clearProfileScopedSignerProof = () => {
+      setConnectedSigner('');
+      setSignerProofMessage('Turnkey profile changed. Reconnect the dev browser wallet before building or signing.');
+      setSimulation(null);
+      setSignedReview(null);
+      setBroadcastResult(null);
+      setSignedCreate({ status: 'idle', message: 'Turnkey profile changed. Rebuild, simulate, and reconnect signer before local signing.' });
+    };
+    window.addEventListener('bondr-profile-subject-changed', clearProfileScopedSignerProof);
+    return () => window.removeEventListener('bondr-profile-subject-changed', clearProfileScopedSignerProof);
+  }, []);
+
   async function buildUnsigned() {
     setLoading(true);
     setResult(null);
@@ -256,6 +269,10 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
   }
 
   async function buildPumpPortalCreate(confirmBuild: boolean) {
+    if (payer.trim() && connectedSigner.trim() && payer.trim() !== connectedSigner.trim()) {
+      setPumpPortalBuild({ status: 'blocked', error: 'Connected browser signer does not match the selected deployer. Reconnect the intended wallet before build.' });
+      return;
+    }
     setPumpPortalBuildLoading(true);
     setPumpPortalBuild(null);
     setSimulation(null);
@@ -335,6 +352,12 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
     const provider = typeof window !== 'undefined' ? (window as BrowserWindowWithSolana).solana : undefined;
     if (!provider?.signTransaction) {
       setSignedCreate({ status: 'blocked', message: 'Browser wallet does not expose signTransaction.' });
+      return;
+    }
+    const expectedSigner = pumpPortalBuild.result.intent?.expectedSigner;
+    const providerSigner = provider.publicKey?.toBase58?.() ?? provider.publicKey?.toString();
+    if (!providerSigner || !expectedSigner || providerSigner !== connectedSigner || providerSigner !== expectedSigner) {
+      setSignedCreate({ status: 'blocked', message: 'Browser signer proof is stale or mismatched. Reconnect the selected deployer wallet and rebuild before signing.' });
       return;
     }
     try {

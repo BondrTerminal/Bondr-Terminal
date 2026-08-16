@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { getProfileScopedActiveWallet, setProfileScopedActiveWallet } from '../../../lib/profile-scoped-browser-state';
 
 type TerminalWallet = {
   id: string;
@@ -52,19 +53,26 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
   const selectedWallet = renderedWallets.find((wallet) => wallet.id === selectedWalletId) ?? renderedWallets[0];
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('bondr.activeWallet') ?? '';
+    const stored = getProfileScopedActiveWallet();
     const saved = renderedWallets.find((wallet) => wallet.address === stored);
     if (saved) setSelectedWalletId(saved.id);
     const onActiveWalletChanged = (event: Event) => {
-      const address = (event as CustomEvent<{ address?: string }>).detail?.address ?? window.localStorage.getItem('bondr.activeWallet') ?? '';
+      const address = (event as CustomEvent<{ address?: string }>).detail?.address ?? getProfileScopedActiveWallet();
       const wallet = renderedWallets.find((item) => item.address === address);
       if (wallet) setSelectedWalletId(wallet.id);
     };
+    const onProfileSubjectChanged = () => {
+      const address = getProfileScopedActiveWallet();
+      const wallet = renderedWallets.find((item) => item.address === address);
+      setSelectedWalletId(wallet?.id ?? renderedWallets[0]?.id ?? '');
+    };
     window.addEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
     window.addEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+    window.addEventListener('bondr-profile-subject-changed', onProfileSubjectChanged);
     return () => {
       window.removeEventListener('bondr-active-wallet-changed', onActiveWalletChanged);
       window.removeEventListener('bondr-watch-only-wallet-added', onActiveWalletChanged);
+      window.removeEventListener('bondr-profile-subject-changed', onProfileSubjectChanged);
     };
   }, [renderedWallets]);
   const bundleWallets = useMemo(() => renderedWallets.filter((wallet) => bundleWalletIds.includes(wallet.id)), [renderedWallets, bundleWalletIds]);
@@ -129,7 +137,7 @@ export function WalletSelectionDesk({ wallets }: { wallets: TerminalWallet[] }) 
                   <small>{walletSignerLabel(wallet)}</small>
                 </div>
                 <p className="walletBoxPurpose">{wallet.purpose}</p>
-                <div className="terminalRowActions"><button type="button" onClick={() => { setSelectedWalletId(wallet.id); window.localStorage.setItem('bondr.activeWallet', wallet.address); window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address: wallet.address } })); }}>{isSelected ? 'Active' : 'Use active'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><Link href="/portfolio?view=wallets">Wallets</Link><Link href="/sniper">Open Terminal</Link></div>
+                <div className="terminalRowActions"><button type="button" onClick={() => { setSelectedWalletId(wallet.id); setProfileScopedActiveWallet(wallet.address); }}>{isSelected ? 'Active' : 'Use active'}</button><button type="button" onClick={() => toggleBundleWallet(wallet.id)}>{inBundle ? 'Remove' : 'Multi'}</button><Link href="/portfolio?view=wallets">Wallets</Link><Link href="/sniper">Open Terminal</Link></div>
               </div>
             );
           })}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent, typ
 import { useRouter } from 'next/navigation';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import type { LaunchConfig, Project, Wallet, WalletPlanEntry } from '../../../lib/meridian-store';
+import { getProfileScopedActiveWallet, getProfileScopedClientMint, setProfileScopedActiveWallet, setProfileScopedClientMint } from '../../../lib/profile-scoped-browser-state';
 import { PreLiveDryRunAction } from '../../sniper/components/PreLiveDryRunAction';
 
 type Props = { project: Project; wallets: Wallet[] };
@@ -404,14 +405,28 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('bondr.activeWallet') ?? '';
+    const stored = getProfileScopedActiveWallet();
     setConnectedSigner(stored);
     if (stored) setSignerMessage(stored === selectedDevWallet?.address ? 'Stored active wallet matches the selected dev wallet.' : 'Stored active wallet does not match the selected dev wallet.');
   }, [selectedDevWallet?.address]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedMint = window.sessionStorage.getItem(`bondr.clientMintPublicKey.${project.id}`) ?? '';
+    const clearProfileScopedLaunchProof = () => {
+      const stored = getProfileScopedActiveWallet();
+      setConnectedSigner(stored);
+      setClientMintPublicKey('');
+      setMintMessage('Turnkey profile changed. Generate a fresh client mint public key for this profile before rehearsal.');
+      setSignerMessage(stored ? 'Turnkey profile changed. Reconnect and verify the dev signer before rehearsal.' : 'Turnkey profile changed. Connect the dev browser wallet to prove signer alignment.');
+      setShadowState(null);
+    };
+    window.addEventListener('bondr-profile-subject-changed', clearProfileScopedLaunchProof);
+    return () => window.removeEventListener('bondr-profile-subject-changed', clearProfileScopedLaunchProof);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedMint = getProfileScopedClientMint(project.id);
     if (storedMint) {
       setClientMintPublicKey(storedMint);
       setMintMessage('Loaded client mint public key from this browser session. Private key material is not stored by BONDR.');
@@ -479,8 +494,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       const address = result.publicKey?.toBase58?.() ?? solana.publicKey?.toBase58?.() ?? '';
       setConnectedSigner(address);
       if (address && typeof window !== 'undefined') {
-        window.localStorage.setItem('bondr.activeWallet', address);
-        window.dispatchEvent(new CustomEvent('bondr-active-wallet-changed', { detail: { address } }));
+        setProfileScopedActiveWallet(address);
       }
       const matches = Boolean(address && selectedDevWallet?.address === address);
       setSignerMessage(matches ? 'Connected browser wallet matches the selected dev wallet.' : `Connected signer ${short(address)} does not match dev wallet ${selectedDevWallet ? short(selectedDevWallet.address) : 'missing'}.`);
@@ -497,14 +511,14 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
     setClientMintPublicKey(publicKey);
     setMintMessage('Client mint public key generated in browser memory. BONDR stores/sends only the public key for rehearsal.');
     setShadowState(null);
-    if (typeof window !== 'undefined') window.sessionStorage.setItem(`bondr.clientMintPublicKey.${project.id}`, publicKey);
+    if (typeof window !== 'undefined') setProfileScopedClientMint(project.id, publicKey);
   }
 
   function clearClientMintPublicKey() {
     setClientMintPublicKey('');
     setMintMessage('Client mint cleared. Generate a new public key before compiling shadow.');
     setShadowState(null);
-    if (typeof window !== 'undefined') window.sessionStorage.removeItem(`bondr.clientMintPublicKey.${project.id}`);
+    if (typeof window !== 'undefined') setProfileScopedClientMint(project.id, '');
   }
 
   async function compileShadowPacket() {
