@@ -162,6 +162,34 @@ function defaultMonitor(): Project['monitor'] {
   return { holders: [], orders: [], positions: [], topTraders: [], devTokens: [] };
 }
 
+function normalizeMonitor(value: unknown): Project['monitor'] {
+  const raw = recordValue(value);
+  const fallback = defaultMonitor();
+  return {
+    holders: Array.isArray(raw.holders) ? raw.holders as Project['monitor']['holders'] : fallback.holders,
+    orders: Array.isArray(raw.orders) ? raw.orders as Project['monitor']['orders'] : fallback.orders,
+    positions: Array.isArray(raw.positions) ? raw.positions as Project['monitor']['positions'] : fallback.positions,
+    topTraders: Array.isArray(raw.topTraders) ? raw.topTraders as Project['monitor']['topTraders'] : fallback.topTraders,
+    devTokens: Array.isArray(raw.devTokens) ? raw.devTokens as Project['monitor']['devTokens'] : fallback.devTokens
+  };
+}
+
+function normalizeWallet(wallet: Wallet, index = 0): Wallet {
+  const raw = wallet as Partial<Wallet>;
+  const id = stringValue(raw.id, `wallet-${index + 1}`);
+  return {
+    ...raw,
+    id,
+    role: stringValue(raw.role, index === 0 ? 'dev wallet' : 'watch-only wallet'),
+    address: stringValue(raw.address),
+    scope: raw.scope === 'project' ? 'project' : 'global',
+    groupId: stringValue(raw.groupId),
+    status: stringValue(raw.status, 'active'),
+    balanceSol: numberValue(raw.balanceSol),
+    purpose: stringValue(raw.purpose, 'operator wallet')
+  } as Wallet;
+}
+
 function defaultLaunchConfig(project: Project, wallets: Wallet[] = []): LaunchConfig {
   return {
     route: {
@@ -200,12 +228,15 @@ function normalizedLaunchConfig(project: Project, wallets: Wallet[] = []): Launc
   const fallback = defaultLaunchConfig(project, wallets);
   const saved = recordValue(project.launchConfig) as Partial<LaunchConfig>;
   const savedWalletPlan = Array.isArray(saved.walletPlan) ? saved.walletPlan : [];
-  const savedById = new Map(savedWalletPlan.map((entry) => [entry.walletId, entry]));
+  const savedById = new Map(savedWalletPlan.map((entry) => {
+    const raw = recordValue(entry);
+    return [stringValue(raw.walletId), raw];
+  }));
   return {
     ...fallback,
     ...(saved ?? {}),
     route: { ...fallback.route, ...recordValue(saved.route) },
-    walletPlan: wallets.length ? wallets.map((wallet) => ({ ...(fallback.walletPlan.find((entry) => entry.walletId === wallet.id)!), ...(savedById.get(wallet.id) ?? {}), walletId: wallet.id, role: wallet.role })) : (savedWalletPlan.length ? savedWalletPlan : fallback.walletPlan),
+    walletPlan: wallets.length ? wallets.map((wallet) => ({ ...(fallback.walletPlan.find((entry) => entry.walletId === wallet.id)!), ...recordValue(savedById.get(wallet.id)), walletId: wallet.id, role: wallet.role })) : fallback.walletPlan,
     devWalletRules: { ...fallback.devWalletRules, ...recordValue(saved.devWalletRules) }
   };
 }
@@ -219,7 +250,7 @@ function normalizedProject(project: Project): Project {
   const fundingPlan = recordValue(raw.fundingPlan);
   const deploymentState = recordValue(raw.deploymentState);
   const moduleLinks = { ...defaultModuleLinks(id), ...recordValue(raw.moduleLinks), wallets: portfolioWalletHref(id) };
-  const monitor = { ...defaultMonitor(), ...recordValue(raw.monitor) };
+  const monitor = normalizeMonitor(raw.monitor);
   const normalized = {
     ...raw,
     id,
@@ -323,7 +354,7 @@ function terminalHandoff(project: Project, wallets: Wallet[]): TerminalHandoff {
 export function buildMeridianProjectContext(project: Project, store: MeridianStore, observedAt = new Date().toISOString()): MeridianProjectContext {
   const normalizedBaseProject = normalizedProject(project);
   const walletGroup = store.walletGroups.find((group) => group.id === normalizedBaseProject.walletGroupId) ?? null;
-  const wallets = walletsForGroup(normalizedBaseProject.walletGroupId, store).filter((wallet) => !wallet.archived);
+  const wallets = walletsForGroup(normalizedBaseProject.walletGroupId, store).filter((wallet) => !wallet.archived).map(normalizeWallet);
   const currentProject = { ...normalizedBaseProject, launchConfig: normalizedLaunchConfig(normalizedBaseProject, wallets) };
   const readiness = readinessScore(currentProject, store);
   const preflight = launchPreflight(currentProject, store);

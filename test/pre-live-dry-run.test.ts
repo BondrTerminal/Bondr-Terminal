@@ -186,18 +186,33 @@ test('deployment context upgrades partial durable project rows without crashing'
     ticker: 'PART',
     status: 'draft',
     walletGroupId: 'operator-wallets',
-    launchConfig: { walletPlan: 'legacy-bad-shape' }
+    monitor: { holders: null },
+    launchConfig: {
+      walletPlan: [
+        { walletId: 'wallet-1', role: null, participate: true },
+        'legacy-bad-shape'
+      ]
+    }
   } as unknown as Project;
+  const partialWallet = { ...wallet, role: undefined, balanceSol: undefined } as unknown as Wallet;
 
-  const context = buildMeridianProjectContext(partialProject, { ...store, projects: [partialProject] }, '2026-08-16T06:00:00.000Z');
+  const context = buildMeridianProjectContext(
+    partialProject,
+    { ...store, projects: [partialProject], wallets: [partialWallet] },
+    '2026-08-16T06:00:00.000Z'
+  );
   assert.equal(context.project.id, 'partial-project');
   assert.equal(context.project.metadata.symbol, 'PART');
   assert.equal(context.project.fundingPlan.budgetSol, 0);
   assert.equal(context.project.deploymentState.stage, 'configuration');
   assert.equal(context.project.moduleLinks.deployment, '/deployment?project=partial-project');
   assert.equal(context.project.moduleLinks.wallets, '/portfolio?view=wallets&project=partial-project');
+  assert.deepEqual(context.project.monitor.holders, []);
+  assert.equal(context.wallets[0].role, 'dev wallet');
+  assert.equal(context.wallets[0].balanceSol, 0);
   assert.equal(context.launchConfig.route.platform, 'pump');
   assert.ok(Array.isArray(context.launchConfig.walletPlan));
+  assert.equal(context.launchConfig.walletPlan[0].role, 'dev wallet');
 });
 
 test('raydium pre-live dry-run stays blocked until config, LP proof, and burn simulation exist', () => {
