@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useBondrTurnkeyAccount } from './TurnkeyAccountProvider';
 import { BondrLandingPage } from './BondrLandingPage';
 import { GlobalCreateProjectAction } from './GlobalCreateProjectAction';
@@ -11,7 +11,6 @@ import { AccountNavButton } from './AccountNavButton';
 
 const NEXT_KEY = 'bondr_next_path';
 const AUTH_SUCCESS_EVENT = 'bondr-turnkey-auth-success';
-const VERIFIED_AUTH_KEY = 'bondr_verified_auth';
 const PUBLIC_PATHS = new Set(['/whitepaper']);
 
 const primaryNavItems = [
@@ -28,10 +27,6 @@ const toolItems = [
   { href: '/project-dashboard', label: 'Project Dashboard' },
   { href: '/whitepaper', label: 'Whitepaper' }
 ];
-
-function currentPath(pathname: string, search: string) {
-  return `${pathname}${search ? `?${search}` : ''}`;
-}
 
 function safeNextPath(value: string | null | undefined, fallback: string | null = '/') {
   if (!value) return fallback;
@@ -83,7 +78,6 @@ function AppHeader() {
 export function BondrPlatformShell({ children }: { children: ReactNode }) {
   const account = useBondrTurnkeyAccount();
   const pathname = usePathname();
-  const router = useRouter();
   const redirectedRef = useRef(false);
   const [debugAuth, setDebugAuth] = useState(false);
 
@@ -99,39 +93,23 @@ export function BondrPlatformShell({ children }: { children: ReactNode }) {
     function completeTurnkeyAuthRedirect() {
       const next = resolveStoredNextPath('/') ?? '/';
       redirectedRef.current = true;
-      router.replace(next);
-      window.setTimeout(() => {
-        if (sessionStorage.getItem(VERIFIED_AUTH_KEY) === 'true' && !document.querySelector('.bondrTopHeader')) {
-          window.location.href = next;
-        }
-      }, 250);
+      window.location.replace(next);
     }
 
     window.addEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);
     return () => window.removeEventListener(AUTH_SUCCESS_EVENT, completeTurnkeyAuthRedirect);
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const path = currentPath(pathname, window.location.search.replace(/^\?/, ''));
 
     if (!account.authenticated) {
       if (account.authResolved && !account.authHydrating) {
-        sessionStorage.setItem(NEXT_KEY, '/');
         redirectedRef.current = false;
       }
       return;
     }
-
-    if (redirectedRef.current) return;
-    const next = resolveStoredNextPath(null);
-    if (!next) return;
-    redirectedRef.current = true;
-
-    if (next !== path) {
-      router.replace(next);
-    }
-  }, [account.authHydrating, account.authResolved, account.authenticated, pathname, router]);
+  }, [account.authHydrating, account.authResolved, account.authenticated]);
 
   if (!account.authenticated && !account.authResolved && !PUBLIC_PATHS.has(pathname)) {
     return <div className="bondrAuthResolving" aria-live="polite">Restoring Bond.Terminal session…</div>;

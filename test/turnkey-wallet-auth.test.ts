@@ -149,13 +149,13 @@ test('route error boundary fails closed with profile audit recovery', () => {
 
 test('authenticated shell navigation uses document loads after Turnkey subject changes', () => {
   assert.doesNotMatch(platformShellSource, /from 'next\/link'/);
+  assert.doesNotMatch(platformShellSource, /useRouter/);
   assert.doesNotMatch(accountNavButtonSource, /from 'next\/link'/);
   assert.doesNotMatch(headerWalletChipSource, /from 'next\/link'/);
-  assert.match(platformShellSource, /router\.replace\(next\)/);
-  assert.match(platformShellSource, /window\.location\.href = next/);
-  assert.match(platformShellSource, /sessionStorage\.setItem\(NEXT_KEY, '\/'\)/);
-  assert.match(platformShellSource, /resolveStoredNextPath\(null\)/);
-  assert.match(platformShellSource, /if \(!next\) return/);
+  assert.doesNotMatch(platformShellSource, /router\.replace/);
+  assert.doesNotMatch(platformShellSource, /router\.push/);
+  assert.doesNotMatch(platformShellSource, /sessionStorage\.setItem\(NEXT_KEY, '\/'\)/);
+  assert.match(platformShellSource, /window\.location\.replace\(next\)/);
   assert.match(platformShellSource, /resolveStoredNextPath\('\/'\) \?\? '\/'/);
   assert.match(platformShellSource, /<a className="bondrWordmark" href="\/"/);
   assert.match(platformShellSource, /<a key=\{item\.href\} href=\{item\.href\}>/);
