@@ -17,7 +17,7 @@ function safeJsonParse(value: string | null) {
 function storageSnapshot(storage: Storage) {
   try {
     const keys = Array.from({ length: storage.length }, (_item, index) => storage.key(index)).filter((key): key is string => Boolean(key));
-    const relevantKeys = keys.filter((key) => /^bondr_|^turnkey|turnkey|meridian|wallet|profile/i.test(key)).slice(0, 40);
+    const relevantKeys = keys.filter((key) => /^bondr[._]|^turnkey|turnkey|meridian|wallet|profile/i.test(key)).slice(0, 40);
     return {
       available: true,
       relevantKeys,
@@ -26,9 +26,9 @@ function storageSnapshot(storage: Storage) {
       hasVerifiedAuthMethod: Boolean(storage.getItem('bondr_verified_auth_method')),
       hasPendingLogin: Boolean(storage.getItem('bondr_pending_login')),
       nextPath: storage.getItem('bondr_next_path') ?? null,
-      activeProfileSubjectPresent: relevantKeys.some((key) => key.includes('active_profile_subject')),
-      clientMintKeyCount: relevantKeys.filter((key) => key.includes('client_mint')).length,
-      activeWalletKeyCount: relevantKeys.filter((key) => key.includes('active_wallet')).length
+      activeProfileSubjectPresent: Boolean(storage.getItem('bondr.activeSubject')) || relevantKeys.some((key) => key.includes('active_profile_subject') || key.includes('activeSubject')),
+      clientMintKeyCount: relevantKeys.filter((key) => key.includes('client_mint') || key.includes('clientMintPublicKey')).length,
+      activeWalletKeyCount: relevantKeys.filter((key) => key.includes('active_wallet') || key.includes('activeWallet')).length
     };
   } catch (err) {
     return {
@@ -135,12 +135,8 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
     }).catch(() => undefined);
   }, [diagnostics, digest, error.message, error.name]);
 
-  const localStorageDiagnostics = diagnostics?.localStorage;
   const sessionStorageDiagnostics = diagnostics?.sessionStorage;
   const verifiedSessionDiagnostics = diagnostics?.verifiedSession;
-  const storageSummary = typeof localStorageDiagnostics === 'object' && localStorageDiagnostics && 'available' in localStorageDiagnostics
-    ? localStorageDiagnostics
-    : null;
   const sessionStorageSummary = typeof sessionStorageDiagnostics === 'object' && sessionStorageDiagnostics && 'available' in sessionStorageDiagnostics
     ? sessionStorageDiagnostics
     : null;
@@ -160,9 +156,10 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           <div className="sideRow"><span>Error type</span><strong>{error.name || 'Error'}</strong></div>
           <div className="sideRow"><span>Recovery</span><strong>reload or return to Hub</strong></div>
           <div className="sideRow"><span>Diagnostics build</span><strong>{DIAGNOSTICS_BUILD}</strong></div>
-          <div className="sideRow"><span>Verified auth</span><strong>{storageSummary && 'hasVerifiedAuth' in storageSummary ? String(storageSummary.hasVerifiedAuth) : 'unknown'}</strong></div>
+          <div className="sideRow"><span>Verified auth</span><strong>{sessionStorageSummary && 'hasVerifiedAuth' in sessionStorageSummary ? String(sessionStorageSummary.hasVerifiedAuth) : 'unknown'}</strong></div>
           <div className="sideRow"><span>Session auth</span><strong>{sessionStorageSummary && 'hasVerifiedAuthSession' in sessionStorageSummary ? String(sessionStorageSummary.hasVerifiedAuthSession) : 'unknown'}</strong></div>
           <div className="sideRow"><span>Session expired</span><strong>{verifiedSessionSummary && 'expired' in verifiedSessionSummary ? String(verifiedSessionSummary.expired) : 'unknown'}</strong></div>
+          <div className="sideRow"><span>Profile subject</span><strong>{sessionStorageSummary && 'activeProfileSubjectPresent' in sessionStorageSummary ? String(sessionStorageSummary.activeProfileSubjectPresent) : 'unknown'}</strong></div>
         </div>
         <div className="profileActions">
           <button className="button" type="button" onClick={() => reset()}>Retry view</button>

@@ -53,6 +53,9 @@ test('Turnkey provider exposes Solana wallet auth as an identity login method', 
   assert.match(providerSource, /sessionFromJwt\(result\.sessionToken\)/);
   assert.match(providerSource, /wallet-login-session-stored/);
   assert.match(providerSource, /wallet-login-missing-session-token/);
+  assert.match(providerSource, /const hasTurnkeySession = Boolean\(sessionUserId && sessionOrganizationId\)/);
+  assert.match(providerSource, /const hasRestoredVerifiedSession = clientReady && Boolean\(verifiedSession\)/);
+  assert.match(providerSource, /hasTurnkeySession \|\| hasRestoredVerifiedSession/);
   assert.match(providerSource, /token:\s*session\.token/);
   assert.match(providerSource, /activateVerifiedSubject\(verified,\s*result\.address \?\? nextAuthMethod\.identifier\)/);
   assert.match(providerSource, /externalWalletAddress/);
@@ -146,6 +149,9 @@ test('route error boundary fails closed with profile audit recovery', () => {
   assert.match(appErrorSource, /cookieNames/);
   assert.match(appErrorSource, /route-diagnostics-v2/);
   assert.match(appErrorSource, /Diagnostics build/);
+  assert.match(appErrorSource, /\^bondr\[\._\]/);
+  assert.match(appErrorSource, /bondr\.activeSubject/);
+  assert.match(appErrorSource, /Profile subject/);
   assert.match(appErrorSource, /sendBeacon/);
   assert.match(appErrorSource, /Open Profile Audit/);
   assert.match(appErrorSource, /href="\/profile"/);

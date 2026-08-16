@@ -424,7 +424,9 @@ function TurnkeyAccountBridge({ children, verifiedSession, setVerifiedSession, v
   const session = turnkey.session as Record<string, unknown> | undefined;
   const sessionUserId = maybeString(session?.userId);
   const sessionOrganizationId = maybeString(session?.organizationId);
-  const authenticated = turnkey.authState === AuthState.Authenticated || Boolean(sessionUserId && sessionOrganizationId) || Boolean(verifiedSession);
+  const hasTurnkeySession = Boolean(sessionUserId && sessionOrganizationId);
+  const hasRestoredVerifiedSession = clientReady && Boolean(verifiedSession);
+  const authenticated = turnkey.authState === AuthState.Authenticated || hasTurnkeySession || hasRestoredVerifiedSession;
   const authResolved = clientReady || authenticated || turnkey.authState === AuthState.Unauthenticated;
   const authHydrating = configured && !authenticated && !authResolved;
   const user = turnkey.user as Record<string, unknown> | undefined;
