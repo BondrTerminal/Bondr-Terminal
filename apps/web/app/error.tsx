@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 
 const DIAGNOSTICS_BUILD = 'route-diagnostics-v2';
+const RESET_STORAGE_KEY = /^bondr[._]|^@turnkey\//i;
 
 function safeJsonParse(value: string | null) {
   if (!value) return null;
@@ -103,6 +104,16 @@ function collectDiagnostics() {
   }
 }
 
+function resetBrowserSession() {
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && RESET_STORAGE_KEY.test(key)) storage.removeItem(key);
+    }
+  }
+  window.location.replace('/profile?resetAuth=1');
+}
+
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const digest = error.digest ?? 'no-digest';
   const diagnostics = useMemo(() => (typeof window === 'undefined' ? null : collectDiagnostics()), []);
@@ -163,6 +174,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         </div>
         <div className="profileActions">
           <button className="button" type="button" onClick={() => reset()}>Retry view</button>
+          <button className="button secondary" type="button" onClick={resetBrowserSession}>Reset browser session</button>
           <a className="button secondary" href="/">Return to Hub</a>
           <a className="button secondary" href="/profile">Open Profile Audit</a>
         </div>
