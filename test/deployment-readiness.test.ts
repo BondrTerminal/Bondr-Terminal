@@ -11,6 +11,7 @@ import { buildJitoLaunchBundlePlan } from '../apps/web/lib/jito-launch-bundle-pl
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-plan.js';
 import { buildRaydiumLpTokenAccountProof, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
+import { buildRaydiumCpmmCreatePoolTransaction } from '../apps/web/lib/raydium-cpmm-create-pool-adapter.js';
 import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExecutionReadiness, buildTaskLifecyclePreview, buildTaskQueuePreview } from '../apps/web/lib/sniper-task-readiness.js';
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
@@ -22,6 +23,7 @@ import type { Project, Wallet } from '../apps/web/lib/meridian-store.js';
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
 import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pumpportal/build-create/route.js';
+import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydium/build-lp/route.js';
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -229,9 +231,9 @@ test('deployment route adapters keep live launch rails explicit', () => {
   const raydium = DEPLOYMENT_ROUTE_ADAPTERS.find((adapter) => adapter.id === 'raydium-original-lp-burn');
   assert.equal(pump?.completionStatus, 'rehearsal-ready');
   assert.equal(pump?.builderStatus, 'provider-preview-builder-present');
-  assert.equal(raydium?.supportLevel, 'blocked');
+  assert.equal(raydium?.supportLevel, 'scaffolded');
   assert.equal(raydium?.completionStatus, 'mapped-not-developed');
-  assert.equal(raydium?.builderStatus, 'builder-missing');
+  assert.equal(raydium?.builderStatus, 'unsigned-sdk-builder-present');
 });
 
 test('deployment launch path normalization only allows Pump.fun and Raydium', () => {
@@ -320,23 +322,24 @@ test('raydium route readiness recommends original LP burn adapter', () => {
   assert.equal(readiness.routeCompleteness.platform, 'raydium');
   assert.equal(readiness.routeCompleteness.status, 'not-developed');
   assert.equal(readiness.routeCompleteness.developed, false);
-  assert.equal(readiness.routeCompleteness.builderStatus, 'lp-plan-ready-sdk-adapter-missing');
+  assert.equal(readiness.routeCompleteness.builderStatus, 'lp-plan-ready-sdk-adapter-present');
   assert.equal(readiness.raydiumLaunchReadiness.contract, 'bondr-raydium-launch-readiness-v1');
   assert.equal(readiness.raydiumLaunchReadiness.selected, true);
   assert.equal(readiness.raydiumLaunchReadiness.status, 'builder-missing');
   assert.equal(readiness.raydiumLaunchReadiness.developed, false);
   assert.equal(readiness.raydiumLaunchReadiness.lpPlan.contract, 'bondr-raydium-original-lp-plan-v1');
-  assert.ok(readiness.raydiumLaunchReadiness.lpPlan.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
-  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-sdk-transaction-build-adapter'));
+  assert.ok(readiness.raydiumLaunchReadiness.lpPlan.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.ok(readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-lp-simulation-policy'));
   assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('lp-burn-transaction-builder'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-cpmm-create-pool-adapter'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-original-lp-plan'));
   assert.ok(readiness.raydiumLaunchReadiness.blockers.includes('verified-lp-token-account-required'));
   assert.deepEqual(readiness.routeCompleteness.missingBuilders, [
-    'raydium-sdk-transaction-build-adapter',
-    'lp-token-account-derivation',
+    'raydium-lp-simulation-policy',
+    'post-broadcast-lp-account-proof',
     'lp-burn-simulation-proof'
   ]);
-  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'lp-burn-transaction-builder']);
+  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder']);
   assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
@@ -415,7 +418,7 @@ test('deployment engine LP readiness does not block Pump.fun route with Raydium 
   assert.equal(engines.createLp.execution, 'pumpfun-or-raydium-lp-readiness-map-only-no-lp-transaction');
 });
 
-test('deployment engine LP readiness marks Raydium route builder-missing', () => {
+test('deployment engine LP readiness marks Raydium route proof-gated', () => {
   const raydiumProject = structuredClone(project);
   raydiumProject.launchPath = 'raydium';
   raydiumProject.launchConfig = {
@@ -434,7 +437,8 @@ test('deployment engine LP readiness marks Raydium route builder-missing', () =>
   assert.equal(engines.createLp.status, 'rehearsal-contract-ready');
   assert.equal(engines.createLp.implementationStatus, 'rehearsal-contract-only');
   assert.equal(engines.createLp.raydiumPlan.contract, 'bondr-raydium-original-lp-plan-v1');
-  assert.ok(engines.createLp.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
+  assert.ok(engines.createLp.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.ok(engines.createLp.blockers.includes('raydium-user-token-account-proof-required'));
   assert.ok(engines.createLp.blockers.includes('verified-lp-token-account-required'));
   assert.ok(!engines.createLp.blockers.includes('lp-burn-transaction-builder-missing'));
   assert.ok(engines.createLp.blockers.includes('lp-burn-simulation-proof-required'));
@@ -464,10 +468,51 @@ test('raydium original LP plan validates route inputs without provider calls', (
   assert.equal(plan.liquidityPolicy.initialTokenLiquidityMode, 'withheld-token-percent');
   assert.equal(plan.liquidityPolicy.burnLiquidity, true);
   assert.ok(plan.planHash.length === 64);
-  assert.ok(plan.blockers.includes('raydium-sdk-transaction-build-adapter-required'));
+  assert.equal(plan.unsignedBuildContract.endpoint, '/api/deployment/raydium/build-lp');
+  assert.equal(plan.unsignedBuildContract.method, 'makeCreateCpmmPoolInInstruction');
+  assert.ok(plan.blockers.includes('raydium-cpmm-config-id-required'));
   assert.ok(plan.blockers.includes('deployment-gate-closed'));
   assert.equal(plan.safety.noProviderCall, true);
   assert.equal(plan.safety.requiresVerifiedLpAccountBeforeBurn, true);
+});
+
+test('raydium CPMM adapter derives unsigned pool build contract without signing', () => {
+  const build = buildRaydiumCpmmCreatePoolTransaction({
+    creator: wallet.address,
+    baseMint: validMintPublicKey,
+    quoteMint: 'So11111111111111111111111111111111111111112',
+    baseDecimals: 6,
+    quoteDecimals: 9,
+    baseAmountRaw: '1000000000',
+    quoteAmountRaw: '100000000',
+    configId: SystemProgram.programId.toBase58(),
+    recentBlockhash: '11111111111111111111111111111111',
+    includeUnsignedTransaction: true
+  });
+  assert.equal(build.contract, 'bondr-raydium-cpmm-create-pool-build-v1');
+  assert.equal(build.status, 'built');
+  assert.equal(build.execution, 'unsigned-raydium-cpmm-create-pool-built-no-signing-no-broadcast');
+  assert.equal(build.requiredSigners[0], wallet.address);
+  assert.ok(build.derived.poolId);
+  assert.ok(build.derived.lpMint);
+  assert.ok(build.transactionBase64);
+  assert.ok(build.programs?.includes('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C'));
+  assert.equal(build.policyReview?.signerMatched, true);
+  assert.equal(build.policyReview?.baseMintReferenced, true);
+  assert.equal(build.policyReview?.quoteMintReferenced, true);
+  assert.equal(build.policyReview?.programsAllowed, true);
+  assert.equal(build.policyReview?.safeToRequestSignatureAfterSimulation, true);
+  assert.deepEqual(build.policyReview?.blockers, []);
+  assert.equal(build.safety.noSigning, true);
+  assert.equal(build.safety.requiresSimulationBeforeSigning, true);
+});
+
+test('raydium CPMM adapter previews missing inputs without unsigned transaction', () => {
+  const preview = buildRaydiumCpmmCreatePoolTransaction({ creator: wallet.address, baseMint: validMintPublicKey });
+  assert.equal(preview.status, 'blocked');
+  assert.equal(preview.execution, 'raydium-cpmm-create-pool-preview-no-signing-no-broadcast');
+  assert.ok(preview.blockers.includes('raydium-cpmm-config-id-required'));
+  assert.equal(preview.transactionBase64, undefined);
 });
 
 test('raydium LP proof decodes AMM v4 LP mint and blocks unsupported owners', () => {
@@ -804,6 +849,56 @@ test('pumpportal build-create route protects unsigned handoff and intent flags',
   assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
   assert.ok(source.includes('rateLimitSensitiveBuild(request)'));
   assert.ok(source.includes('build-create-rate-limited-no-provider-call-no-signing-no-broadcast'));
+});
+
+test('raydium build-lp sensitive POST requires Meridian operator auth before unsigned build', async () => {
+  const previous = {
+    VERCEL: process.env.VERCEL,
+    NODE_ENV: process.env.NODE_ENV,
+    LIVE_TRADING_ENABLED: process.env.LIVE_TRADING_ENABLED,
+    MERIDIAN_SESSION_SECRET: process.env.MERIDIAN_SESSION_SECRET,
+    MERIDIAN_OPERATOR_KEY: process.env.MERIDIAN_OPERATOR_KEY,
+    OPERATOR_SESSION_SECRET: process.env.OPERATOR_SESSION_SECRET,
+    TERMINAL_OPERATOR_TOKEN: process.env.TERMINAL_OPERATOR_TOKEN
+  };
+  try {
+    process.env.VERCEL = '1';
+    delete process.env.LIVE_TRADING_ENABLED;
+    delete process.env.MERIDIAN_SESSION_SECRET;
+    delete process.env.MERIDIAN_OPERATOR_KEY;
+    delete process.env.OPERATOR_SESSION_SECRET;
+    delete process.env.TERMINAL_OPERATOR_TOKEN;
+    const request = new Request('https://bondr.test/api/deployment/raydium/build-lp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://bondr.test' },
+      body: JSON.stringify({
+        creator: wallet.address,
+        baseMint: validMintPublicKey,
+        baseAmountRaw: '1000000000',
+        quoteAmountRaw: '100000000',
+        configId: SystemProgram.programId.toBase58(),
+        includeUnsignedTransaction: true
+      })
+    });
+    const response = await raydiumBuildLpPost(request);
+    const json = await response.json() as { execution?: string };
+    assert.equal(response.status, 503);
+    assert.equal(json.execution, 'blocked-by-missing-meridian-auth-config');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key as keyof typeof process.env];
+      else process.env[key as keyof typeof process.env] = value;
+    }
+  }
+});
+
+test('raydium build-lp route protects unsigned pool handoff', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/deployment/raydium/build-lp/route.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("import { meridianAuthRequiredResponse }"));
+  assert.ok(source.includes('input.includeUnsignedTransaction'));
+  assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
+  assert.ok(source.includes('rateLimit(request)'));
+  assert.ok(source.includes('raydium-build-rate-limited-no-signing-no-broadcast'));
 });
 
 test('deployment launch builder stages signed PumpPortal create packets for signed review and gated broadcast', () => {
@@ -1144,9 +1239,12 @@ test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () 
       signedTransactions: ['tx1'],
       expectedSigners: [wallet.address],
       expectedMint: 'Mint111111111111111111111111111111111111111',
+      expectedTransactionSignatures: ['sig-one', 'sig-two'],
       tipLamports: 1000,
       simulationProof: { ok: true },
-      approvalId: 'approval-test'
+      approvalId: 'approval-test',
+      projectId: 'sda',
+      rail: 'deployment'
     }, { ...activation, broadcastEnabled: true }, {
       contract: 'bondr-jito-relay-readiness-v1',
       status: 'relay-ready',
@@ -1166,6 +1264,12 @@ test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () 
     });
     assert.equal(result.status, 'submitted');
     assert.equal(result.relayResponse?.bundleId, 'bundle-test-id');
+    assert.equal(result.receipt?.contract, 'bondr-bundle-receipt-v1');
+    assert.equal(result.receipt?.bundleId, 'bundle-test-id');
+    assert.equal(result.receipt?.status, 'submitted');
+    assert.equal(result.receipt?.projectId, 'sda');
+    assert.equal(result.receipt?.rail, 'deployment');
+    assert.deepEqual(result.receipt?.txSignatures, ['sig-one', 'sig-two']);
     assert.equal(requests.length, 1);
     assert.equal(JSON.parse(requests[0].body).method, 'sendBundle');
   } finally {

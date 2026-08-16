@@ -5,9 +5,12 @@ export type JitoBundlePayload = {
   signedTransactions?: unknown;
   expectedSigners?: unknown;
   expectedMint?: unknown;
+  expectedTransactionSignatures?: unknown;
   tipLamports?: unknown;
   simulationProof?: unknown;
   approvalId?: unknown;
+  projectId?: unknown;
+  rail?: unknown;
 };
 
 export type NormalizedJitoRelayError = {
@@ -81,6 +84,7 @@ export type JitoSendBundleResult = {
     bundleId: string | null;
     raw: unknown;
   };
+  receipt?: BundleReceiptRecord | null;
   normalizedError?: NormalizedJitoRelayError;
   execution: 'blocked-no-jito-relay-submit' | 'jito-send-bundle-submitted';
 };
@@ -120,6 +124,10 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function railFrom(value: unknown): BundleReceiptRecord['rail'] {
+  return value === 'deployment' || value === 'bundle' || value === 'sniper' || value === 'task' ? value : 'bundle';
+}
+
 function asNumber(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
@@ -145,6 +153,21 @@ function statusFromRaw(raw: unknown): BundleReceiptRecord['status'] {
   if (text.includes('failed') || text.includes('invalid')) return 'failed';
   if (text.includes('pending') || text.includes('inflight')) return 'inflight';
   return 'unknown';
+}
+
+function buildSubmittedReceipt(payload: JitoBundlePayload, bundleId: string | null, relayResponse: unknown, observedAt: string): BundleReceiptRecord | null {
+  if (!bundleId) return null;
+  return {
+    contract: 'bondr-bundle-receipt-v1',
+    bundleId,
+    rail: railFrom(payload.rail),
+    status: 'submitted',
+    txSignatures: asStringArray(payload.expectedTransactionSignatures),
+    observedAt,
+    provider: 'jito-block-engine',
+    projectId: asString(payload.projectId),
+    relayResponse
+  };
 }
 
 export function normalizeJitoRelayError(error: unknown): NormalizedJitoRelayError {
@@ -273,13 +296,16 @@ export async function sendJitoBundle(payload: JitoBundlePayload, activation: Liv
         execution: 'blocked-no-jito-relay-submit'
       };
     }
+    const observedAt = new Date().toISOString();
+    const bundleId = raw?.result ?? null;
     return {
       status: 'submitted',
-      observedAt: new Date().toISOString(),
+      observedAt,
       preview,
       blockers: [],
       relayRequest: { endpoint, method: 'sendBundle', transactionCount: signedTransactions.length },
-      relayResponse: { bundleId: raw?.result ?? null, raw },
+      relayResponse: { bundleId, raw },
+      receipt: buildSubmittedReceipt(payload, bundleId, raw, observedAt),
       execution: 'jito-send-bundle-submitted'
     };
   } catch (error) {

@@ -26,18 +26,18 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     route?.burnLiquidity ? null : 'lp-burn-policy-required'
   ].filter((item): item is string => Boolean(item));
   const missingBuilderIds = [
-    'raydium-sdk-transaction-build-adapter',
-    'lp-token-account-derivation',
+    'raydium-lp-simulation-policy',
+    'post-broadcast-lp-account-proof',
     'raydium-lp-burn-simulation-proof'
   ];
-  const gatedBuilderIds = ['raydium-original-lp-plan', 'lp-burn-transaction-builder'];
+  const gatedBuilderIds = ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder'];
 
   return {
     contract: 'bondr-raydium-launch-readiness-v1' as const,
     selected: raydiumSelected,
     status: missingBuilderIds.length ? 'builder-missing' as const : 'ready',
     developed: false,
-    execution: 'readiness-only-no-raydium-transaction-no-lp-creation' as const,
+    execution: 'readiness-only-unsigned-raydium-build-gated-no-signing-no-broadcast' as const,
     lpPlan,
     routeConfig: {
       raydiumLiquiditySol: route?.raydiumLiquiditySol ?? null,
@@ -62,15 +62,15 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
       {
         id: 'raydium-lp-add',
         label: 'Raydium original LP add',
-        status: 'config-ready' as RaydiumStageStatus,
-        builder: '@raydium-io/raydium-sdk-v2 or verified Raydium pool transaction API',
-        requiredInputs: ['base token mint', 'SOL/quote mint', 'initial token liquidity', 'initial SOL liquidity', 'deployer wallet', 'pool config'],
-        outputProof: ['unsigned pool/liquidity transaction', 'exact writable accounts', 'LP mint/account evidence']
+        status: 'implemented' as RaydiumStageStatus,
+        builder: '/api/deployment/raydium/build-lp -> @raydium-io/raydium-sdk-v2 makeCreateCpmmPoolInInstruction',
+        requiredInputs: ['base token mint', 'SOL/quote mint', 'initial token liquidity', 'initial SOL liquidity', 'deployer wallet', 'Raydium CPMM config id', 'fresh blockhash'],
+        outputProof: ['unsigned pool transaction', 'exact writable accounts', 'expected LP mint/account addresses', 'simulation request']
       },
       {
         id: 'lp-token-identify',
         label: 'LP token/account identification',
-        status: 'builder-missing' as RaydiumStageStatus,
+        status: 'config-ready' as RaydiumStageStatus,
         builder: 'post-LP transaction account resolver',
         requiredInputs: ['Raydium pool id', 'owner token accounts', 'LP mint', 'LP token account'],
         outputProof: ['verified LP mint', 'verified LP token account owner', 'expected LP balance']

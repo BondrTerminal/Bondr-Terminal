@@ -143,12 +143,12 @@ export const LP_ADAPTER_READINESS = [
   {
     id: 'raydium-original-lp-burn',
     label: 'Raydium original LP + burn on launch',
-    implementationStatus: 'adapter-missing' as ImplementationStatus,
-    requiredSdkOrApi: '@raydium-io/raydium-sdk-v2 or verified Raydium pool transaction API for original LP creation and LP-token burn',
+    implementationStatus: 'rehearsal-contract-only' as ImplementationStatus,
+    requiredSdkOrApi: '@raydium-io/raydium-sdk-v2 makeCreateCpmmPoolInInstruction plus verified Raydium config discovery',
     requiredInputs: ['base token mint', 'quote/SOL mint', 'initial token liquidity', 'initial SOL/quote liquidity', 'deployer wallet', 'pool config', 'LP token destination', 'burn authority/policy'],
     signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool + burn transactions',
     simulationRequirement: 'simulate pool create/add-liquidity transaction, verify LP token mint/account, then simulate LP burn before signature/broadcast',
-    blockers: ['raydium-original-lp-builder-missing', 'lp-token-account-derivation-missing', 'verified-lp-token-account-required', 'lp-burn-simulation-proof-missing'],
+    blockers: ['raydium-cpmm-config-id-required', 'raydium-user-token-account-proof-required', 'verified-lp-token-account-required', 'lp-burn-simulation-proof-missing'],
     lpPolicy: 'Automated LP burn is in-scope only after BONDR can build and verify the real Raydium LP token account and burn transaction.'
   }
 ] as const;
@@ -171,7 +171,7 @@ export function buildCreateLpEngineReadiness(project: Project | null, wallets: W
     blockers: routePlatform === 'raydium' ? raydiumPlan.blockers : [],
     raydiumPlan,
     routeSummary: routePlatform === 'raydium'
-      ? 'Raydium launch now has a deterministic LP lifecycle plan; it still needs the SDK transaction adapter and chain proofs before any LP add or burn can be signed.'
+      ? 'Raydium launch now has a deterministic LP lifecycle plan and gated unsigned CPMM builder; it still needs config discovery, simulation proof, and LP account proof before any LP add or burn can be signed.'
       : 'Pump.fun launch does not require BONDR-created LP at launch; LP creation is not a blocker for the Pump.fun route.',
     safety: {
       noFakeLpCreation: true,

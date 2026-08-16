@@ -16,8 +16,9 @@ export type RaydiumOriginalLpPlan = {
   planHash: string;
   unsignedBuildContract: {
     adapter: '@raydium-io/raydium-sdk-v2';
-    method: 'createPoolV4-or-cpmm-createPool';
-    returnedShape: 'unsigned-transaction-or-versioned-transaction-array';
+    method: 'makeCreateCpmmPoolInInstruction';
+    endpoint: '/api/deployment/raydium/build-lp';
+    returnedShape: 'unsigned-legacy-transaction';
     mustExpose: string[];
   };
   liquidityPolicy: {
@@ -97,10 +98,10 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
     burnLiquidity ? null : 'lp-burn-policy-required',
     quoteMint === WSOL_MINT ? null : 'quote-token-resolver-required'
   ].filter((item): item is string => Boolean(item));
-  const adapterBlockers = [
-    'raydium-sdk-transaction-build-adapter-required',
+  const chainProofBlockers = [
+    'raydium-cpmm-config-id-required',
+    'raydium-user-token-account-proof-required',
     'raydium-pool-account-proof-required',
-    'lp-token-account-derivation-required',
     'verified-lp-token-account-required',
     'lp-burn-simulation-proof-required'
   ];
@@ -110,11 +111,11 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
   ].filter((item): item is string => Boolean(item));
   const stages: RaydiumOriginalLpPlan['stages'] = [
     { id: 'validate-inputs', status: inputBlockers.length ? 'blocked' : 'ready', requiredSigners: [], blockers: inputBlockers },
-    { id: 'build-raydium-lp-unsigned', status: 'requires-sdk-adapter', requiredSigners: deployer?.address ? [deployer.address] : [], blockers: ['raydium-sdk-transaction-build-adapter-required'] },
+    { id: 'build-raydium-lp-unsigned', status: inputBlockers.length ? 'blocked' : 'ready', requiredSigners: deployer?.address ? [deployer.address] : [], blockers: inputBlockers.length ? inputBlockers : [] },
     { id: 'verify-lp-mint-and-account', status: 'requires-chain-proof', requiredSigners: [], blockers: ['raydium-pool-account-proof-required', 'lp-token-account-derivation-required'] },
     { id: 'build-lp-burn-unsigned', status: burnLiquidity ? 'requires-chain-proof' : 'blocked', requiredSigners: deployer?.address ? [deployer.address] : [], blockers: burnLiquidity ? ['verified-lp-token-account-required', 'lp-burn-simulation-proof-required'] : ['lp-burn-policy-required'] }
   ];
-  const blockers = Array.from(new Set([...inputBlockers, ...adapterBlockers, ...gateBlockers]));
+  const blockers = Array.from(new Set([...inputBlockers, ...chainProofBlockers, ...gateBlockers]));
   const planCore = {
     projectId: project?.id ?? null,
     baseMint,
@@ -137,8 +138,9 @@ export function buildRaydiumOriginalLpPlan(project: Project | null, wallets: Wal
     planHash: hash(planCore),
     unsignedBuildContract: {
       adapter: '@raydium-io/raydium-sdk-v2',
-      method: 'createPoolV4-or-cpmm-createPool',
-      returnedShape: 'unsigned-transaction-or-versioned-transaction-array',
+      method: 'makeCreateCpmmPoolInInstruction',
+      endpoint: '/api/deployment/raydium/build-lp',
+      returnedShape: 'unsigned-legacy-transaction',
       mustExpose: ['poolId', 'lpMint', 'lpTokenAccount', 'requiredSigners', 'writableAccounts', 'simulationRequest']
     },
     liquidityPolicy: {

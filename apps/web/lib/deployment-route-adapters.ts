@@ -18,7 +18,7 @@ export type DeploymentRouteAdapter = {
   route: string;
   supportLevel: 'preview-ready' | 'mapped' | 'research' | 'scaffolded' | 'blocked';
   completionStatus: 'rehearsal-ready' | 'mapped-not-developed' | 'blocked';
-  builderStatus: 'provider-preview-builder-present' | 'rehearsal-only' | 'builder-missing';
+  builderStatus: 'provider-preview-builder-present' | 'rehearsal-only' | 'unsigned-sdk-builder-present' | 'builder-missing';
   requiredInputs: string[];
   apiFlow: string[];
   signingModel: string;
@@ -70,14 +70,14 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     id: 'raydium-original-lp-burn',
     label: 'Raydium original LP + burn',
     route: 'SPL token deploy, Raydium LP add, LP-token burn',
-    supportLevel: 'blocked',
+    supportLevel: 'scaffolded',
     completionStatus: 'mapped-not-developed',
-    builderStatus: 'builder-missing',
-    requiredInputs: ['mint', 'token metadata', 'deployer wallet', 'SOL liquidity', 'withheld token allocation', 'LP burn policy'],
-    apiFlow: ['build SPL token mint transaction', 'build Raydium pool/liquidity transaction', 'resolve LP mint/account', 'build LP burn transaction', 'simulate all legs', 'browser wallet sign', 'broadcast only after approval'],
+    builderStatus: 'unsigned-sdk-builder-present',
+    requiredInputs: ['mint', 'token metadata', 'deployer wallet', 'SOL liquidity', 'withheld token allocation', 'Raydium CPMM config id', 'LP burn policy'],
+    apiFlow: ['build SPL token mint transaction', 'build unsigned Raydium CPMM pool transaction', 'resolve LP mint/account', 'build LP burn transaction', 'simulate all legs', 'browser wallet sign', 'broadcast only after approval'],
     signingModel: 'browser deployer wallet signs reviewed unsigned Raydium pool and burn transactions',
     safeguards: ['exact deployer signer', 'exact mint binding', 'liquidity SOL cap', 'withheld token cap', 'LP mint/account verification', 'burn destination verification', 'simulation proof'],
-    blockedUntil: ['Raydium original LP builder implemented', 'verified LP mint/account resolver implemented', 'LP burn simulation proof', 'explicit launch approval']
+    blockedUntil: ['Raydium config discovery verified', 'verified LP mint/account resolver implemented', 'LP burn simulation proof', 'explicit launch approval']
   }
 ];
 
@@ -146,11 +146,11 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       selectable: true,
       developed: false,
       adapterId: selectedRouteAdapter.id,
-      builderStatus: 'lp-plan-ready-sdk-adapter-missing' as const,
-      missingBuilders: ['raydium-sdk-transaction-build-adapter', 'lp-token-account-derivation', 'lp-burn-simulation-proof'],
-      gatedBuilders: ['raydium-original-lp-plan', 'lp-burn-transaction-builder'],
+      builderStatus: 'lp-plan-ready-sdk-adapter-present' as const,
+      missingBuilders: ['raydium-lp-simulation-policy', 'post-broadcast-lp-account-proof', 'lp-burn-simulation-proof'],
+      gatedBuilders: ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'lp-burn-transaction-builder'],
       blockers: raydiumLaunchReadiness.lpPlan.blockers,
-      summary: 'Raydium is selectable and has a deterministic LP lifecycle plan, but it is not launch-developed until the SDK transaction adapter, LP account proof, and LP burn simulation are implemented.'
+      summary: 'Raydium is selectable and has a gated unsigned CPMM pool builder, but it is not launch-developed until config discovery, simulation, LP account proof, and LP burn simulation are implemented.'
     }
     : {
       platform: 'pump' as const,
