@@ -189,24 +189,31 @@ test('deployment editor consolidates dev bundle sniper and task wallet controls 
   assert.match(globalCssSource, /\.deploymentWalletSourcePanel/);
   assert.match(globalCssSource, /\.deploymentMatrixWalletHeader/);
   assert.match(globalCssSource, /\.deploymentMatrixRailLayers/);
-  assert.match(globalCssSource, /Deployment cockpit workspace expansion/);
-  assert.match(globalCssSource, /width: min\(2440px, calc\(100vw - 16px\)\)/);
-  assert.match(globalCssSource, /\.deploymentCockpitGrid\s*\{\s*grid-template-columns: minmax\(0, 12fr\) minmax\(340px, 2\.7fr\)/);
-  assert.match(globalCssSource, /\.deploymentMatrixRailLayers\s*\{\s*grid-template-columns: minmax\(0, 0\.75fr\) minmax\(0, 0\.82fr\) minmax\(0, 1\.2fr\) minmax\(0, 1\.35fr\)/);
-  assert.match(globalCssSource, /\.launchWizardWindow\s*\{\s*min-height: 74vh/);
-  assert.match(globalCssSource, /@media \(max-width: 1280px\)/);
+  assert.match(globalCssSource, /Calibrated BONDR workspace layout/);
+  assert.match(globalCssSource, /--bondr-deployment-width: min\(2360px, calc\(100vw - \(var\(--bondr-workspace-gutter\) \* 2\)\)\)/);
+  assert.match(globalCssSource, /\.deploymentCockpitGrid\s*\{\s*grid-template-columns: minmax\(0, 1fr\) minmax\(300px, clamp\(320px, 21vw, 410px\)\)/);
+  assert.match(globalCssSource, /\.deploymentMatrixRailLayers,\n\.deploymentAdvancedGrid\s*\{\s*grid-template-columns: repeat\(auto-fit, minmax\(min\(260px, 100%\), 1fr\)\)/);
+  assert.match(globalCssSource, /\.launchWizardWindow\s*\{\s*min-height: min\(74vh, 920px\)/);
+  assert.match(globalCssSource, /@media \(max-width: 1320px\)/);
   assert.match(deploymentPageSource, /store\.wallets\s*\n\s*\.filter\(\(wallet\) => !wallet\.archived\)/);
   assert.doesNotMatch(deploymentPageSource, /LaunchConfigEditor project=\{activeProject\} wallets=\{selectedContext\?\.wallets/);
 });
 
-test('sitewide layout uses wide operator workspaces instead of narrow centered islands', () => {
-  assert.match(globalCssSource, /BONDR sitewide workspace expansion/);
-  assert.match(globalCssSource, /--bondr-workspace-wide: min\(2440px, calc\(100vw - \(var\(--bondr-workspace-gutter\) \* 2\)\)\)/);
+test('sitewide layout uses calibrated operator workspaces instead of oversized centered islands', () => {
+  assert.match(globalCssSource, /Calibrated BONDR workspace layout/);
+  assert.match(globalCssSource, /--bondr-page-width: min\(1680px, calc\(100vw - \(var\(--bondr-workspace-gutter\) \* 2\)\)\)/);
+  assert.match(globalCssSource, /--bondr-dashboard-width: min\(2200px, calc\(100vw - \(var\(--bondr-workspace-gutter\) \* 2\)\)\)/);
+  assert.match(globalCssSource, /--bondr-terminal-width: min\(2320px, calc\(100vw - \(var\(--bondr-workspace-gutter\) \* 2\)\)\)/);
   for (const selector of ['\\.contentShell', '\\.mainWebsiteShell', '\\.hubShell', '\\.terminalShell', '\\.focusedTerminal', '\\.walletBoardPageShell', '\\.portfolioShell', '\\.liquidityShell']) {
     assert.match(globalCssSource, new RegExp(selector));
   }
   assert.match(globalCssSource, /\.projectOpsGrid,\n\.walletOpsLayout,\n\.walletDashboardGrid,\n\.liquidityActionGrid/);
   assert.match(globalCssSource, /\.terminalMain,\n\.focusedTerminal \.terminalMain,\n\.meridianBoard \.terminalMain/);
+  assert.match(globalCssSource, /\.premiumTradeGrid,\n\.axiomTradeGrid\s*\{\s*grid-template-columns: minmax\(0, 1fr\) minmax\(min\(420px, 28vw\), 420px\)/);
+  assert.match(globalCssSource, /Authenticated app calibration guard/);
+  assert.match(globalCssSource, /\.bondrFinalShell \.deploymentCockpitShell\s*\{\s*width: var\(--bondr-deployment-width\) !important/);
+  assert.match(globalCssSource, /\.bondrFinalShell \.compactTradeGrid\.premiumTradeGrid,\n\.bondrFinalShell \.axiomTradeGrid\.premiumTradeGrid\s*\{\s*grid-template-columns: minmax\(0, 1fr\) minmax\(min\(420px, 28vw\), 420px\) !important/);
+  assert.doesNotMatch(globalCssSource, /BONDR sitewide workspace expansion/);
   assert.match(globalCssSource, /@media \(min-width: 1600px\)/);
   assert.match(globalCssSource, /@media \(max-width: 1180px\)/);
 });

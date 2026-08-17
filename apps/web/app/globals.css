@@ -17509,198 +17509,59 @@ body > .createProjectModal .professionalCreateProjectShell {
 }
 .accountNavPanel p { margin: 12px 0; font-size: 12px; line-height: 1.5; }
 
-/* Deployment cockpit workspace expansion */
-.deploymentCockpitShell {
-  width: min(2440px, calc(100vw - 16px));
-  max-width: none;
-  gap: 22px;
-}
-.deploymentCommandBar {
-  grid-template-columns: minmax(320px, 1.2fr) minmax(420px, 1.4fr) minmax(310px, 0.72fr) minmax(360px, auto);
-  padding: 14px;
-}
-.deploymentCommandStats {
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
-}
-.deploymentOpsConsole {
-  grid-template-columns: minmax(320px, 0.55fr) minmax(0, 1.45fr);
-}
-.deploymentStageStrip {
-  grid-template-columns: repeat(6, minmax(170px, 1fr));
-}
-.deploymentCockpitGrid {
-  grid-template-columns: minmax(0, 12fr) minmax(340px, 2.7fr);
-  gap: 22px;
-}
-.deploymentOperatorRail {
-  max-width: none;
-}
-.deploymentCockpitMain {
-  gap: 16px;
-}
-.deploymentCockpitMain .cleanLaunchConfigEditor {
-  width: 100%;
-}
-.launchWizardWindow {
-  min-height: 74vh;
-}
-.launchWizardTopbar {
-  grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
-}
-.launchWizardTitle {
-  grid-column: auto;
-}
-.launchWizardTabs {
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
-}
-.launchWizardViewport {
-  min-height: 58vh;
-}
-.deploymentCockpitMain .launchConfigPanel,
-.deploymentCockpitMain .launchWalletPanel,
-.deploymentCockpitMain .deploymentDisabledPanel {
-  padding: 18px;
-}
-.deploymentCockpitMain .launchConfigEditorGrid.compact {
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
-}
-.deploymentCockpitMain .launchConfigEditorGrid label.wide {
-  grid-column: span 3;
-}
-.launchTokenPanel {
-  grid-template-columns: minmax(250px, 0.25fr) minmax(0, 1fr);
-}
-.launchBuyModeGrid {
-  grid-template-columns: repeat(4, minmax(210px, 1fr));
-}
-.deploymentExecutionMatrixPanel {
-  padding: 18px;
-  gap: 16px;
-}
-.deploymentExecutionMatrixHeader {
-  grid-template-columns: minmax(420px, 1.45fr) minmax(300px, 0.65fr) minmax(360px, 0.75fr);
-}
-.deploymentMatrixPath {
-  grid-template-columns: repeat(4, minmax(220px, 1fr));
-}
-.deploymentWalletSourcePanel {
-  grid-template-columns: minmax(360px, 1.25fr) minmax(300px, 0.75fr) minmax(260px, 0.58fr) minmax(300px, 0.7fr);
-}
-.deploymentExecutionMatrix {
-  gap: 18px;
-}
-.deploymentMatrixWalletBlock {
-  padding: 18px;
-  gap: 16px;
-}
-.deploymentMatrixWalletHeader {
-  grid-template-columns: minmax(240px, 0.9fr) minmax(430px, 1.45fr) minmax(190px, 0.52fr) minmax(260px, 0.72fr);
-}
-.deploymentMatrixRailButtons {
-  grid-template-columns: repeat(5, minmax(80px, 1fr));
-}
-.deploymentMatrixRailLayers {
-  grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.82fr) minmax(0, 1.2fr) minmax(0, 1.35fr);
-}
-.deploymentMatrixFieldStack.sniper {
-  grid-template-columns: repeat(4, minmax(100px, 1fr));
-}
-.deploymentMatrixFieldStack.task {
-  grid-template-columns: repeat(4, minmax(104px, 1fr));
-}
-.deploymentMatrixFieldStack .launchWalletMiniField input {
-  min-height: 38px;
-  font-size: 0.84rem;
-}
-.deploymentAdvancedGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.deploymentAdvancedGrid > .deploymentLaunchBuilderPanel {
-  grid-column: span 2;
-}
-@media (min-width: 1900px) {
-  .deploymentCockpitGrid {
-    grid-template-columns: minmax(0, 13fr) minmax(360px, 2.4fr);
-  }
-  .deploymentMatrixRailLayers {
-    grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.78fr) minmax(0, 1.22fr) minmax(0, 1.34fr);
-  }
-}
-@media (max-width: 1280px) {
-  .deploymentCommandBar,
-  .deploymentCockpitGrid,
-  .deploymentExecutionMatrixHeader,
-  .deploymentWalletSourcePanel,
-  .deploymentMatrixWalletHeader,
-  .deploymentMatrixRailLayers {
-    grid-template-columns: 1fr;
-  }
-  .deploymentOperatorRail {
-    position: static;
-    max-height: none;
-    overflow: visible;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .deploymentCockpitMain .launchConfigEditorGrid.compact {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .deploymentCockpitMain .launchConfigEditorGrid label.wide {
-    grid-column: span 3;
-  }
-}
-
-/* BONDR sitewide workspace expansion — wide operator pages, not centered islands */
+/* Calibrated BONDR workspace layout — full-width surfaces without stretched or overlapping UI. */
 :root {
-  --bondr-workspace-gutter: clamp(12px, 1.15vw, 28px);
-  --bondr-workspace-wide: min(2440px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
-  --bondr-workspace-dashboard: min(2240px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
-  --bondr-workspace-terminal: min(2460px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
+  --bondr-workspace-gutter: clamp(12px, 1.15vw, 26px);
+  --bondr-page-width: min(1680px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
+  --bondr-dashboard-width: min(2200px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
+  --bondr-terminal-width: min(2320px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
+  --bondr-deployment-width: min(2360px, calc(100vw - (var(--bondr-workspace-gutter) * 2)));
+  --bondr-panel-gap: clamp(12px, 1vw, 20px);
+  --bondr-section-gap: clamp(16px, 1.35vw, 26px);
+  --bondr-readable: min(92ch, 100%);
 }
 .appNav,
 .shell,
 .contentShell,
 .mainWebsiteShell,
+.hubShell {
+  width: var(--bondr-page-width);
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
+}
+.contentShell,
+.mainWebsiteShell,
 .hubShell,
-.terminalShell,
-.focusedTerminal,
-.terminalMainSurface,
-.axiomTerminalShell,
-.premiumTerminalShell,
-.walletBoardPageShell,
-.launchStationShell,
-.projectDashboardShell,
-.portfolioShell,
-.portfolioPageShell,
-.tokenAnalyzerShell,
-.analyzerShell,
-.liquidityShell,
-.liquidityPageShell {
-  width: var(--bondr-workspace-wide) !important;
-  max-width: none !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+.walletBoardPageShell {
+  display: grid;
+  gap: var(--bondr-section-gap);
 }
 .terminalShell,
 .focusedTerminal,
 .terminalMainSurface,
 .axiomTerminalShell,
 .premiumTerminalShell {
-  width: var(--bondr-workspace-terminal) !important;
+  width: var(--bondr-terminal-width);
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
 }
-.contentShell,
-.mainWebsiteShell,
-.hubShell,
-.walletBoardPageShell,
-.launchStationShell,
+.deploymentCockpitShell,
 .projectDashboardShell,
 .portfolioShell,
 .portfolioPageShell,
-.tokenAnalyzerShell,
-.analyzerShell,
+.walletBoardPageShell,
+.liquidityCommandShell,
 .liquidityShell,
-.liquidityPageShell {
-  display: grid;
-  gap: clamp(16px, 1.6vw, 28px);
+.liquidityPageShell,
+.tokenAnalyzerShell,
+.analyzerShell {
+  width: var(--bondr-dashboard-width);
+}
+.deploymentCockpitShell {
+  width: var(--bondr-deployment-width);
+  gap: var(--bondr-section-gap);
 }
 .documentHero,
 .mainHero,
@@ -17710,6 +17571,17 @@ body > .createProjectModal .professionalCreateProjectShell {
 .deploymentOpsConsole,
 .terminalStatusBar {
   width: 100%;
+}
+.contentShell *,
+.mainWebsiteShell *,
+.hubShell *,
+.terminalShell *,
+.focusedTerminal *,
+.terminalMainSurface *,
+.axiomTerminalShell *,
+.premiumTerminalShell *,
+.walletBoardPageShell * {
+  min-width: 0;
 }
 .documentGrid,
 .moduleGrid,
@@ -17728,7 +17600,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 .sourceGrid,
 .grid.three,
 .grid.four {
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
 }
 .projectOpsGrid,
 .walletOpsLayout,
@@ -17737,21 +17609,35 @@ body > .createProjectModal .professionalCreateProjectShell {
 .launchTokenPanel,
 .launchRouteChoicePanel,
 .launchRouteTabsPanel {
-  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr) !important;
-  gap: clamp(14px, 1.4vw, 24px) !important;
+  grid-template-columns: minmax(0, 1.25fr) minmax(min(360px, 100%), 0.75fr);
+  gap: var(--bondr-panel-gap);
 }
 .terminalMain,
 .focusedTerminal .terminalMain,
 .meridianBoard .terminalMain {
-  grid-template-columns: minmax(0, 1.2fr) minmax(440px, 0.8fr) !important;
+  grid-template-columns: minmax(0, 1.2fr) minmax(min(420px, 100%), 0.8fr);
 }
 .terminalLowerGrid,
 .focusedTerminal .terminalLowerGrid {
-  grid-template-columns: minmax(420px, 0.85fr) minmax(0, 1.15fr) !important;
+  grid-template-columns: minmax(min(380px, 100%), 0.85fr) minmax(0, 1.15fr);
 }
 .premiumTradeGrid,
 .axiomTradeGrid {
-  grid-template-columns: minmax(0, 1.55fr) minmax(420px, 0.55fr) !important;
+  grid-template-columns: minmax(0, 1fr) minmax(min(420px, 28vw), 420px);
+  gap: var(--bondr-panel-gap);
+  align-items: start;
+}
+.freshTradingDock,
+.freshTradingTicket {
+  width: 100%;
+  max-width: 420px;
+  justify-self: stretch;
+}
+.premiumChartColumn .premiumDexChart {
+  min-height: clamp(430px, 48vh, 700px);
+}
+.premiumChartColumn .premiumDexChart iframe {
+  height: clamp(470px, 52vh, 740px);
 }
 .projectTable,
 .portfolioTable,
@@ -17768,7 +17654,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 .mainHero p,
 .moduleCard p,
 .documentCard p {
-  max-width: min(92ch, 100%);
+  max-width: var(--bondr-readable);
 }
 .documentCard,
 .moduleCard,
@@ -17780,26 +17666,124 @@ body > .createProjectModal .professionalCreateProjectShell {
 .portfolioPositionsPanel {
   min-width: 0;
 }
+.deploymentCommandBar {
+  grid-template-columns: minmax(260px, 1fr) minmax(340px, 1.15fr) minmax(220px, 0.75fr) minmax(240px, 0.8fr);
+  gap: var(--bondr-panel-gap);
+  padding: clamp(12px, 1vw, 16px);
+}
+.deploymentCommandStats {
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+.deploymentOpsConsole {
+  grid-template-columns: minmax(260px, 0.48fr) minmax(0, 1fr);
+  gap: var(--bondr-panel-gap);
+}
+.deploymentStageStrip {
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+}
+.deploymentCockpitGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, clamp(320px, 21vw, 410px));
+  gap: var(--bondr-section-gap);
+  align-items: start;
+}
+.deploymentOperatorRail {
+  max-width: none;
+}
+.deploymentCockpitMain {
+  gap: var(--bondr-panel-gap);
+}
+.deploymentCockpitMain .cleanLaunchConfigEditor,
+.deploymentExecutionMatrixPanel {
+  width: 100%;
+}
+.launchWizardWindow {
+  min-height: min(74vh, 920px);
+}
+.launchWizardTopbar {
+  grid-template-columns: minmax(240px, 0.35fr) minmax(0, 1fr);
+}
+.launchWizardTitle {
+  grid-column: auto;
+}
+.launchWizardTabs {
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+.launchWizardViewport {
+  min-height: min(58vh, 760px);
+}
+.deploymentCockpitMain .launchConfigPanel,
+.deploymentCockpitMain .launchWalletPanel,
+.deploymentCockpitMain .deploymentDisabledPanel,
+.deploymentExecutionMatrixPanel {
+  padding: clamp(14px, 1vw, 18px);
+}
+.deploymentCockpitMain .launchConfigEditorGrid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+.deploymentCockpitMain .launchConfigEditorGrid label.wide {
+  grid-column: span 2;
+}
+.launchBuyModeGrid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.deploymentExecutionMatrixHeader,
+.deploymentWalletSourcePanel,
+.deploymentMatrixWalletHeader,
+.deploymentMatrixRailLayers,
+.deploymentAdvancedGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+.deploymentMatrixPath {
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+}
+.deploymentExecutionMatrix,
+.deploymentMatrixWalletBlock {
+  gap: var(--bondr-panel-gap);
+}
+.deploymentMatrixWalletBlock {
+  padding: clamp(14px, 1vw, 18px);
+}
+.deploymentMatrixRailButtons {
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+}
+.deploymentMatrixFieldStack.sniper,
+.deploymentMatrixFieldStack.task {
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+}
+.deploymentMatrixFieldStack .launchWalletMiniField input {
+  min-height: 38px;
+  font-size: 0.84rem;
+}
+.deploymentAdvancedGrid > .deploymentLaunchBuilderPanel {
+  grid-column: span 2;
+}
 @media (min-width: 1600px) {
-  .mainWebsiteShell,
-  .contentShell,
-  .hubShell,
-  .walletBoardPageShell,
-  .projectDashboardShell,
-  .portfolioShell,
-  .portfolioPageShell,
-  .tokenAnalyzerShell,
-  .analyzerShell,
-  .liquidityShell,
-  .liquidityPageShell {
-    width: var(--bondr-workspace-dashboard) !important;
-  }
   .websiteModules,
   .projectDashboardKpiGrid,
   .walletBoardMetrics,
   .walletReadinessRail,
   .portfolioWalletGrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+}
+@media (max-width: 1500px) {
+  .deploymentCommandBar,
+  .deploymentOpsConsole {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deploymentCommandActions {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 1320px) {
+  .deploymentCockpitGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploymentOperatorRail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 }
 @media (max-width: 1180px) {
@@ -17822,7 +17806,7 @@ body > .createProjectModal .professionalCreateProjectShell {
   .analyzerShell,
   .liquidityShell,
   .liquidityPageShell {
-    width: min(calc(100% - 20px), 100%) !important;
+    width: calc(100vw - 20px);
   }
   .projectOpsGrid,
   .walletOpsLayout,
@@ -17838,7 +17822,31 @@ body > .createProjectModal .professionalCreateProjectShell {
   .focusedTerminal .terminalLowerGrid,
   .premiumTradeGrid,
   .axiomTradeGrid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .freshTradingDock,
+  .freshTradingTicket {
+    max-width: none;
+  }
+}
+@media (max-width: 900px) {
+  .deploymentCommandBar,
+  .deploymentOpsConsole,
+  .deploymentExecutionMatrixHeader,
+  .deploymentWalletSourcePanel,
+  .deploymentMatrixWalletHeader,
+  .deploymentMatrixRailLayers,
+  .deploymentAdvancedGrid,
+  .launchWizardTopbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploymentAdvancedGrid > .deploymentLaunchBuilderPanel,
+  .deploymentCockpitMain .launchConfigEditorGrid label.wide {
+    grid-column: auto;
+  }
+  .launchWizardWindow,
+  .launchWizardViewport {
+    min-height: 0;
   }
 }
 .accountNavActions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
@@ -18853,5 +18861,179 @@ body > .createProjectModal .professionalCreateProjectShell {
   .freshPresetRow button,
   .freshPrimaryActions button {
     flex-basis: 100%;
+  }
+}
+
+/* Authenticated app calibration guard: these rules intentionally sit last so older recovery
+   blocks cannot re-confine app pages or over-expand the terminal ticket. */
+.bondrFinalShell .contentShell,
+.bondrFinalShell .mainWebsiteShell,
+.bondrFinalShell .hubShell {
+  width: var(--bondr-page-width) !important;
+  max-width: none !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.bondrFinalShell .deploymentCockpitShell,
+.bondrFinalShell .projectDashboardShell,
+.bondrFinalShell .portfolioShell,
+.bondrFinalShell .portfolioPageShell,
+.bondrFinalShell .walletBoardPageShell,
+.bondrFinalShell .liquidityCommandShell,
+.bondrFinalShell .liquidityShell,
+.bondrFinalShell .liquidityPageShell,
+.bondrFinalShell .tokenAnalyzerShell,
+.bondrFinalShell .analyzerShell {
+  width: var(--bondr-dashboard-width) !important;
+  max-width: none !important;
+}
+.bondrFinalShell .deploymentCockpitShell {
+  width: var(--bondr-deployment-width) !important;
+}
+.bondrFinalShell .terminalShell,
+.bondrFinalShell .focusedTerminal,
+.bondrFinalShell .terminalMainSurface,
+.bondrFinalShell .axiomTerminalShell,
+.bondrFinalShell .premiumTerminalShell {
+  width: var(--bondr-terminal-width) !important;
+  max-width: none !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.bondrFinalShell .deploymentHero,
+.bondrFinalShell .deploymentAdapterReadiness,
+.bondrFinalShell .deploymentControlGrid,
+.bondrFinalShell .capitalGraphGrid,
+.bondrFinalShell .launchBundleGrid,
+.bondrFinalShell .deploymentWorkspaceGrid,
+.bondrFinalShell .postLaunchMonitorGrid {
+  max-width: none !important;
+}
+.bondrFinalShell .compactTradeGrid.premiumTradeGrid,
+.bondrFinalShell .axiomTradeGrid.premiumTradeGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(min(420px, 28vw), 420px) !important;
+  gap: var(--bondr-panel-gap) !important;
+  align-items: start !important;
+}
+.bondrFinalShell .compactTradeGrid .premiumExecutionDock,
+.bondrFinalShell .compactTradeGrid .executionDock,
+.bondrFinalShell .freshTradingDock,
+.bondrFinalShell .freshTradingTicket {
+  max-width: 420px !important;
+  width: 100% !important;
+  justify-self: stretch !important;
+}
+.bondrFinalShell .compactTradeGrid .terminalChartColumn,
+.bondrFinalShell .compactTradeGrid .premiumChartColumn {
+  min-height: clamp(520px, 58vh, 780px) !important;
+  overflow: hidden !important;
+}
+.bondrFinalShell .deploymentCommandBar {
+  grid-template-columns: minmax(260px, 1fr) minmax(340px, 1.15fr) minmax(220px, 0.75fr) minmax(240px, 0.8fr) !important;
+}
+.bondrFinalShell .deploymentCockpitGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, clamp(320px, 21vw, 410px)) !important;
+}
+.bondrFinalShell .deploymentExecutionMatrixHeader,
+.bondrFinalShell .deploymentWalletSourcePanel,
+.bondrFinalShell .deploymentMatrixWalletHeader,
+.bondrFinalShell .deploymentMatrixRailLayers,
+.bondrFinalShell .deploymentAdvancedGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)) !important;
+}
+@media (max-width: 1500px) {
+  .bondrFinalShell .deploymentCommandBar,
+  .bondrFinalShell .deploymentOpsConsole {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 1320px) {
+  .bondrFinalShell .deploymentCockpitGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+@media (max-width: 1180px) {
+  .bondrFinalShell .compactTradeGrid.premiumTradeGrid,
+  .bondrFinalShell .axiomTradeGrid.premiumTradeGrid,
+  .bondrFinalShell .terminalMain,
+  .bondrFinalShell .focusedTerminal .terminalMain,
+  .bondrFinalShell .meridianBoard .terminalMain {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .bondrFinalShell .compactTradeGrid .premiumExecutionDock,
+  .bondrFinalShell .compactTradeGrid .executionDock,
+  .bondrFinalShell .freshTradingDock,
+  .bondrFinalShell .freshTradingTicket {
+    max-width: none !important;
+  }
+}
+@media (max-width: 900px) {
+  .bondrFinalShell .deploymentCommandBar,
+  .bondrFinalShell .deploymentOpsConsole,
+  .bondrFinalShell .deploymentExecutionMatrixHeader,
+  .bondrFinalShell .deploymentWalletSourcePanel,
+  .bondrFinalShell .deploymentMatrixWalletHeader,
+  .bondrFinalShell .deploymentMatrixRailLayers,
+  .bondrFinalShell .deploymentAdvancedGrid,
+  .bondrFinalShell .launchWizardTopbar {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+@media (max-width: 760px) {
+  .bondrFinalShell .bondrTopHeader {
+    width: 100% !important;
+    max-width: 100vw !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+    overflow-x: clip !important;
+  }
+  .bondrFinalShell .bondrWordmark,
+  .bondrFinalShell .bondrHeaderNav,
+  .bondrFinalShell .bondrHeaderActions {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .bondrFinalShell .bondrWordmark {
+    justify-content: flex-start !important;
+  }
+  .bondrFinalShell .bondrHeaderNav,
+  .bondrFinalShell .bondrHeaderActions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    overflow: visible !important;
+  }
+  .bondrFinalShell .bondrHeaderNav a,
+  .bondrFinalShell .bondrToolsMenu summary,
+  .bondrFinalShell .bondrHeaderActions > *,
+  .bondrFinalShell .bondrHeaderActions a,
+  .bondrFinalShell .bondrHeaderActions button {
+    max-width: 100% !important;
+    white-space: normal !important;
+  }
+  .bondrFinalShell .bondrToolsMenu,
+  .bondrFinalShell .accountNavMenu {
+    position: static !important;
+    max-width: 100% !important;
+  }
+  .bondrFinalShell .bondrToolsMenuPanel,
+  .bondrFinalShell .accountNavPanel {
+    position: fixed !important;
+    top: 118px !important;
+    right: 12px !important;
+    left: 12px !important;
+    width: auto !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .bondrFinalShell .accountNavSummary {
+    max-width: 100% !important;
+  }
+  .bondrFinalShell .accountNavSummary strong,
+  .bondrFinalShell .accountNavSummary em {
+    max-width: 190px !important;
   }
 }
