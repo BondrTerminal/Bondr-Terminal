@@ -1,5 +1,6 @@
 import type { LiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness, type JitoRelayReadiness } from './jito-relay-readiness';
+import { VersionedTransaction } from '@solana/web3.js';
 
 export type JitoBundlePayload = {
   signedTransactions?: unknown;
@@ -9,6 +10,7 @@ export type JitoBundlePayload = {
   tipLamports?: unknown;
   simulationProof?: unknown;
   approvalId?: unknown;
+  antiFrontRunRequired?: unknown;
   projectId?: unknown;
   rail?: unknown;
 };
@@ -51,6 +53,9 @@ export type JitoBundlePreview = {
     maxTipLamports: number;
     simulationProofPresent: boolean;
     approvalPresent: boolean;
+    antiFrontRunRequired: boolean;
+    antiFrontRunMarkerDetected: boolean;
+    antiFrontRunMarkerIndexes: number[];
   };
   blockers: string[];
   warnings: string[];
@@ -61,6 +66,7 @@ export type JitoBundlePreview = {
     tipLamports: number;
     simulationProof: 'required-before-submit';
     approvalId: 'required-before-submit';
+    antiFrontRunRequired: boolean;
   };
   safety: {
     relayEnabled: boolean;
@@ -69,6 +75,8 @@ export type JitoBundlePreview = {
     noRelaySubmit: boolean;
   };
 };
+
+const JITO_DONT_FRONT_PREFIX = 'jitodontfront';
 
 export type JitoSendBundleResult = {
   status: 'blocked' | 'submitted' | 'relay-error';
@@ -138,8 +146,27 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+function asBoolean(value: unknown) {
+  return value === true || value === 'true';
+}
+
 function signedTransactionsFrom(payload: JitoBundlePayload) {
   return asStringArray(payload.signedTransactions);
+}
+
+function jitoDontFrontMarkerIndexes(signedTransactions: string[]) {
+  const indexes: number[] = [];
+  signedTransactions.forEach((transactionBase64, index) => {
+    try {
+      const transaction = VersionedTransaction.deserialize(Buffer.from(transactionBase64, 'base64'));
+      const hasMarker = transaction.message.staticAccountKeys.some((key) => key.toBase58().startsWith(JITO_DONT_FRONT_PREFIX));
+      if (hasMarker) indexes.push(index);
+    } catch {
+      // The signed-review layer owns full transaction validity. This helper only
+      // detects Jito's optional anti-front-run marker when it is decodable.
+    }
+  });
+  return indexes;
 }
 
 function bundleIdsFrom(value: unknown): string[] {
@@ -259,6 +286,9 @@ export function buildJitoBundlePreview(payload: JitoBundlePayload = {}, activati
   const tipLamports = asNumber(payload.tipLamports, relay.tip.minLamports);
   const simulationProofPresent = Boolean(payload.simulationProof);
   const approvalPresent = Boolean(asString(payload.approvalId));
+  const antiFrontRunRequired = asBoolean(payload.antiFrontRunRequired);
+  const antiFrontRunMarkerIndexes = jitoDontFrontMarkerIndexes(signedTransactions);
+  const antiFrontRunMarkerDetected = antiFrontRunMarkerIndexes.length > 0;
 
   const blockers = [
     signedTransactions.length ? null : 'signed-transactions-missing',
@@ -269,6 +299,8 @@ export function buildJitoBundlePreview(payload: JitoBundlePayload = {}, activati
     tipLamports > relay.tip.maxLamports ? 'jito-tip-exceeds-cap' : null,
     simulationProofPresent ? null : 'simulation-proof-missing',
     approvalPresent ? null : 'explicit-approval-missing',
+    antiFrontRunRequired && antiFrontRunMarkerIndexes[0] !== 0 ? 'jitodontfront-marker-required-on-first-transaction' : null,
+    antiFrontRunMarkerIndexes.some((index) => index > 0) ? 'jitodontfront-protected-transaction-must-be-first' : null,
     relay.relayEnabled ? null : 'jito-relay-disabled',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
   ].filter((item): item is string => Boolean(item));
@@ -308,7 +340,10 @@ export function buildJitoBundlePreview(payload: JitoBundlePayload = {}, activati
       tipLamports,
       maxTipLamports: relay.tip.maxLamports,
       simulationProofPresent,
-      approvalPresent
+      approvalPresent,
+      antiFrontRunRequired,
+      antiFrontRunMarkerDetected,
+      antiFrontRunMarkerIndexes
     },
     blockers,
     warnings,
@@ -318,7 +353,8 @@ export function buildJitoBundlePreview(payload: JitoBundlePayload = {}, activati
       expectedMint: 'token mint',
       tipLamports,
       simulationProof: 'required-before-submit',
-      approvalId: 'required-before-submit'
+      approvalId: 'required-before-submit',
+      antiFrontRunRequired
     },
     safety: {
       relayEnabled: relay.relayEnabled,
@@ -353,7 +389,7 @@ export async function sendJitoBundle(payload: JitoBundlePayload, activation: Liv
         jsonrpc: '2.0',
         id: `bondr-${Date.now()}`,
         method: 'sendBundle',
-        params: [signedTransactions]
+        params: [signedTransactions, { encoding: 'base64' }]
       }),
       cache: 'no-store'
     });

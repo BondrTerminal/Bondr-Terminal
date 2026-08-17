@@ -40,8 +40,8 @@ type ShadowPanelState = {
 const LAUNCH_TABS: Array<{ id: LaunchTab; label: string; detail: string }> = [
   { id: 'token', label: 'Token Info', detail: 'Metadata, image, platform' },
   { id: 'route', label: 'Route', detail: 'Venue and buy mode' },
-  { id: 'wallets', label: 'Dev Wallet', detail: 'Deployer and wallet roles' },
-  { id: 'task', label: 'Bundle / Snipe / Task', detail: 'Automated wallet tasks' },
+  { id: 'wallets', label: 'Deploy Matrix', detail: 'Dev, bundle, snipe, task' },
+  { id: 'task', label: 'Task Defaults', detail: 'Automation presets' },
   { id: 'risk', label: 'Risk', detail: 'Caps and exits' },
   { id: 'review', label: 'Review', detail: 'Preflight and gates' }
 ];
@@ -241,6 +241,8 @@ function checked(form: FormData, name: string) {
 }
 
 function phaseForWallet(form: FormData, wallet: Wallet, index: number, devWalletId: string): NonNullable<WalletPlanEntry['executionPhase']> {
+  const matrixRail = String(form.get(`rail.${wallet.id}`) ?? '');
+  if (['dev', 'bundle', 'sniper', 'task', 'observe'].includes(matrixRail)) return matrixRail as NonNullable<WalletPlanEntry['executionPhase']>;
   if (wallet.id === devWalletId) return 'dev';
   if (checked(form, `task.${wallet.id}.enabled`)) return 'task';
   if (checked(form, `sniper.${wallet.id}.enabled`)) return 'sniper';
@@ -276,6 +278,145 @@ function signingLabel(wallet: Wallet, phase: NonNullable<WalletPlanEntry['execut
   if (phase === 'dev') return 'browser signer required';
   if (phase === 'observe') return 'watch-only record';
   return 'watch-only · cannot sign';
+}
+
+function minBuySol(plan: WalletPlanEntry | undefined) {
+  return plan?.taskBuyMinSol ?? plan?.plannedBuySol ?? plan?.taskAmountSol ?? 0;
+}
+
+function maxBuySol(plan: WalletPlanEntry | undefined) {
+  return plan?.taskBuyMaxSol ?? plan?.maxBuySol ?? plan?.taskMaxTotalSol ?? minBuySol(plan);
+}
+
+function phaseFromPlan(plan: WalletPlanEntry | undefined): NonNullable<WalletPlanEntry['executionPhase']> {
+  if (plan?.executionPhase) return plan.executionPhase;
+  const role = plan?.role?.toLowerCase() ?? '';
+  if (role.includes('dev') || role.includes('creator')) return 'dev';
+  if (role.includes('bundle')) return 'bundle';
+  if (role.includes('sniper')) return 'sniper';
+  if (role.includes('task')) return 'task';
+  return plan?.participate ? 'bundle' : 'observe';
+}
+
+function phaseClass(phase: NonNullable<WalletPlanEntry['executionPhase']>) {
+  return `deploymentMatrixPhase ${phase}`;
+}
+
+function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId }: { project: Project; wallets: Wallet[]; initial: LaunchConfig; selectedDevWalletId: string }) {
+  const totals = wallets.reduce((acc, wallet) => {
+    const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+    const phase = phaseFromPlan(plan);
+    acc.balance += wallet.balanceSol;
+    if (phase === 'bundle') acc.bundle += 1;
+    if (phase === 'sniper') acc.sniper += 1;
+    if (phase === 'task') acc.task += 1;
+    if (phase !== 'observe') acc.active += 1;
+    acc.planned += minBuySol(plan);
+    acc.max += maxBuySol(plan);
+    return acc;
+  }, { balance: 0, active: 0, bundle: 0, sniper: 0, task: 0, planned: 0, max: 0 });
+
+  return (
+    <section className="deploymentExecutionMatrixPanel" aria-label="Deployment execution matrix">
+      <div className="deploymentExecutionMatrixHeader">
+        <div>
+          <span>Dev + bundle + snipe + tasks</span>
+          <strong>Deploy execution matrix</strong>
+          <small>{project.name} · {totals.active} active wallets · {totals.balance.toFixed(4)} SOL visible · {totals.planned.toFixed(4)} planned / {totals.max.toFixed(4)} max</small>
+        </div>
+        <label>
+          <span>Dev wallet</span>
+          <select name="dev.walletId" defaultValue={selectedDevWalletId}>
+            {wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.role || wallet.id} · {short(wallet.address)} · {wallet.balanceSol.toFixed(4)} SOL</option>)}
+          </select>
+        </label>
+        <div className="deploymentExecutionMatrixCounts">
+          <div><span>Bundle</span><strong>{totals.bundle}</strong></div>
+          <div><span>Snipe</span><strong>{totals.sniper}</strong></div>
+          <div><span>Task</span><strong>{totals.task}</strong></div>
+        </div>
+      </div>
+
+      <div className="deploymentExecutionMatrixScroll">
+        <div className="deploymentExecutionMatrix" role="table">
+          <div className="deploymentExecutionMatrixRow head" role="row">
+            <span>Wallet</span>
+            <span>Rail</span>
+            <span>Balance</span>
+            <span>Dev Range</span>
+            <span>Bundle Range</span>
+            <span>Snipe Range</span>
+            <span>Task Range</span>
+            <span>Signer</span>
+          </div>
+          {wallets.map((wallet) => {
+            const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+            const phase = phaseFromPlan(plan);
+            const fallbackTakeProfit = plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
+            const buyMin = minBuySol(plan);
+            const buyMax = maxBuySol(plan);
+            const taskBuyMin = plan?.taskBuyMinSol ?? buyMin;
+            const taskBuyMax = plan?.taskBuyMaxSol ?? buyMax;
+            return (
+              <div className={`deploymentExecutionMatrixRow rail-${phase}`} role="row" key={wallet.id}>
+                <div className="deploymentMatrixWalletCell">
+                  <strong>{wallet.role || 'Wallet'}</strong>
+                  <code title={wallet.address}>{short(wallet.address)}</code>
+                  <small>{wallet.purpose || wallet.status}</small>
+                </div>
+                <div className="deploymentMatrixRailButtons" role="radiogroup" aria-label={`${wallet.role} launch rail`}>
+                  {(['dev', 'bundle', 'sniper', 'task', 'observe'] as Array<NonNullable<WalletPlanEntry['executionPhase']>>).map((rail) => (
+                    <label className={phase === rail ? 'active' : ''} key={rail}>
+                      <input name={`rail.${wallet.id}`} type="radio" value={rail} defaultChecked={phase === rail} />
+                      <span>{rail === 'sniper' ? 'snipe' : rail}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="deploymentMatrixBalanceCell">
+                  <strong>{wallet.balanceSol.toFixed(4)} SOL</strong>
+                  <small>{wallet.custodyMode ?? 'watch-only'} · {wallet.status}</small>
+                </div>
+                <div className="deploymentMatrixFieldStack">
+                  <WalletPlanNumberField label="min SOL" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                  <WalletPlanNumberField label="max SOL" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                  <WalletPlanNumberField label="slip" name={`devPlan.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                </div>
+                <div className="deploymentMatrixFieldStack">
+                  <WalletPlanNumberField label="min SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                  <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                  <WalletPlanNumberField label="slip" name={`bundle.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                </div>
+                <div className="deploymentMatrixFieldStack sniper">
+                  <WalletPlanNumberField label="min SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                  <WalletPlanNumberField label="max SOL" name={`sniper.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                  <WalletPlanNumberField label="slip" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                  <WalletPlanNumberField label="stop %" name={`sniper.${wallet.id}.stopLossPct`} max="0" step="0.1" value={plan?.stopLossPct || initial.devWalletRules.stopLossPct} placeholder="-18" />
+                  <WalletPlanTextField label="take profit" name={`sniper.${wallet.id}.takeProfitPercents`} value={formatPctList(fallbackTakeProfit)} placeholder="35, 75, 150" />
+                  <WalletPlanNumberField label="sell cap" name={`sniper.${wallet.id}.perTxSellCapPct`} min="0" max="100" step="0.1" value={plan?.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct} placeholder="25" />
+                  <WalletPlanNumberField label="cooldown" name={`sniper.${wallet.id}.cooldownSeconds`} min="0" step="1" value={plan?.cooldownSeconds || initial.devWalletRules.cooldownSeconds} placeholder="60" />
+                </div>
+                <div className="deploymentMatrixFieldStack task">
+                  <WalletPlanNumberField label="buy min" name={`task.${wallet.id}.buyMinSol`} min="0" step="0.001" value={taskBuyMin} placeholder="0.100" />
+                  <WalletPlanNumberField label="buy max" name={`task.${wallet.id}.buyMaxSol`} min="0" step="0.001" value={taskBuyMax} placeholder="2.000" />
+                  <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
+                  <WalletPlanNumberField label="total max" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? taskBuyMax} placeholder="4.000" />
+                  <WalletPlanNumberField label="delay" name={`task.${wallet.id}.delaySeconds`} min="0" step="1" value={plan?.taskDelaySeconds ?? 0} placeholder="0" />
+                  <WalletPlanNumberField label="interval" name={`task.${wallet.id}.intervalSeconds`} min="0" step="1" value={plan?.taskIntervalSeconds ?? 0} placeholder="60" />
+                  <WalletPlanNumberField label="runs" name={`task.${wallet.id}.maxExecutions`} min="1" step="1" value={plan?.taskMaxExecutions ?? 1} placeholder="1" />
+                </div>
+                <div className="deploymentMatrixSignerCell">
+                  <span className={phaseClass(phase)}>{phase === 'sniper' ? 'snipe' : phase}</span>
+                  <strong>{signingLabel(wallet, phase)}</strong>
+                  <small>{phase === 'observe' ? 'excluded from launch plan' : phase === 'dev' ? 'must match browser signer' : 'requires future multi-wallet signer proof'}</small>
+                </div>
+              </div>
+            );
+          })}
+          {!wallets.length && <div className="deploymentExecutionMatrixEmpty">No wallets are attached to this project wallet group.</div>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function LaunchConfigEditor({ project, wallets }: Props) {
@@ -608,14 +749,16 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
       const phase = phaseForWallet(form, wallet, index, devWalletId);
       const prefix = phase === 'dev' ? `devPlan.${wallet.id}` : phase === 'bundle' ? `bundle.${wallet.id}` : phase === 'sniper' ? `sniper.${wallet.id}` : phase === 'task' ? `task.${wallet.id}` : `observe.${wallet.id}`;
       const fallbackTakeProfit = existing.takeProfitPercents?.length ? existing.takeProfitPercents : devTakeProfitPercents;
-      const taskAmountSol = numberFrom(form, `task.${wallet.id}.taskAmountSol`, existing.taskAmountSol ?? existing.plannedBuySol ?? 0);
+      const taskBuyMinSol = numberFrom(form, `task.${wallet.id}.buyMinSol`, existing.taskBuyMinSol ?? existing.taskAmountSol ?? existing.plannedBuySol ?? 0);
+      const taskBuyMaxSol = numberFrom(form, `task.${wallet.id}.buyMaxSol`, existing.taskBuyMaxSol ?? existing.taskMaxTotalSol ?? existing.maxBuySol ?? taskBuyMinSol);
+      const taskAmountSol = taskBuyMinSol;
       const taskSellPercent = numberFrom(form, `task.${wallet.id}.taskSellPercent`, existing.taskSellPercent ?? 0);
-      const taskMaxTotalSol = numberFrom(form, `task.${wallet.id}.taskMaxTotalSol`, existing.taskMaxTotalSol ?? existing.maxBuySol ?? 0);
+      const taskMaxTotalSol = numberFrom(form, `task.${wallet.id}.taskMaxTotalSol`, existing.taskMaxTotalSol ?? taskBuyMaxSol);
       const plannedBuySol = phase === 'task' ? taskAmountSol : numberFrom(form, `${prefix}.plannedBuySol`, existing.plannedBuySol ?? 0);
       const maxBuySol = phase === 'task'
-        ? taskMaxTotalSol
+        ? taskBuyMaxSol
         : phase === 'sniper'
-          ? numberFrom(form, `${prefix}.plannedBuySol`, existing.maxBuySol || existing.plannedBuySol || 0)
+          ? numberFrom(form, `${prefix}.maxBuySol`, existing.maxBuySol || existing.plannedBuySol || 0)
           : numberFrom(form, `${prefix}.maxBuySol`, existing.maxBuySol ?? 0);
       return {
         ...existing,
@@ -644,8 +787,8 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         taskSellPowerPct: numberFrom(form, `task.${wallet.id}.sellPowerPct`, numberFrom(form, 'taskCommand.sellPowerPct', existing.taskSellPowerPct ?? 50)),
         taskSellMinPct: numberFrom(form, `task.${wallet.id}.sellMinPct`, numberFrom(form, 'taskCommand.sellMinPct', existing.taskSellMinPct ?? 5)),
         taskSellMaxPct: numberFrom(form, `task.${wallet.id}.sellMaxPct`, numberFrom(form, 'taskCommand.sellMaxPct', existing.taskSellMaxPct ?? 35)),
-        taskBuyMinSol: numberFrom(form, `task.${wallet.id}.buyMinSol`, numberFrom(form, 'taskCommand.buyMinSol', existing.taskBuyMinSol ?? 0)),
-        taskBuyMaxSol: numberFrom(form, `task.${wallet.id}.buyMaxSol`, numberFrom(form, 'taskCommand.buyMaxSol', existing.taskBuyMaxSol ?? taskAmountSol)),
+        taskBuyMinSol,
+        taskBuyMaxSol,
         taskDelayMinMs: numberFrom(form, `task.${wallet.id}.delayMinMs`, numberFrom(form, 'taskCommand.delayMinMs', existing.taskDelayMinMs ?? 500)),
         taskDelayMaxMs: numberFrom(form, `task.${wallet.id}.delayMaxMs`, numberFrom(form, 'taskCommand.delayMaxMs', existing.taskDelayMaxMs ?? 4000)),
         taskWalletRotation: optionFrom(form, `task.${wallet.id}.rotation`, TASK_ROTATION_MODES, optionFrom(form, 'taskCommand.rotation', TASK_ROTATION_MODES, existing.taskWalletRotation ?? 'random')),
@@ -977,22 +1120,9 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
 
       <section aria-labelledby="launch-tab-button-wallets" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'wallets'} id="launch-tab-wallets" role="tabpanel">
         <div className="sectionIntro compactIntro">
-          <span>Wallet rails</span>
-          <h2>Select wallets for launch</h2>
-          <p>Choose the dev wallet first, then assign bundle and sniper wallets. Task wallets are configured in the next route step.</p>
-        </div>
-        <div className="launchWalletSetupHeader">
-          <div className="launchWalletRoleStrip">
-            <button className="active" type="button">Dev</button>
-            <button type="button" onClick={() => setActiveTab('task')}>Task</button>
-            <a href={`/portfolio?view=wallets&project=${project.id}`}>Wallet Center</a>
-            <a href="/portfolio?view=wallets">Global Wallets</a>
-          </div>
-          <div className="launchWalletBalanceBox">
-            <span>Total SOL Balance</span>
-            <strong>{totalWalletBalance.toFixed(4)} SOL</strong>
-            <small>{bundleCount} bundle · {sniperCount} sniper · {selectedTaskCount} task</small>
-          </div>
+          <span>Deploy matrix</span>
+          <h2>Dev + bundle + snipe + tasks</h2>
+          <p>Select wallet rails and tune amounts in one table. This is configuration only; no signing, relay submit, or broadcast happens here.</p>
         </div>
         <div className={`deploymentHarnessActionPanel signer ${signerMatchesDev ? 'ready' : 'review'}`}>
           <div>
@@ -1010,114 +1140,13 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <a href={`/portfolio?view=wallets&project=${project.id}`}>Wallet Center</a>
           </div>
         </div>
-        <div className="launchWalletListPanel">
-          <div className="launchWalletListHeader">
-            <span>Wallet List</span>
-            <strong>{wallets.length} available</strong>
-            <a href={`/portfolio?view=wallets&project=${project.id}`}>Open Wallet Center</a>
-          </div>
-          {wallets.length ? <div className="launchWalletList">
-            {wallets.map((wallet) => {
-              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              return <div className="launchWalletSelectRow walletBoxLayout" key={`select-${wallet.id}`}>
-                <div className="walletBoxLayer walletBoxTopLayer">
-                  <span className={plan?.participate ? 'launchWalletStatus active' : 'launchWalletStatus'}>{plan?.participate ? 'Active' : 'Idle'}</span>
-                  <em>{plan?.executionPhase ?? 'observe'}</em>
-                </div>
-                <div className="walletBoxLayer walletBoxIdentityLayer">
-                  <strong>{wallet.role || 'Wallet'}</strong>
-                  <code title={wallet.address}>{short(wallet.address)}</code>
-                </div>
-                <div className="walletBoxLayer walletBoxMetaLayer">
-                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{signingLabel(wallet, plan?.executionPhase ?? 'observe')}</small>
-                </div>
-              </div>;
-            })}
-          </div> : <div className="simpleEmptyBundle">No wallets yet. Generate or import wallets to continue.</div>}
+        <LaunchExecutionMatrix project={project} wallets={wallets} initial={initial} selectedDevWalletId={defaultDevWalletId} />
+        <div className="deploymentMatrixActions">
+          <a href={`/portfolio?view=wallets&project=${project.id}`}>Open Wallet Center</a>
+          <button type="button" onClick={() => setActiveTab('task')}>Task Defaults</button>
+          <button type="button" onClick={() => setActiveTab('review')}>Review Deploy</button>
         </div>
-        {wallets.length ? <div className="deploymentWalletFlow">
-          <section className="deploymentWalletFlowStep">
-            <div><span>01</span><h3>Dev Wallet / Buy Amount</h3><p>Select the deployer wallet and define initial buy limits.</p></div>
-            <label className="deploymentDevWalletSelect">
-              <span>Dev wallet</span>
-              <select name="dev.walletId" defaultValue={defaultDevWalletId}>
-                {wallets.map((wallet) => <option value={wallet.id} key={wallet.id}>{wallet.role || wallet.id} · {short(wallet.address)}</option>)}
-              </select>
-            </label>
-            {wallets.map((wallet, index) => {
-              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              return <div className="deploymentWalletFlowRow walletBoxLayout" key={`dev-${wallet.id}`}>
-                <div className="walletBoxLayer walletBoxIdentityLayer">
-                  <strong>{wallet.role || `Wallet ${index + 1}`}</strong>
-                  <code title={wallet.address}>{short(wallet.address)}</code>
-                </div>
-                <div className="walletBoxLayer walletBoxMetaLayer">
-                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{signingLabel(wallet, wallet.id === defaultDevWalletId ? 'dev' : 'observe')}</small>
-                </div>
-                <span className="launchWalletInputs">
-                  <WalletPlanNumberField label="planned buy" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
-                  <WalletPlanNumberField label="max buy" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
-                  <WalletPlanNumberField label="slip bps" name={`devPlan.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                </span>
-              </div>;
-            })}
-          </section>
-
-          <section className="deploymentWalletFlowStep">
-            <div><span>02</span><h3>Bundle Wallet Select</h3><p>Select wallets for launch bundle participation and cap spend per wallet.</p></div>
-            {wallets.map((wallet) => {
-              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              const enabled = plan?.executionPhase === 'bundle' || plan?.role.toLowerCase().includes('bundle');
-              return <label className="deploymentWalletFlowRow selectable walletBoxLayout" key={`bundle-${wallet.id}`}>
-                <input name={`bundle.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <div className="walletBoxLayer walletBoxIdentityLayer">
-                  <strong>{wallet.role}</strong>
-                  <code title={wallet.address}>{short(wallet.address)}</code>
-                </div>
-                <div className="walletBoxLayer walletBoxMetaLayer">
-                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{signingLabel(wallet, 'bundle')}</small>
-                </div>
-                <span className="launchWalletInputs">
-                  <WalletPlanNumberField label="planned SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
-                  <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={plan?.maxBuySol ?? 0} placeholder="0.020" />
-                  <WalletPlanNumberField label="slip bps" name={`bundle.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                </span>
-              </label>;
-            })}
-          </section>
-
-          <section className="deploymentWalletFlowStep">
-            <div><span>03</span><h3>Sniper Wallet Select</h3><p>Select wallets for snipe/protection rules after launch.</p></div>
-            {wallets.map((wallet) => {
-              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              const enabled = plan?.executionPhase === 'sniper' || plan?.role.toLowerCase().includes('sniper');
-              return <label className="deploymentWalletFlowRow selectable walletBoxLayout" key={`sniper-${wallet.id}`}>
-                <input name={`sniper.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <div className="walletBoxLayer walletBoxIdentityLayer">
-                  <strong>{wallet.role}</strong>
-                  <code title={wallet.address}>{short(wallet.address)}</code>
-                </div>
-                <div className="walletBoxLayer walletBoxMetaLayer">
-                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{signingLabel(wallet, 'sniper')}</small>
-                </div>
-                <span className="launchWalletInputs riskInputs">
-                  <WalletPlanNumberField label="buy cap SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={plan?.plannedBuySol ?? 0} placeholder="0.010" />
-                  <WalletPlanNumberField label="slip bps" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                  <WalletPlanNumberField label="stop %" name={`sniper.${wallet.id}.stopLossPct`} max="0" step="0.1" value={plan?.stopLossPct || initial.devWalletRules.stopLossPct} placeholder="-18" />
-                  <WalletPlanTextField label="take profit %" name={`sniper.${wallet.id}.takeProfitPercents`} value={formatPctList(plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents)} placeholder="35, 75, 150" />
-                  <WalletPlanNumberField label="sell cap %" name={`sniper.${wallet.id}.perTxSellCapPct`} min="0" max="100" step="0.1" value={plan?.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct} placeholder="25" />
-                  <WalletPlanNumberField label="cooldown" name={`sniper.${wallet.id}.cooldownSeconds`} min="0" step="1" value={plan?.cooldownSeconds || initial.devWalletRules.cooldownSeconds} placeholder="60" />
-                </span>
-              </label>;
-            })}
-          </section>
-
-        </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
-        <p className="walletSecurityFootnote">Wallet roles define intent only. Deployment execution, signing, and broadcast remain gated off until a later explicit approval profile.</p>
+        <p className="walletSecurityFootnote">Wallet rows define intent only. Deployment execution, signing, Jito relay submit, and broadcast remain gated until explicit approval.</p>
       </section>
 
       <section aria-labelledby="launch-tab-button-task" className="launchWalletPanel deploymentWalletFlowPanel launchWizardPanel" hidden={activeTab !== 'task'} id="launch-tab-task" role="tabpanel">
@@ -1128,7 +1157,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
         </div>
         {wallets.length ? <div className="deploymentWalletFlow taskBuilderFlow">
           <section className="deploymentWalletFlowStep taskCommandStep">
-            <div><span>04</span><h3>Create Task</h3><p>Configure the global task command first, then tune per-wallet amounts and timing below.</p></div>
+            <div><span>04</span><h3>Task defaults</h3><p>Set global automation defaults. Per-wallet task selection, amount, timing, and max-run values live in the deploy matrix.</p></div>
             <div className="deploymentTaskCommandPanel">
               <div className="deploymentTaskCommandHeader">
                 <div>
@@ -1162,31 +1191,13 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
               </div>
             </div>
           </section>
-          <section className="deploymentWalletFlowStep taskWalletStep">
-            <div><span>05</span><h3>Task Wallet Select</h3><p>Select the wallets this task may use and cap each wallet independently.</p></div>
-            {wallets.map((wallet) => {
-              const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-              const enabled = plan?.executionPhase === 'task' || plan?.role.toLowerCase().includes('task');
-              return <label className="deploymentWalletFlowRow selectable taskRow walletBoxLayout" key={`task-${wallet.id}`}>
-                <input name={`task.${wallet.id}.enabled`} type="checkbox" defaultChecked={enabled} />
-                <div className="walletBoxLayer walletBoxIdentityLayer">
-                  <strong>{wallet.role}</strong>
-                  <code title={wallet.address}>{short(wallet.address)}</code>
-                </div>
-                <div className="walletBoxLayer walletBoxMetaLayer">
-                  <span>{wallet.balanceSol.toFixed(4)} SOL</span>
-                  <small>{signingLabel(wallet, 'task')}</small>
-                </div>
-                <span className="launchWalletInputs taskInputs">
-                  <WalletPlanNumberField label="amount SOL" name={`task.${wallet.id}.taskAmountSol`} min="0" step="0.001" value={plan?.taskAmountSol ?? plan?.plannedBuySol ?? 0} placeholder="0.010" />
-                  <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
-                  <WalletPlanNumberField label="max total SOL" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? plan?.maxBuySol ?? 0} placeholder="0.050" />
-                  <WalletPlanNumberField label="delay sec" name={`task.${wallet.id}.delaySeconds`} min="0" step="1" value={plan?.taskDelaySeconds ?? 0} placeholder="0" />
-                  <WalletPlanNumberField label="interval sec" name={`task.${wallet.id}.intervalSeconds`} min="0" step="1" value={plan?.taskIntervalSeconds ?? 0} placeholder="60" />
-                  <WalletPlanNumberField label="max runs" name={`task.${wallet.id}.maxExecutions`} min="1" step="1" value={plan?.taskMaxExecutions ?? 1} placeholder="1" />
-                </span>
-              </label>;
-            })}
+          <section className="deploymentTaskMatrixPointer">
+            <div>
+              <span>Per-wallet task controls</span>
+              <strong>Use Deploy Matrix</strong>
+              <small>{selectedTaskCount} selected · {selectedTaskSol.toFixed(4)} SOL max task allocation · wallet-level task values save from the matrix rows.</small>
+            </div>
+            <button type="button" onClick={() => setActiveTab('wallets')}>Open Deploy Matrix</button>
           </section>
         </div> : <div className="simpleEmptyBundle">No saved wallets. Add your connected browser signer as a watch-only wallet in Wallet Center.</div>}
         <p className="walletSecurityFootnote">Task rails are automated deployer wallet controls. They are configuration-only here; no signing, broadcast, or artificial volume action is enabled.</p>

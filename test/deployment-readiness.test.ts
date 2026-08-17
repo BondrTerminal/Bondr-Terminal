@@ -39,6 +39,8 @@ import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pump
 import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydium/build-lp/route.js';
 
 const durableWalletStoreSource = readFileSync(new URL('../apps/web/lib/durable-wallet-store.ts', import.meta.url), 'utf8');
+const launchConfigEditorSource = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
+const globalCssSource = readFileSync(new URL('../apps/web/app/globals.css', import.meta.url), 'utf8');
 
 const wallet: Wallet = {
   id: 'dev-wallet',
@@ -153,6 +155,27 @@ test('deployment readiness tolerates partial launch config rows without wallet p
   assert.doesNotThrow(() => buildRaydiumRouteConfig(partialConfigProject, [wallet]));
   assert.doesNotThrow(() => buildWalletSigningReadiness(partialConfigProject, [wallet]));
   assert.doesNotThrow(() => buildJitoLaunchBundlePlan(partialConfigProject, [wallet], activation));
+});
+
+test('deployment editor consolidates dev bundle sniper and task wallet controls into deploy matrix', () => {
+  assert.match(launchConfigEditorSource, /function LaunchExecutionMatrix/);
+  assert.match(launchConfigEditorSource, /Deploy execution matrix/);
+  assert.match(launchConfigEditorSource, /name=\{`rail\.\$\{wallet\.id\}`\}/);
+  assert.match(launchConfigEditorSource, /phaseForWallet\(form, wallet, index, devWalletId\)/);
+  assert.match(launchConfigEditorSource, /phase === 'dev' \? `devPlan\.\$\{wallet\.id\}`/);
+  assert.match(launchConfigEditorSource, /phase === 'bundle' \? `bundle\.\$\{wallet\.id\}`/);
+  assert.match(launchConfigEditorSource, /phase === 'sniper' \? `sniper\.\$\{wallet\.id\}`/);
+  assert.match(launchConfigEditorSource, /phase === 'task' \? `task\.\$\{wallet\.id\}`/);
+  assert.match(launchConfigEditorSource, /label="min SOL" name=\{`bundle\.\$\{wallet\.id\}\.plannedBuySol`\}/);
+  assert.match(launchConfigEditorSource, /label="max SOL" name=\{`bundle\.\$\{wallet\.id\}\.maxBuySol`\}/);
+  assert.match(launchConfigEditorSource, /label="min SOL" name=\{`sniper\.\$\{wallet\.id\}\.plannedBuySol`\}/);
+  assert.match(launchConfigEditorSource, /label="max SOL" name=\{`sniper\.\$\{wallet\.id\}\.maxBuySol`\}/);
+  assert.match(launchConfigEditorSource, /label="buy min" name=\{`task\.\$\{wallet\.id\}\.buyMinSol`\}/);
+  assert.match(launchConfigEditorSource, /label="buy max" name=\{`task\.\$\{wallet\.id\}\.buyMaxSol`\}/);
+  assert.match(launchConfigEditorSource, /const taskAmountSol = taskBuyMinSol/);
+  assert.match(launchConfigEditorSource, /const maxBuySol = phase === 'task'\s+\? taskBuyMaxSol/);
+  assert.match(launchConfigEditorSource, /Deployment execution, signing, Jito relay submit, and broadcast remain gated/);
+  assert.match(globalCssSource, /\.deploymentMatrixRailButtons label:has\(input:checked\)/);
 });
 
 test('Meridian view payloads strip inline project asset data', () => {
@@ -2394,6 +2417,59 @@ test('jito launch bundle plan blocks over-cap tips before relay submit', () => {
   assert.equal(plan.safety.noRelaySubmit, true);
 });
 
+function jitoMarkerTransactionBase64(includeMarker: boolean) {
+  const payer = Keypair.generate();
+  const marker = new PublicKey('jitodontfront111111111111111111111111111111');
+  const instruction = new TransactionInstruction({
+    programId: SystemProgram.programId,
+    keys: includeMarker ? [{ pubkey: marker, isSigner: false, isWritable: false }] : [],
+    data: Buffer.alloc(0)
+  });
+  const transaction = new VersionedTransaction(new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [instruction]
+  }).compileToV0Message());
+  return Buffer.from(transaction.serialize()).toString('base64');
+}
+
+test('jito bundle preview requires jitodontfront marker on first transaction when anti-front-run is requested', () => {
+  const protectedTx = jitoMarkerTransactionBase64(true);
+  const preview = buildJitoBundlePreview({
+    signedTransactions: [protectedTx],
+    expectedSigners: [wallet.address],
+    expectedMint: 'Mint111111111111111111111111111111111111111',
+    tipLamports: 1000,
+    simulationProof: { ok: true },
+    approvalId: 'approval-test',
+    antiFrontRunRequired: true
+  }, activation);
+
+  assert.equal(preview.policy.antiFrontRunRequired, true);
+  assert.equal(preview.policy.antiFrontRunMarkerDetected, true);
+  assert.deepEqual(preview.policy.antiFrontRunMarkerIndexes, [0]);
+  assert.ok(!preview.blockers.includes('jitodontfront-marker-required-on-first-transaction'));
+  assert.ok(!preview.blockers.includes('jitodontfront-protected-transaction-must-be-first'));
+});
+
+test('jito bundle preview blocks jitodontfront marker outside the first transaction', () => {
+  const ordinaryTx = jitoMarkerTransactionBase64(false);
+  const protectedTx = jitoMarkerTransactionBase64(true);
+  const preview = buildJitoBundlePreview({
+    signedTransactions: [ordinaryTx, protectedTx],
+    expectedSigners: [wallet.address],
+    expectedMint: 'Mint111111111111111111111111111111111111111',
+    tipLamports: 1000,
+    simulationProof: { ok: true },
+    approvalId: 'approval-test',
+    antiFrontRunRequired: true
+  }, activation);
+
+  assert.deepEqual(preview.policy.antiFrontRunMarkerIndexes, [1]);
+  assert.ok(preview.blockers.includes('jitodontfront-marker-required-on-first-transaction'));
+  assert.ok(preview.blockers.includes('jitodontfront-protected-transaction-must-be-first'));
+});
+
 test('jito send bundle response remains blocked until live implementation exists', () => {
   const result = buildJitoSendBundleBlockedResponse({
     signedTransactions: ['tx1'],
@@ -2469,6 +2545,7 @@ test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () 
     assert.deepEqual(result.receipt?.txSignatures, ['sig-one', 'sig-two']);
     assert.equal(requests.length, 1);
     assert.equal(JSON.parse(requests[0].body).method, 'sendBundle');
+    assert.deepEqual(JSON.parse(requests[0].body).params[1], { encoding: 'base64' });
   } finally {
     globalThis.fetch = previousFetch;
   }
