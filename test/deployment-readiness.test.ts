@@ -1,16 +1,25 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import test from 'node:test';
 import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../apps/web/lib/deployment-route-adapters.js';
 import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engine-readiness.js';
 import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
+import { buildExecutionTruthMap } from '../apps/web/lib/execution-truth-map.js';
+import { buildAuthenticatedQaChecklist } from '../apps/web/lib/authenticated-qa-checklist.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson, pinataJwt } from '../apps/web/lib/ipfs-metadata-readiness.js';
-import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
+import { buildJitoAddressLookupTablePlan } from '../apps/web/lib/jito-address-lookup-table-plan.js';
+import { buildJitoBundleChainEffectProof } from '../apps/web/lib/jito-bundle-chain-effect-proof.js';
+import { buildJitoBundlePreview, buildJitoSendBundleBlockedResponse, getJitoBundleStatus, normalizeJitoBundleStatusReceipt, sendJitoBundle } from '../apps/web/lib/jito-relay-adapter.js';
 import { buildJitoLaunchBundlePlan } from '../apps/web/lib/jito-launch-bundle-plan.js';
+import { buildJitoMultiWalletSigningSession } from '../apps/web/lib/jito-multi-wallet-signing-session.js';
+import { buildJitoPackedTransaction } from '../apps/web/lib/jito-packed-transaction-builder.js';
+import { buildJitoWaveDispatchPlan } from '../apps/web/lib/jito-wave-dispatch-plan.js';
+import { buildJitoRouteInstructionSource } from '../apps/web/lib/jito-route-instruction-source.js';
 import { buildPumpPortalCreatePreview, buildPumpPortalCreateTransaction } from '../apps/web/lib/pumpportal-deploy-readiness.js';
 import { buildRaydiumOriginalLpPlan } from '../apps/web/lib/raydium-original-lp-plan.js';
-import { buildRaydiumLpTokenAccountProof, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
+import { buildRaydiumLpTokenAccountProof, buildRaydiumPostBroadcastLpAccountProof, buildRaydiumPostBroadcastLpAccountProofFromObservation, RAYDIUM_AMM_V4_LP_MINT_OFFSET, RAYDIUM_AMM_V4_PROGRAM_ID, resolveRaydiumAmmV4LpMintProof } from '../apps/web/lib/raydium-lp-proof.js';
 import { buildRaydiumCpmmCreatePoolTransaction } from '../apps/web/lib/raydium-cpmm-create-pool-adapter.js';
 import { buildRaydiumLpSimulationPolicy } from '../apps/web/lib/raydium-lp-simulation-policy.js';
 import { buildRaydiumRouteConfig } from '../apps/web/lib/raydium-route-config.js';
@@ -19,12 +28,13 @@ import { buildSniperExecutionReadiness, buildSniperTriggerPreview, buildTaskExec
 import { buildWalletSigningReadiness } from '../apps/web/lib/wallet-signing-readiness.js';
 import { buildShadowExecutionPacket } from '../apps/web/lib/execution-shadow-plan.js';
 import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routePlatformForLaunchPath } from '../apps/web/lib/deployment-launch-path.js';
-import { buildLpBurnTransaction, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
+import { buildLpBurnTransaction, buildSimulationVerifiedLpBurnSignatureHandoff, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
 import { stripMeridianInlineAssetData, stripProjectInlineAssetData, walletPlanEntries, type MeridianStore, type Project, type Wallet } from '../apps/web/lib/meridian-store.js';
-import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { Keypair, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
+import { POST as bundleSequencerPost } from '../apps/web/app/api/bundle-sequencer/route.js';
 import { POST as pumpBuildCreatePost } from '../apps/web/app/api/deployment/pumpportal/build-create/route.js';
 import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydium/build-lp/route.js';
 
@@ -169,6 +179,34 @@ test('Meridian view payloads strip inline project asset data', () => {
   const strippedStore = stripMeridianInlineAssetData(store);
   assert.equal(strippedStore.projects[0].metadata.imageDataUrl, undefined);
   assert.equal(store.projects[0].metadata.imageDataUrl, projectWithInlineAsset.metadata.imageDataUrl);
+});
+
+test('authenticated QA checklist requires an operator session and covers core tabs', () => {
+  const store: MeridianStore = {
+    projects: [project],
+    wallets: [wallet],
+    walletGroups: [{ id: 'operator-wallets', name: 'Operator Wallets', scope: 'global', walletIds: [wallet.id] }],
+    flowEvents: [],
+    eventLog: []
+  };
+  const blocked = buildAuthenticatedQaChecklist({
+    auth: { configured: true, authenticated: false, reason: 'missing-session' },
+    store,
+    projectId: project.id
+  });
+  assert.equal(blocked.contract, 'bondr-authenticated-manual-qa-checklist-v1');
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes('operator-session-required'));
+
+  const ready = buildAuthenticatedQaChecklist({
+    auth: { configured: true, authenticated: true, reason: 'operator-key-header' },
+    store,
+    projectId: project.id
+  });
+  assert.equal(ready.status, 'ready');
+  assert.ok(ready.tabs.some((tab) => tab.href === `/deployment?project=${project.id}`));
+  assert.ok(ready.tabs.some((tab) => tab.id === 'profile'));
+  assert.equal(ready.safety.noMutation, true);
 });
 
 const validMintPublicKey = 'Mint111111111111111111111111111111111111111';
@@ -378,21 +416,21 @@ test('raydium route readiness recommends original LP burn adapter', () => {
   assert.equal(readiness.routeCompleteness.builderStatus, 'lp-plan-ready-sdk-adapter-present');
   assert.equal(readiness.raydiumLaunchReadiness.contract, 'bondr-raydium-launch-readiness-v1');
   assert.equal(readiness.raydiumLaunchReadiness.selected, true);
-  assert.equal(readiness.raydiumLaunchReadiness.status, 'builder-missing');
+  assert.equal(readiness.raydiumLaunchReadiness.status, 'blocked');
   assert.equal(readiness.raydiumLaunchReadiness.developed, false);
   assert.equal(readiness.raydiumLaunchReadiness.lpPlan.contract, 'bondr-raydium-original-lp-plan-v1');
   assert.ok(readiness.raydiumLaunchReadiness.lpPlan.blockers.includes('raydium-cpmm-config-id-required'));
   assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('raydium-lp-simulation-policy'));
   assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('lp-burn-transaction-builder'));
+  assert.ok(!readiness.raydiumLaunchReadiness.missingBuilderIds.includes('post-broadcast-lp-account-proof'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-cpmm-create-pool-adapter'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-lp-simulation-policy'));
   assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('raydium-original-lp-plan'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('post-broadcast-lp-account-proof'));
+  assert.ok(readiness.raydiumLaunchReadiness.gatedBuilderIds.includes('lp-burn-simulation-handoff'));
   assert.ok(readiness.raydiumLaunchReadiness.blockers.includes('verified-lp-token-account-required'));
-  assert.deepEqual(readiness.routeCompleteness.missingBuilders, [
-    'post-broadcast-lp-account-proof',
-    'lp-burn-simulation-proof'
-  ]);
-  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder']);
+  assert.deepEqual(readiness.routeCompleteness.missingBuilders, []);
+  assert.deepEqual(readiness.routeCompleteness.gatedBuilders, ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'post-broadcast-lp-account-proof', 'lp-burn-transaction-builder', 'lp-burn-simulation-handoff']);
   assert.equal(readiness.approvalSummary.launchVenue, 'raydium');
 });
 
@@ -853,6 +891,7 @@ test('verified LP burn builder requires Raydium LP token account proof', () => {
   });
   assert.equal(burn.execution, 'unsigned-verified-lp-burn-transaction-built-no-signing-no-broadcast');
   assert.equal(burn.proofContract, 'bondr-raydium-lp-token-account-proof-v1');
+  assert.equal(burn.transactionMessageHash.length, 64);
   assert.equal(burn.safety.proofBoundBeforeBuild, true);
 
   const blockedProof = { ...proof, status: 'blocked' as const, blockers: ['lp-token-account-owner-mismatch'] };
@@ -867,6 +906,58 @@ test('verified LP burn builder requires Raydium LP token account proof', () => {
   }), /verified LP token account proof/);
 });
 
+test('verified LP burn signature handoff requires matching simulation proof hash', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const mintProof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  const proof = buildRaydiumLpTokenAccountProof({
+    expectedOwner: wallet.address,
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    lpTokenOwner: wallet.address,
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '1000000000',
+    mintProof
+  });
+  const base = {
+    owner: wallet.address,
+    lpMint: lpMint.toBase58(),
+    lpTokenAccount: 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP',
+    amount: 1,
+    decimals: 9,
+    recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87',
+    proof
+  };
+
+  const missing = buildSimulationVerifiedLpBurnSignatureHandoff(base);
+  assert.equal(missing.contract, 'bondr-lp-burn-signature-handoff-v1');
+  assert.equal(missing.status, 'blocked');
+  assert.equal(missing.safeToRequestSignature, false);
+  assert.ok(missing.blockers.includes('lp-burn-simulation-proof-required'));
+
+  const mismatched = buildSimulationVerifiedLpBurnSignatureHandoff({
+    ...base,
+    simulationProof: { status: 'ok', transactionMessageHash: 'b'.repeat(64), err: null, provider: 'quicknode' }
+  });
+  assert.ok(mismatched.blockers.includes('lp-burn-simulation-hash-mismatch'));
+
+  const failed = buildSimulationVerifiedLpBurnSignatureHandoff({
+    ...base,
+    simulationProof: { status: 'failed', transactionMessageHash: missing.transactionMessageHash, err: { InstructionError: [0, 'Custom'] }, provider: 'quicknode' }
+  });
+  assert.ok(failed.blockers.includes('lp-burn-simulation-status-not-ok'));
+  assert.ok(failed.blockers.includes('lp-burn-simulation-failed'));
+
+  const passed = buildSimulationVerifiedLpBurnSignatureHandoff({
+    ...base,
+    simulationProof: { status: 'ok', transactionMessageHash: missing.transactionMessageHash, err: null, provider: 'quicknode', unitsConsumed: 1000 }
+  });
+  assert.equal(passed.status, 'ready');
+  assert.equal(passed.safeToRequestSignature, true);
+  assert.equal(passed.simulationProof.transactionMessageHash, passed.transactionMessageHash);
+  assert.equal(passed.safety.simulationProofBoundBeforeSignature, true);
+});
+
 test('LP burn builder rejects missing verified LP token account', () => {
   assert.throws(() => buildLpBurnTransaction({
     owner: wallet.address,
@@ -876,6 +967,126 @@ test('LP burn builder rejects missing verified LP token account', () => {
     decimals: 9,
     recentBlockhash: 'C5c8RwRiHGgqoSYHXNYTFxnFFuVEqjqBPadZnuaUtV87'
   }), /lpTokenAccount/);
+});
+
+test('Raydium post-broadcast LP proof requires confirmed pool and LP account evidence', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const poolId = 'E1yVt3FsrMqD1NeRbCBjRNrZjVwVoY8tZz4YnJBGxz5x';
+  const lpTokenAccount = 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP';
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const mintProof = resolveRaydiumAmmV4LpMintProof(RAYDIUM_AMM_V4_PROGRAM_ID, data);
+  const signature = '5'.repeat(88);
+  const base = {
+    signature,
+    expectedPoolId: poolId,
+    observedPoolId: poolId,
+    expectedOwner: wallet.address,
+    lpTokenAccount,
+    lpTokenOwner: wallet.address,
+    lpTokenMint: lpMint.toBase58(),
+    amountRaw: '1000000000',
+    mintProof,
+    transactionMessageHash: 'a'.repeat(64),
+    simulationTransactionMessageHash: 'a'.repeat(64),
+    confirmedAt: '2026-08-16T12:00:00Z'
+  };
+
+  const missingConfirmation = buildRaydiumPostBroadcastLpAccountProof({ ...base, confirmedAt: null });
+  assert.equal(missingConfirmation.status, 'blocked');
+  assert.ok(missingConfirmation.blockers.includes('raydium-lp-broadcast-confirmation-required'));
+
+  const wrongPool = buildRaydiumPostBroadcastLpAccountProof({
+    ...base,
+    observedPoolId: 'BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'
+  });
+  assert.ok(wrongPool.blockers.includes('raydium-pool-id-mismatch'));
+
+  const wrongHash = buildRaydiumPostBroadcastLpAccountProof({ ...base, simulationTransactionMessageHash: 'b'.repeat(64) });
+  assert.ok(wrongHash.blockers.includes('simulation-transaction-message-hash-mismatch'));
+
+  const wrongOwner = buildRaydiumPostBroadcastLpAccountProof({
+    ...base,
+    lpTokenOwner: 'BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'
+  });
+  assert.ok(wrongOwner.blockers.includes('lp-token-account-owner-mismatch'));
+  assert.equal(wrongOwner.tokenAccountProofStatus, 'blocked');
+
+  const verified = buildRaydiumPostBroadcastLpAccountProof(base);
+  assert.equal(verified.contract, 'bondr-raydium-post-broadcast-lp-account-proof-v1');
+  assert.equal(verified.status, 'verified');
+  assert.equal(verified.signature, signature);
+  assert.equal(verified.poolId, poolId);
+  assert.equal(verified.lpMint, lpMint.toBase58());
+  assert.equal(verified.lpTokenAccount, lpTokenAccount);
+  assert.equal(verified.tokenAccountProof.status, 'verified');
+  assert.equal(verified.safety.readOnlyPostBroadcastProof, true);
+  assert.equal(verified.safety.noSigning, true);
+  assert.equal(verified.safety.noBroadcast, true);
+});
+
+test('Raydium post-broadcast proof can be built from real receipt/account observations', () => {
+  const lpMint = new PublicKey('BQWP7hhYKb5qEp4wjtJoQYxAanzFV5uev4v476tRehAj');
+  const poolId = 'E1yVt3FsrMqD1NeRbCBjRNrZjVwVoY8tZz4YnJBGxz5x';
+  const lpTokenAccount = 'FJiBxPRAqQZjkpbpszBRDidEUiDbCQ3ovmAL7tNtP4aP';
+  const data = Buffer.alloc(RAYDIUM_AMM_V4_LP_MINT_OFFSET + 64);
+  data.set(lpMint.toBytes(), RAYDIUM_AMM_V4_LP_MINT_OFFSET);
+  const base = {
+    expectedPoolId: poolId,
+    expectedOwner: wallet.address,
+    transaction: {
+      signature: '5'.repeat(88),
+      slot: 328_000_001,
+      err: null,
+      accountKeys: [wallet.address, poolId, lpTokenAccount],
+      blockTime: 1_786_923_200
+    },
+    poolAccount: {
+      poolId,
+      ownerProgram: RAYDIUM_AMM_V4_PROGRAM_ID,
+      accountData: data
+    },
+    lpTokenAccount: {
+      lpTokenAccount,
+      owner: wallet.address,
+      mint: lpMint.toBase58(),
+      amountRaw: '1000000000'
+    },
+    transactionMessageHash: 'a'.repeat(64),
+    simulationTransactionMessageHash: 'a'.repeat(64)
+  };
+  const proof = buildRaydiumPostBroadcastLpAccountProofFromObservation(base);
+  assert.equal(proof.contract, 'bondr-raydium-post-broadcast-lp-account-proof-v1');
+  assert.equal(proof.status, 'verified');
+  assert.equal(proof.observationSource, 'solana-rpc');
+  assert.equal(proof.chainObservation.transactionStatus, 'confirmed');
+  assert.equal(proof.chainObservation.accountKeyMatched, true);
+  assert.equal(proof.poolId, poolId);
+  assert.equal(proof.lpMint, lpMint.toBase58());
+  assert.equal(proof.lpTokenAccount, lpTokenAccount);
+  assert.equal(proof.confirmedAt, '2026-08-16T23:33:20.000Z');
+  assert.equal(proof.safety.readOnlyPostBroadcastProof, true);
+
+  const missingPoolKey = buildRaydiumPostBroadcastLpAccountProofFromObservation({
+    ...base,
+    transaction: { ...base.transaction, accountKeys: [wallet.address, lpTokenAccount] }
+  });
+  assert.equal(missingPoolKey.status, 'blocked');
+  assert.ok(missingPoolKey.blockers.includes('raydium-lp-transaction-missing-expected-pool-account'));
+
+  const failedTransaction = buildRaydiumPostBroadcastLpAccountProofFromObservation({
+    ...base,
+    transaction: { ...base.transaction, err: { InstructionError: [2, 'Custom'] } }
+  });
+  assert.equal(failedTransaction.status, 'blocked');
+  assert.ok(failedTransaction.blockers.includes('raydium-lp-transaction-failed'));
+
+  const missingOwnerLpAccount = buildRaydiumPostBroadcastLpAccountProofFromObservation({
+    ...base,
+    lpTokenAccount: null
+  });
+  assert.equal(missingOwnerLpAccount.status, 'blocked');
+  assert.ok(missingOwnerLpAccount.blockers.includes('raydium-owner-lp-token-account-not-found'));
 });
 
 test('pumpportal create preview names IPFS and mint blockers without calling provider', () => {
@@ -1160,6 +1371,50 @@ test('deployment launch builder stages signed PumpPortal create packets for sign
   assert.ok(source.includes('safeToBroadcastIfLiveEnabled'));
 });
 
+test('deployment UI and truth map expose authenticated QA and Jito packed orchestration', () => {
+  const pageSource = readFileSync(new URL('../apps/web/app/deployment/page.tsx', import.meta.url), 'utf8');
+  const capabilitySource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
+  const truthMapProject: Project = {
+    ...project,
+    launchConfig: {
+      ...project.launchConfig!,
+      walletPlan: [
+        ...project.launchConfig!.walletPlan,
+        { walletId: 'dev-wallet', role: 'task wallet', participate: true, executionPhase: 'task', taskType: 'auto-take-profit', plannedBuySol: 0, maxBuySol: 0.01, maxSlippageBps: 100, takeProfitPercents: [35], stopLossPct: -18, trailingStopPct: 22, perTxSellCapPct: 25, cooldownSeconds: 60, taskMaxExecutions: 3 }
+      ]
+    }
+  };
+  const store: MeridianStore = {
+    projects: [truthMapProject],
+    wallets: [{ ...wallet, custodyMode: undefined }],
+    walletGroups: [{ id: 'operator-wallets', name: 'Operator Wallets', scope: 'global', walletIds: [wallet.id] }],
+    flowEvents: [],
+    eventLog: []
+  };
+  const truth = buildExecutionTruthMap({ store, projectId: project.id, activation });
+  const deploymentRail = truth.rails.find((rail) => rail.rail === 'deployment');
+  const bundleRail = truth.rails.find((rail) => rail.rail === 'bundle');
+  const sniperRail = truth.rails.find((rail) => rail.rail === 'sniper');
+  const taskRail = truth.rails.find((rail) => rail.rail === 'task');
+  assert.ok(pageSource.includes('Jito orchestration'));
+  assert.ok(pageSource.includes('Pump.fun/Raydium/Jupiter route policy proof'));
+  assert.ok(pageSource.includes('/api/bundle-sequencer mode=build-packed'));
+  assert.ok(pageSource.includes('/api/relay/jito/wave-dispatch-plan'));
+  assert.ok(capabilitySource.includes("authenticatedQaChecklist: '/api/authenticated-qa-checklist'"));
+  assert.equal(deploymentRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
+  assert.equal(bundleRail?.steps.find((item) => item.step === 'builder')?.detail.includes('route-policy-proven'), true);
+  assert.equal(bundleRail?.steps.find((item) => item.step === 'receipt')?.status, 'rehearsal-only');
+  assert.equal(bundleRail?.steps.find((item) => item.step === 'monitor')?.detail.includes('Post-chain effect proof'), true);
+  assert.equal(sniperRail?.nextAction.includes('/api/sniper/trigger-preview'), true);
+  assert.equal(taskRail?.nextAction.includes('/api/tasks/queue-preview'), true);
+  assert.equal(sniperRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
+  assert.equal(sniperRail?.steps.find((item) => item.step === 'recovery')?.status, 'rehearsal-only');
+  assert.ok(sniperRail?.steps.find((item) => item.step === 'monitor')?.blockers.includes('sniper-trigger-engine-missing'));
+  assert.equal(taskRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
+  assert.equal(taskRail?.steps.find((item) => item.step === 'simulation')?.status, 'rehearsal-only');
+  assert.ok(taskRail?.steps.find((item) => item.step === 'monitor')?.blockers.includes('durable-task-runner-missing'));
+});
+
 test('pump direct SDK adapter stays gated behind explicit env and shares handoff shape', () => {
   const source = readFileSync(new URL('../apps/web/lib/pumpportal-deploy-readiness.ts', import.meta.url), 'utf8');
   const directSource = readFileSync(new URL('../apps/web/lib/pumpfun-direct-create-builder.ts', import.meta.url), 'utf8');
@@ -1196,6 +1451,8 @@ test('manual launch receipt reconciliation requires Meridian operator auth', () 
   assert.ok(source.includes("import { meridianAuthRequiredResponse }"));
   assert.ok(source.includes('const authBlocked = await meridianAuthRequiredResponse(request);'));
   assert.ok(source.indexOf('meridianAuthRequiredResponse(request)') < source.indexOf('sameOriginAllowed(request)'));
+  assert.ok(source.includes('simulationTransactionMessageHash: body.simulationTransactionMessageHash'));
+  assert.ok(source.includes('broadcastPolicy: body.broadcastPolicy'));
 });
 
 test('launch config mutation requires Meridian operator auth', () => {
@@ -1206,17 +1463,50 @@ test('launch config mutation requires Meridian operator auth', () => {
 });
 
 test('launch receipt normalization rejects invalid mint public keys', () => {
+  const messageHash = 'a'.repeat(64);
   const valid = normalizeLaunchReceipt({
     signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
-    tokenMint: 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu'
+    tokenMint: 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu',
+    transactionMessageHash: messageHash,
+    simulationTransactionMessageHash: messageHash,
+    simulationStatus: 'ok',
+    broadcastPolicy: { maxRetries: 0, blindRetries: false, skipPreflight: false, preflightCommitment: 'confirmed' }
   });
   assert.equal(valid.receipt?.tokenMint, 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu');
+  assert.equal(valid.receipt?.transactionMessageHash, messageHash);
+  assert.equal(valid.receipt?.simulationTransactionMessageHash, messageHash);
+  assert.equal(valid.receipt?.simulationStatus, 'ok');
+  assert.equal(valid.receipt?.broadcastPolicy?.blindRetries, false);
 
   const invalid = normalizeLaunchReceipt({
     signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
     tokenMint: 'bad-mint'
   });
   assert.equal(invalid.error, 'Valid launched token mint is required.');
+});
+
+test('launch receipt normalization rejects mismatched simulation proof evidence', () => {
+  const base = {
+    signature: '2SSk4HBp9WYZbQPVQ1LP6ZfQJYEpkoBNwZw8VnrHjhuppRf3bT8MzjQFWSkBJqVnNvF3pNhpYinTY91Hu66u5Pth',
+    tokenMint: 'AtowBVrQfHZkmL5zvPBM6pyYQgz6ByZcZ5JTSJwRvWcu'
+  };
+  assert.equal(normalizeLaunchReceipt({ ...base, transactionMessageHash: 'not-a-hash' }).error, 'Valid transaction message hash is required when provided.');
+  assert.equal(normalizeLaunchReceipt({ ...base, transactionMessageHash: 'a'.repeat(64), simulationTransactionMessageHash: 'b'.repeat(64), simulationStatus: 'ok' }).error, 'Simulation proof hash must match the launched transaction message hash.');
+  assert.equal(normalizeLaunchReceipt({ ...base, transactionMessageHash: 'a'.repeat(64), simulationTransactionMessageHash: 'a'.repeat(64), simulationStatus: 'failed' }).error, 'Launch receipt simulation status must be ok when provided.');
+});
+
+test('launch receipt persistence records broadcast proof fields after launch submit', () => {
+  const sendSource = readFileSync(new URL('../apps/web/app/api/send-signed-transaction/route.ts', import.meta.url), 'utf8');
+  const pageSource = readFileSync(new URL('../apps/web/app/deployment/page.tsx', import.meta.url), 'utf8');
+  const reconciliationSource = readFileSync(new URL('../apps/web/lib/launch-reconciliation.ts', import.meta.url), 'utf8');
+
+  assert.ok(sendSource.includes('simulationTransactionMessageHash,'));
+  assert.ok(sendSource.includes('broadcastPolicy: {'));
+  assert.ok(sendSource.includes('maxRetries: SINGLE_BROADCAST_MAX_RETRIES'));
+  assert.ok(pageSource.includes('launchReceipt.simulationTransactionMessageHash'));
+  assert.ok(pageSource.includes('launchReceipt.broadcastPolicy?.maxRetries'));
+  assert.ok(reconciliationSource.includes('simulationTransactionMessageHash: receipt?.simulationTransactionMessageHash'));
+  assert.ok(reconciliationSource.includes('broadcastPolicy: receipt?.broadcastPolicy'));
 });
 
 test('launch reconciliation blocks without a launch receipt', async () => {
@@ -1243,7 +1533,11 @@ test('launch reconciliation uses receipt mint and normalizes provider evidence',
     route: 'pump.fun',
     provider: 'quicknode',
     observedAt: '2026-08-15T22:40:53.000Z',
-    confirmedAt: '2026-08-15T22:40:53.000Z'
+    confirmedAt: '2026-08-15T22:40:53.000Z',
+    transactionMessageHash: 'a'.repeat(64),
+    simulationTransactionMessageHash: 'a'.repeat(64),
+    simulationStatus: 'ok',
+    broadcastPolicy: { maxRetries: 0, blindRetries: false, skipPreflight: false, preflightCommitment: 'confirmed' }
   };
   const calls: string[] = [];
   const result = await buildLaunchReconciliation(launched, 'https://bondr.test', async (input) => {
@@ -1273,6 +1567,8 @@ test('launch reconciliation uses receipt mint and normalizes provider evidence',
   assert.equal(result.status, 'ok');
   assert.equal(result.mint, launched.tokenMint);
   assert.equal(result.receipt.status, 'confirmed');
+  assert.equal(result.receipt.simulationTransactionMessageHash, 'a'.repeat(64));
+  assert.equal(result.receipt.broadcastPolicy?.blindRetries, false);
   assert.equal(result.pair.value?.liquidityUsd, 2100);
   assert.equal(result.market.value?.marketCap, 2100);
   assert.equal(result.holders.value?.totalHolders, 7);
@@ -1421,22 +1717,637 @@ test('jito bundle preview enforces tip cap and transaction count', () => {
   assert.equal(preview.policy.tipLamports, 1_000_000_000);
 });
 
+test('jito packed transaction proof route is exposed as read-only pre-relay proof', () => {
+  const routeSource = readFileSync(new URL('../apps/web/app/api/relay/jito/packed-transaction-proof/route.ts', import.meta.url), 'utf8');
+  const capabilitiesSource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
+  const sequencerSource = readFileSync(new URL('../apps/web/app/api/bundle-sequencer/route.ts', import.meta.url), 'utf8');
+  assert.ok(routeSource.includes('bondr-jito-packed-transaction-proof-v1'));
+  assert.ok(routeSource.includes('decodeTransactionPolicyWithLookupTables'));
+  assert.ok(routeSource.includes('buildJitoPackedTransactionProof'));
+  assert.ok(routeSource.includes('noRelaySubmit: true'));
+  assert.ok(routeSource.includes('noBroadcast: true'));
+  assert.ok(capabilitiesSource.includes("jitoPackedTransactionProof: '/api/relay/jito/packed-transaction-proof'"));
+  assert.ok(sequencerSource.includes("packedTransactionProofEndpoint: '/api/relay/jito/packed-transaction-proof'"));
+});
+
+test('jito address lookup table plan chunks addresses and builds unsigned lifecycle transactions', () => {
+  const authority = Keypair.generate().publicKey.toBase58();
+  const payer = Keypair.generate().publicKey.toBase58();
+  const addresses = Array.from({ length: 65 }, () => Keypair.generate().publicKey.toBase58());
+  const plan = buildJitoAddressLookupTablePlan({
+    authority,
+    payer,
+    addresses,
+    requiredAddresses: [addresses[0], addresses[64]],
+    recentSlot: 123,
+    recentBlockhash: '11111111111111111111111111111111',
+    includeUnsignedTransactions: true
+  });
+
+  assert.equal(plan.contract, 'bondr-jito-address-lookup-table-plan-v1');
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.totalAddresses, 65);
+  assert.deepEqual(plan.chunks.map((chunk) => chunk.count), [30, 30, 5]);
+  assert.equal(plan.transactions.length, 4);
+  assert.equal(plan.transactions[0].action, 'create-lookup-table');
+  assert.equal(plan.transactions.slice(1).every((tx) => tx.action === 'extend-lookup-table'), true);
+  assert.equal(plan.transactions.every((tx) => tx.transactionBase64 && tx.transactionMessageHash?.length === 64), true);
+  assert.equal(plan.proof.allRequiredAddressesPlanned, true);
+  assert.equal(plan.proof.canBuildUnsignedTransactions, true);
+  assert.equal(plan.safety.noSigning, true);
+  assert.equal(plan.safety.noBroadcast, true);
+  assert.ok(plan.warnings.includes('lookup-table-extension-requires-multiple-transactions'));
+});
+
+test('jito address lookup table plan route is exposed as read-only preflight', () => {
+  const routeSource = readFileSync(new URL('../apps/web/app/api/relay/jito/address-lookup-table-plan/route.ts', import.meta.url), 'utf8');
+  const capabilitiesSource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
+  assert.ok(routeSource.includes('bondr-jito-address-lookup-table-plan-v1'));
+  assert.ok(routeSource.includes('buildJitoAddressLookupTablePlan'));
+  assert.ok(routeSource.includes('noSigning: true'));
+  assert.ok(routeSource.includes('noBroadcast: true'));
+  assert.ok(routeSource.includes('noRelaySubmit: true'));
+  assert.ok(capabilitiesSource.includes("jitoAddressLookupTablePlan: '/api/relay/jito/address-lookup-table-plan'"));
+});
+
+test('jito address lookup table plan blocks when required packed addresses are missing', () => {
+  const authority = Keypair.generate().publicKey.toBase58();
+  const payer = Keypair.generate().publicKey.toBase58();
+  const included = Keypair.generate().publicKey.toBase58();
+  const missing = Keypair.generate().publicKey.toBase58();
+  const plan = buildJitoAddressLookupTablePlan({
+    authority,
+    payer,
+    lookupTableAddress: Keypair.generate().publicKey.toBase58(),
+    addresses: [included],
+    requiredAddresses: [included, missing]
+  });
+
+  assert.equal(plan.status, 'blocked');
+  assert.deepEqual(plan.missingRequiredAddresses, [missing]);
+  assert.ok(plan.blockers.includes('lookup-table-required-addresses-missing-from-plan'));
+  assert.equal(plan.proof.lookupTableReadyForPackedTransactions, false);
+});
+
+test('jito packed transaction builder compiles unsigned v0 packed wallet transactions', () => {
+  const payer = Keypair.generate();
+  const secondSigner = Keypair.generate();
+  const mint = Keypair.generate().publicKey;
+  const destination = Keypair.generate().publicKey;
+  const lookupAddress = Keypair.generate().publicKey.toBase58();
+  const result = buildJitoPackedTransaction({
+    payer: payer.publicKey.toBase58(),
+    recentBlockhash: '11111111111111111111111111111111',
+    expectedMint: mint.toBase58(),
+    requiredAccounts: [destination.toBase58()],
+    lookupTables: [{ address: lookupAddress, addresses: [mint.toBase58(), destination.toBase58()] }],
+    instructions: [{
+      id: 'packed-buy-0',
+      rail: 'bundle',
+      programId: SystemProgram.programId.toBase58(),
+      expectedSigner: secondSigner.publicKey.toBase58(),
+      keys: [
+        { pubkey: payer.publicKey.toBase58(), isSigner: true, isWritable: true },
+        { pubkey: secondSigner.publicKey.toBase58(), isSigner: true, isWritable: true },
+        { pubkey: mint.toBase58(), isWritable: false },
+        { pubkey: destination.toBase58(), isWritable: true }
+      ]
+    }],
+    allowedPrograms: [SystemProgram.programId.toBase58(), 'ComputeBudget111111111111111111111111111111']
+  });
+
+  assert.equal(result.contract, 'bondr-jito-packed-transaction-builder-v1');
+  assert.equal(result.status, 'built');
+  assert.ok(result.transactionBase64);
+  assert.equal(result.expectedSigners.includes(payer.publicKey.toBase58()), true);
+  assert.equal(result.expectedSigners.includes(secondSigner.publicKey.toBase58()), true);
+  assert.equal(result.requiredSigners.includes(secondSigner.publicKey.toBase58()), true);
+  assert.equal(result.addressLookupTables.required, true);
+  assert.deepEqual(result.addressLookupTables.supplied, [lookupAddress]);
+  assert.equal(result.transactionMessageHash?.length, 64);
+  assert.equal(result.safety.noSigning, true);
+});
+
+test('jito route instruction source extracts prepared unsigned transaction legs', () => {
+  const payer = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const tx = new VersionedTransaction(new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: destination, lamports: 1 })]
+  }).compileToV0Message());
+  const source = buildJitoRouteInstructionSource({
+    preparedTransactions: [{
+      id: 'jupiter-buy-0',
+      rail: 'bundle',
+      transactionBase64: Buffer.from(tx.serialize()).toString('base64'),
+      expectedSigner: payer.publicKey.toBase58()
+    }]
+  });
+
+  assert.equal(source.contract, 'bondr-jito-route-instruction-source-v1');
+  assert.equal(source.status, 'ready');
+  assert.deepEqual(source.preparedTransactionIds, ['jupiter-buy-0']);
+  assert.equal(source.instructions.length, 1);
+  assert.equal(source.instructions[0].id, 'jupiter-buy-0-ix-0');
+  assert.equal(source.instructions[0].programId, SystemProgram.programId.toBase58());
+  assert.deepEqual(source.expectedSigners, [payer.publicKey.toBase58()]);
+  assert.equal(source.transactionMessageHashes[0].length, 64);
+  assert.equal(source.safety.noRelaySubmit, true);
+});
+
+test('jito route instruction source requires route policy proof for Pump, Raydium, and Jupiter inputs', () => {
+  const payer = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const mint = Keypair.generate().publicKey;
+  const tx = new VersionedTransaction(new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [new TransactionInstruction({
+      programId: SystemProgram.programId,
+      keys: [
+        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: destination, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false }
+      ],
+      data: Buffer.alloc(0)
+    })]
+  }).compileToV0Message());
+  const transactionBase64 = Buffer.from(tx.serialize()).toString('base64');
+  const messageHash = buildJitoRouteInstructionSource({
+    preparedTransactions: [{
+      id: 'hash-source',
+      transactionBase64,
+      expectedSigner: payer.publicKey.toBase58()
+    }]
+  }).transactionMessageHashes[0];
+  const routeInputs = [
+    ['pumpfun-launch', '/api/deployment/pumpportal/build-create'],
+    ['raydium-lp', '/api/deployment/raydium/build-lp'],
+    ['jupiter-swap', '/api/execution-swap']
+  ] as const;
+
+  for (const [routeKind, sourceEndpoint] of routeInputs) {
+    const source = buildJitoRouteInstructionSource({
+      preparedTransactions: [{
+        id: `${routeKind}-prepared`,
+        rail: routeKind === 'raydium-lp' ? 'deployment' : 'bundle',
+        transactionBase64,
+        expectedSigner: payer.publicKey.toBase58(),
+        expectedMint: mint.toBase58(),
+        routeKind,
+        sourceEndpoint,
+        routePolicyStatus: 'passed',
+        routePolicyTransactionMessageHash: messageHash
+      }]
+    });
+
+    assert.equal(source.status, 'ready');
+    assert.equal(source.routeAcceptance[0].routeKind, routeKind);
+    assert.equal(source.routeAcceptance[0].status, 'accepted');
+    assert.equal(source.routeAcceptance[0].sourceEndpoint, sourceEndpoint);
+    assert.equal(source.routeAcceptance[0].transactionMessageHash, messageHash);
+    assert.deepEqual(source.routeAcceptance[0].blockers, []);
+    assert.equal(source.instructions.length, 1);
+  }
+
+  const blocked = buildJitoRouteInstructionSource({
+    preparedTransactions: [{
+      id: 'raydium-missing-proof',
+      transactionBase64,
+      expectedSigner: payer.publicKey.toBase58(),
+      expectedMint: mint.toBase58(),
+      routeKind: 'raydium-lp',
+      sourceEndpoint: '/api/execution-swap',
+      routePolicyStatus: 'missing',
+      routePolicyTransactionMessageHash: 'b'.repeat(64)
+    }]
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(blocked.routeAcceptance[0].status, 'blocked');
+  assert.ok(blocked.blockers.includes('prepared-route-transaction-raydium-missing-proof-raydium-lp-source-endpoint-required'));
+  assert.ok(blocked.blockers.includes('prepared-route-transaction-raydium-missing-proof-raydium-lp-policy-proof-required'));
+  assert.ok(blocked.blockers.includes('prepared-route-transaction-raydium-missing-proof-raydium-lp-policy-message-hash-mismatch'));
+});
+
+test('jito final proof endpoints are exposed through execution capabilities', () => {
+  const capabilitiesSource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
+  const buildRouteSource = readFileSync(new URL('../apps/web/app/api/relay/jito/packed-transaction-build/route.ts', import.meta.url), 'utf8');
+  const signingRouteSource = readFileSync(new URL('../apps/web/app/api/relay/jito/multi-wallet-signing-session/route.ts', import.meta.url), 'utf8');
+  const waveRouteSource = readFileSync(new URL('../apps/web/app/api/relay/jito/wave-dispatch-plan/route.ts', import.meta.url), 'utf8');
+  const effectRouteSource = readFileSync(new URL('../apps/web/app/api/relay/jito/chain-effect-proof/route.ts', import.meta.url), 'utf8');
+  assert.ok(capabilitiesSource.includes("jitoPackedTransactionBuild: '/api/relay/jito/packed-transaction-build'"));
+  assert.ok(capabilitiesSource.includes("jitoMultiWalletSigningSession: '/api/relay/jito/multi-wallet-signing-session'"));
+  assert.ok(capabilitiesSource.includes("jitoWaveDispatchPlan: '/api/relay/jito/wave-dispatch-plan'"));
+  assert.ok(capabilitiesSource.includes("jitoChainEffectProof: '/api/relay/jito/chain-effect-proof'"));
+  assert.ok(buildRouteSource.includes('bondr-jito-packed-transaction-builder-v1'));
+  assert.ok(signingRouteSource.includes('bondr-jito-multi-wallet-signing-session-v1'));
+  assert.ok(waveRouteSource.includes('bondr-jito-wave-dispatch-plan-v1'));
+  assert.ok(effectRouteSource.includes('bondr-jito-bundle-chain-effect-proof-v1'));
+});
+
+test('bundle sequencer loads packed transaction builder for prepared instruction legs', async () => {
+  const payer = Keypair.generate();
+  const secondSigner = Keypair.generate();
+  const mint = Keypair.generate().publicKey;
+  const destination = Keypair.generate().publicKey;
+  const lookupAddress = Keypair.generate().publicKey.toBase58();
+  const response = await bundleSequencerPost(new Request('http://localhost/api/bundle-sequencer', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'build-packed',
+      mint: mint.toBase58(),
+      payer: payer.publicKey.toBase58(),
+      recentBlockhash: '11111111111111111111111111111111',
+      lookupTables: [{ address: lookupAddress, addresses: [mint.toBase58(), destination.toBase58()] }],
+      legs: [
+        { wallet: payer.publicKey.toBase58(), side: 'Buy', amount: '0.001', spendAsset: 'SOL', slippageBps: 100 },
+        { wallet: secondSigner.publicKey.toBase58(), side: 'Buy', amount: '0.001', spendAsset: 'SOL', slippageBps: 100 }
+      ],
+      packedInstructions: [{
+        id: 'packed-buy-0',
+        rail: 'bundle',
+        programId: SystemProgram.programId.toBase58(),
+        expectedSigner: secondSigner.publicKey.toBase58(),
+        keys: [
+          { pubkey: payer.publicKey.toBase58(), isSigner: true, isWritable: true },
+          { pubkey: secondSigner.publicKey.toBase58(), isSigner: true, isWritable: true },
+          { pubkey: mint.toBase58(), isWritable: false },
+          { pubkey: destination.toBase58(), isWritable: true }
+        ]
+      }],
+      allowedPrograms: [SystemProgram.programId.toBase58(), 'ComputeBudget111111111111111111111111111111']
+    })
+  }));
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.flowType, 'multi-wallet-packed-transaction-build');
+  assert.equal(payload.execution, 'packed-transaction-build-only-no-signing-no-relay-submit');
+  assert.equal(payload.packedBuild.contract, 'bondr-jito-packed-transaction-builder-v1');
+  assert.equal(payload.packedBuild.status, 'built');
+  assert.equal(payload.packedBuild.transactionMessageHash.length, 64);
+  assert.equal(payload.executionModel.packedTransactionBuildEndpoint, '/api/relay/jito/packed-transaction-build');
+  assert.equal(payload.executionModel.signingSessionEndpoint, '/api/relay/jito/multi-wallet-signing-session');
+  assert.equal(payload.packedBuild.safety.noRelaySubmit, true);
+});
+
+test('bundle sequencer can pack decoded prepared route transactions', async () => {
+  const payer = Keypair.generate();
+  const destination = Keypair.generate().publicKey;
+  const mint = Keypair.generate().publicKey;
+  const tx = new VersionedTransaction(new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [new TransactionInstruction({
+      programId: SystemProgram.programId,
+      keys: [
+        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: destination, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false }
+      ],
+      data: Buffer.alloc(0)
+    })]
+  }).compileToV0Message());
+  const response = await bundleSequencerPost(new Request('http://localhost/api/bundle-sequencer', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'build-packed',
+      mint: mint.toBase58(),
+      payer: payer.publicKey.toBase58(),
+      recentBlockhash: '11111111111111111111111111111111',
+      legs: [{ wallet: payer.publicKey.toBase58(), side: 'Buy', amount: '0.001', spendAsset: 'SOL', slippageBps: 100 }],
+      preparedTransactions: [{
+        id: 'route-buy-0',
+        rail: 'bundle',
+        transactionBase64: Buffer.from(tx.serialize()).toString('base64'),
+        expectedSigner: payer.publicKey.toBase58()
+      }],
+      requiredAccounts: [destination.toBase58()],
+      allowedPrograms: [SystemProgram.programId.toBase58(), 'ComputeBudget111111111111111111111111111111']
+    })
+  }));
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.routeInstructionSource.contract, 'bondr-jito-route-instruction-source-v1');
+  assert.equal(payload.routeInstructionSource.status, 'ready');
+  assert.deepEqual(payload.routeInstructionSource.preparedTransactionIds, ['route-buy-0']);
+  assert.equal(payload.packedBuild.status, 'built');
+  assert.equal(payload.execution, 'packed-transaction-build-only-no-signing-no-relay-submit');
+});
+
+test('jito multi-wallet signing session tracks missing and complete signatures by message hash', () => {
+  const payer = Keypair.generate();
+  const secondSigner = Keypair.generate();
+  const tx = new VersionedTransaction(new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: '11111111111111111111111111111111',
+    instructions: [new TransactionInstruction({
+      programId: SystemProgram.programId,
+      keys: [
+        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: secondSigner.publicKey, isSigner: true, isWritable: true }
+      ],
+      data: Buffer.alloc(0)
+    })]
+  }).compileToV0Message());
+  const messageHash = createHash('sha256').update(Buffer.from(tx.message.serialize())).digest('hex');
+  const unsignedBase64 = Buffer.from(tx.serialize()).toString('base64');
+  const blocked = buildJitoMultiWalletSigningSession({
+    transactions: [{
+      id: 'packed-0',
+      waveIndex: 0,
+      transactionBase64: unsignedBase64,
+      transactionMessageHash: messageHash,
+      requiredSigners: [payer.publicKey.toBase58(), secondSigner.publicKey.toBase58()]
+    }]
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(blocked.missingSignerCount, 2);
+  assert.equal(blocked.nextSigner, payer.publicKey.toBase58());
+
+  tx.sign([payer, secondSigner]);
+  const signed = buildJitoMultiWalletSigningSession({
+    transactions: [{
+      id: 'packed-0',
+      waveIndex: 0,
+      transactionBase64: Buffer.from(tx.serialize()).toString('base64'),
+      transactionMessageHash: messageHash,
+      requiredSigners: [payer.publicKey.toBase58(), secondSigner.publicKey.toBase58()]
+    }]
+  });
+  assert.equal(signed.contract, 'bondr-jito-multi-wallet-signing-session-v1');
+  assert.equal(signed.status, 'complete');
+  assert.equal(signed.signedSignerCount, 2);
+  assert.equal(signed.nextSigner, null);
+  assert.equal(signed.safety.noRelaySubmit, true);
+});
+
+test('jito wave dispatch plan builds payloads only after approvals and prior receipts', () => {
+  const txs = Array.from({ length: 6 }, (_, index) => ({
+    id: `tx-${index}`,
+    waveIndex: index < 5 ? 0 : 1,
+    signedTransactionBase64: Buffer.from(`signed-${index}`).toString('base64'),
+    transactionMessageHash: `${index}`.repeat(64).slice(0, 64),
+    simulationStatus: 'ok',
+    simulationTransactionMessageHash: `${index}`.repeat(64).slice(0, 64),
+    signedReviewStatus: 'passed'
+  }));
+  const blocked = buildJitoWaveDispatchPlan({
+    transactions: txs,
+    expectedSigners: [wallet.address],
+    expectedMint: validMintPublicKey,
+    tipLamports: 1000,
+    approvals: [{ waveIndex: 0, approvalId: 'approve-wave-0' }]
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes('wave-1-explicit-approval-required'));
+  assert.ok(blocked.blockers.includes('wave-1-prior-wave-receipt-required'));
+
+  const ready = buildJitoWaveDispatchPlan({
+    transactions: txs,
+    expectedSigners: [wallet.address],
+    expectedMint: validMintPublicKey,
+    tipLamports: 1000,
+    approvals: [{ waveIndex: 0, approvalId: 'approve-wave-0' }, { waveIndex: 1, approvalId: 'approve-wave-1' }],
+    priorWaveReceipts: [{
+      contract: 'bondr-bundle-receipt-v1',
+      bundleId: 'bundle-0',
+      rail: 'bundle',
+      status: 'landed',
+      txSignatures: ['sig-0'],
+      observedAt: new Date().toISOString(),
+      provider: 'jito-block-engine',
+      landedSlot: 100
+    }]
+  });
+  assert.equal(ready.contract, 'bondr-jito-wave-dispatch-plan-v1');
+  assert.equal(ready.status, 'ready');
+  assert.deepEqual(ready.waves.map((wave) => wave.transactionCount), [5, 1]);
+  assert.equal(ready.waves[0].bundlePayload?.signedTransactions?.length, 5);
+  assert.equal(ready.waves[1].submitAfterWaveIndex, 0);
+  assert.equal(ready.safety.noRelaySubmit, true);
+});
+
+test('jito chain effect proof requires landed receipt plus wallet token delta evidence', () => {
+  const receipt = normalizeJitoBundleStatusReceipt({
+    bundleId: 'bundle-proof',
+    observedAt: new Date().toISOString(),
+    final: {
+      value: [{
+        bundle_id: 'bundle-proof',
+        confirmation_status: 'finalized',
+        slot: 200,
+        transactions: ['sig-wallet-1']
+      }]
+    }
+  });
+  const blocked = buildJitoBundleChainEffectProof({
+    receipt,
+    expectedEffects: [{
+      wallet: wallet.address,
+      mint: validMintPublicKey,
+      txSignature: 'sig-wallet-1',
+      preTokenAmountRaw: '0',
+      postTokenAmountRaw: '0',
+      minDeltaRaw: '1',
+      status: 'finalized',
+      slot: 200
+    }]
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.blockers.includes(`effect-${wallet.address}-token-delta-below-minimum`));
+
+  const verified = buildJitoBundleChainEffectProof({
+    receipt,
+    expectedEffects: [{
+      wallet: wallet.address,
+      mint: validMintPublicKey,
+      txSignature: 'sig-wallet-1',
+      preTokenAmountRaw: '0',
+      postTokenAmountRaw: '100',
+      minDeltaRaw: '1',
+      status: 'finalized',
+      slot: 200
+    }]
+  });
+  assert.equal(verified.contract, 'bondr-jito-bundle-chain-effect-proof-v1');
+  assert.equal(verified.status, 'verified');
+  assert.equal(verified.verifiedEffectCount, 1);
+  assert.equal(verified.safety.relayReceiptIsNotEnough, true);
+});
+
 test('jito launch bundle plan models legs, hashes, signing, and closed relay gates', () => {
   const plan = buildJitoLaunchBundlePlan(project, [wallet], activation, { expectedMint: validMintPublicKey });
   assert.equal(plan.contract, 'bondr-jito-launch-bundle-plan-v1');
   assert.equal(plan.execution, 'launch-bundle-plan-only-no-signing-no-relay-submit');
+  assert.equal(plan.synchronization.contract, 'bondr-jito-wallet-rail-synchronization-v1');
+  assert.equal(plan.packedExecution.contract, 'bondr-jito-packed-execution-plan-v1');
+  assert.equal(plan.packedExecution.atomicity.withinWave, true);
+  assert.equal(plan.packedExecution.atomicity.acrossWaves, false);
   assert.ok(plan.legs.some((leg) => leg.rail === 'deployment'));
   assert.ok(plan.legs.some((leg) => leg.id === 'jito-tip'));
   assert.equal(plan.preparedTransactions.count, 0);
   assert.equal(plan.legHashes.length, plan.legs.length);
   assert.equal(plan.bundleHash.length, 64);
   assert.ok(plan.signingOrder.includes(wallet.address));
+  assert.ok(plan.synchronization.signingOrder.includes(wallet.address));
+  assert.ok(plan.synchronization.walletRails.some((row) => row.rail === 'deployment' && row.routePath.includes('/deployment')));
+  assert.ok(plan.synchronization.walletRails.some((row) => row.rail === 'bundle' && row.routePath.includes('wallet plan(bundle)')));
+  assert.ok(plan.synchronization.blockers.includes('leg-deployment-0-prepared-transaction-required'));
   assert.ok(plan.blockers.includes('broadcast-gate-closed'));
   assert.ok(plan.blockers.includes('jito-relay-disabled'));
   assert.ok(plan.blockers.includes('simulation-proof-required'));
+  assert.ok(plan.blockers.includes('leg-deployment-0-prepared-transaction-required'));
   assert.equal(plan.safety.noSigning, true);
   assert.equal(plan.safety.noRelaySubmit, true);
   assert.equal(plan.antiAbuse.noWashTrading, true);
+});
+
+test('jito packed execution can fit more than five wallets into one atomic bundle wave', () => {
+  const wallets = Array.from({ length: 8 }, (_, index): Wallet => ({
+    ...wallet,
+    id: index === 0 ? 'dev-wallet' : `bundle-wallet-${index}`,
+    role: index === 0 ? 'dev wallet' : 'bundle wallet',
+    address: index === 0 ? wallet.address : Keypair.generate().publicKey.toBase58(),
+    custodyMode: undefined
+  }));
+  const packedProject: Project = {
+    ...project,
+    launchConfig: {
+      ...project.launchConfig!,
+      walletPlan: wallets.map((row, index) => ({
+        walletId: row.id,
+        role: row.role,
+        participate: true,
+        executionPhase: index === 0 ? 'dev' as const : 'bundle' as const,
+        plannedBuySol: 0.001,
+        maxBuySol: 0.001,
+        maxSlippageBps: 100,
+        takeProfitPercents: [35, 75, 150],
+        stopLossPct: -18,
+        trailingStopPct: 22,
+        perTxSellCapPct: 25,
+        cooldownSeconds: 60
+      }))
+    }
+  };
+  const plan = buildJitoLaunchBundlePlan(packedProject, wallets, activation, {
+    expectedMint: validMintPublicKey,
+    maxWalletsPerPackedTransaction: 4
+  });
+
+  assert.equal(plan.legs.filter((leg) => leg.rail !== 'tip').length, 8);
+  assert.equal(plan.packedExecution.totalWallets, 8);
+  assert.equal(plan.packedExecution.totalTransactions, 2);
+  assert.equal(plan.packedExecution.waveCount, 1);
+  assert.equal(plan.packedExecution.mode, 'single-atomic-bundle');
+  assert.equal(plan.policy.plannedTransactions, 2);
+  assert.equal(plan.policy.plannedWaves, 1);
+  assert.equal(plan.policy.atomicityMode, 'single-atomic-bundle');
+  assert.equal(plan.packedExecution.transactions.every((tx) => tx.walletCount <= 4), true);
+  assert.ok(plan.packedExecution.blockers.includes('packed-transaction-0-address-lookup-table-proof-required'));
+  assert.ok(plan.packedExecution.blockers.includes('packed-transaction-1-address-lookup-table-proof-required'));
+  assert.ok(!plan.blockers.some((blocker) => blocker.includes('bundle-exceeds-5-transaction-limit')));
+});
+
+test('jito packed execution models overflow wallets as near-synchronous waves', () => {
+  const wallets = Array.from({ length: 22 }, (_, index): Wallet => ({
+    ...wallet,
+    id: index === 0 ? 'dev-wallet' : `bundle-wallet-${index}`,
+    role: index === 0 ? 'dev wallet' : 'bundle wallet',
+    address: index === 0 ? wallet.address : Keypair.generate().publicKey.toBase58(),
+    custodyMode: undefined
+  }));
+  const packedProject: Project = {
+    ...project,
+    launchConfig: {
+      ...project.launchConfig!,
+      walletPlan: wallets.map((row, index) => ({
+        walletId: row.id,
+        role: row.role,
+        participate: true,
+        executionPhase: index === 0 ? 'dev' as const : index % 5 === 0 ? 'task' as const : 'bundle' as const,
+        taskType: index % 5 === 0 && index !== 0 ? 'timed-buy' as const : undefined,
+        plannedBuySol: 0.001,
+        maxBuySol: 0.001,
+        maxSlippageBps: 100,
+        takeProfitPercents: [35, 75, 150],
+        stopLossPct: -18,
+        trailingStopPct: 22,
+        perTxSellCapPct: 25,
+        cooldownSeconds: 60
+      }))
+    }
+  };
+  const plan = buildJitoLaunchBundlePlan(packedProject, wallets, activation, {
+    expectedMint: validMintPublicKey,
+    maxWalletsPerPackedTransaction: 4
+  });
+
+  assert.equal(plan.packedExecution.totalWallets, 22);
+  assert.equal(plan.packedExecution.totalTransactions, 6);
+  assert.equal(plan.packedExecution.waveCount, 2);
+  assert.equal(plan.packedExecution.mode, 'near-synchronous-waves');
+  assert.equal(plan.packedExecution.atomicity.label, 'near-synchronous-jito-waves');
+  assert.equal(plan.packedExecution.synchronization.waveSubmitRequiresPreviousWaveReceipt, true);
+  assert.equal(plan.policy.plannedWaves, 2);
+  assert.equal(plan.policy.atomicityMode, 'near-synchronous-waves');
+  assert.deepEqual(plan.packedExecution.waves.map((wave) => wave.transactionCount), [5, 1]);
+  assert.equal(plan.packedExecution.waves[1].submitAfterWaveIndex, 0);
+  assert.ok(plan.packedExecution.warnings.includes('multi-wave-plan-is-not-atomic-across-waves'));
+  assert.ok(!plan.blockers.some((blocker) => blocker.includes('bundle-exceeds-5-transaction-limit')));
+});
+
+test('jito launch bundle synchronization aligns wallet rails, prepared hashes, signing order, and freshness', () => {
+  const devOnly = structuredClone(project);
+  devOnly.launchConfig!.walletPlan = [
+    { walletId: 'dev-wallet', role: 'dev wallet', participate: true, executionPhase: 'dev', plannedBuySol: 0.01, maxBuySol: 0.01, maxSlippageBps: 100, takeProfitPercents: [35, 75, 150], stopLossPct: -18, trailingStopPct: 22, perTxSellCapPct: 25, cooldownSeconds: 60 }
+  ];
+  const future = new Date(Date.now() + 60_000).toISOString();
+  const plan = buildJitoLaunchBundlePlan(devOnly, [wallet], activation, {
+    expectedMint: validMintPublicKey,
+    session: { blockhashExpiresAt: future },
+    preparedTransactions: [{
+      id: 'deployment-create',
+      rail: 'deployment',
+      transactionBase64: 'tx-create',
+      expectedSigners: [wallet.address],
+      messageHash: 'c'.repeat(64),
+      simulationPolicyStatus: 'passed'
+    }]
+  });
+
+  assert.equal(plan.synchronization.status, 'in-sync');
+  assert.deepEqual(plan.synchronization.messageHashes, ['c'.repeat(64)]);
+  assert.equal(plan.synchronization.blockhashExpiresAt, future);
+  const deploymentRail = plan.synchronization.walletRails.find((row) => row.rail === 'deployment');
+  assert.equal(deploymentRail?.signer, wallet.address);
+  assert.equal(deploymentRail?.signingIndex, 0);
+  assert.deepEqual(deploymentRail?.preparedTransactionIds, ['deployment-create']);
+  assert.deepEqual(deploymentRail?.messageHashes, ['c'.repeat(64)]);
+  assert.deepEqual(deploymentRail?.blockers, []);
+  const tipRail = plan.synchronization.walletRails.find((row) => row.rail === 'tip');
+  assert.equal(tipRail?.signer, wallet.address);
+  assert.deepEqual(tipRail?.blockers, []);
+  assert.equal(plan.synchronization.safety.rebuildAllOnExpiry, true);
+
+  const expired = buildJitoLaunchBundlePlan(devOnly, [wallet], activation, {
+    expectedMint: validMintPublicKey,
+    session: { blockhashExpiresAt: '2020-01-01T00:00:00.000Z' },
+    preparedTransactions: [{
+      id: 'deployment-create',
+      rail: 'deployment',
+      transactionBase64: 'tx-create',
+      expectedSigners: [wallet.address],
+      messageHash: 'c'.repeat(64),
+      simulationPolicyStatus: 'passed'
+    }]
+  });
+  assert.equal(expired.synchronization.status, 'blocked');
+  assert.ok(expired.synchronization.blockers.includes('blockhash-expired-rebuild-required'));
+  assert.ok(expired.blockers.includes('blockhash-expired-rebuild-required'));
 });
 
 test('jito launch bundle plan accepts Raydium prepared legs only after policy simulation passes', () => {
@@ -1567,6 +2478,42 @@ test('jito sendBundle posts JSON-RPC only when policy and gates pass', async () 
   }
 });
 
+test('jito bundle status receipt normalization keeps relay status separate from chain proof', () => {
+  const observedAt = '2026-08-16T12:00:00.000Z';
+  const finalized = normalizeJitoBundleStatusReceipt({
+    bundleId: 'bundle-finalized',
+    observedAt,
+    rail: 'deployment',
+    projectId: 'sda',
+    inflight: { value: [{ bundle_id: 'bundle-finalized', status: 'Landed', landed_slot: 123 }] },
+    final: { value: [{ bundle_id: 'bundle-finalized', confirmation_status: 'finalized', slot: 124, transactions: ['sig-one', 'sig-two'], err: null }] }
+  });
+  assert.equal(finalized.status, 'finalized');
+  assert.equal(finalized.confirmationStatus, 'finalized');
+  assert.equal(finalized.landedSlot, 124);
+  assert.deepEqual(finalized.txSignatures, ['sig-one', 'sig-two']);
+  assert.equal(finalized.statusSource, 'combined');
+  assert.equal(finalized.executionProofStatus, 'relay-status-only-not-chain-proof');
+
+  const failed = normalizeJitoBundleStatusReceipt({
+    bundleId: 'bundle-failed',
+    observedAt,
+    inflight: { value: [{ bundle_id: 'bundle-failed', status: 'Pending' }] },
+    final: { value: [{ bundle_id: 'bundle-failed', confirmation_status: 'processed', err: { InstructionError: [0, 'Custom'] } }] }
+  });
+  assert.equal(failed.status, 'failed');
+  assert.deepEqual(failed.err, { InstructionError: [0, 'Custom'] });
+
+  const pending = normalizeJitoBundleStatusReceipt({
+    bundleId: 'bundle-pending',
+    observedAt,
+    inflight: { value: [{ bundle_id: 'bundle-pending', status: 'Pending' }] },
+    final: { value: [] }
+  });
+  assert.equal(pending.status, 'inflight');
+  assert.equal(pending.statusSource, 'getInflightBundleStatuses');
+});
+
 test('jito bundle status stays blocked when relay is disabled', async () => {
   const result = await getJitoBundleStatus({ bundleIds: ['bundle-test-id'] });
   assert.equal(result.status, 'blocked');
@@ -1609,6 +2556,8 @@ test('jito bundle status builds receipt records from relay responses', async () 
     assert.equal(result.receipts[0].bundleId, 'bundle-test-id');
     assert.equal(result.receipts[0].rail, 'deployment');
     assert.equal(result.receipts[0].status, 'finalized');
+    assert.equal(result.receipts[0].confirmationStatus, 'finalized');
+    assert.equal(result.receipts[0].executionProofStatus, 'relay-status-only-not-chain-proof');
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -1651,9 +2600,9 @@ test('sniper readiness reports trigger, relay, and recovery blockers without exe
   const readiness = buildSniperExecutionReadiness(project, [wallet], activation);
   assert.equal(readiness.contract, 'bondr-sniper-execution-readiness-v1');
   assert.equal(readiness.execution, 'readiness-only-no-sniper-submit');
-  assert.ok(readiness.blockers.includes('sniper-trigger-source-missing'));
+  assert.ok(readiness.blockers.includes('durable-sniper-trigger-source-missing'));
   assert.ok(readiness.blockers.includes('broadcast-gate-closed'));
-  assert.ok(readiness.blockers.includes('sniper-recovery-engine-missing'));
+  assert.ok(readiness.blockers.includes('automatic-recovery-runner-missing'));
   assert.equal(readiness.safety.noAutonomousTrading, true);
 });
 
@@ -1679,6 +2628,43 @@ test('sniper trigger preview accepts manual trigger shape but keeps live gates c
   assert.ok(preview.blockers.includes('broadcast-gate-closed'));
   assert.ok(preview.blockers.includes('jito-relay-disabled'));
   assert.equal(preview.safety.noBroadcast, true);
+});
+
+test('sniper trigger preview requires fresh pool proof for automated sources', () => {
+  const poolId = Keypair.generate().publicKey.toBase58();
+  const fresh = buildSniperTriggerPreview({ ...project, tokenMint: validMintPublicKey }, [wallet], activation, {
+    source: 'pool-detector',
+    mint: validMintPublicKey,
+    poolId,
+    poolObservedAt: new Date(Date.now() - 1000).toISOString(),
+    poolSlot: 328_000_001,
+    poolLiquidityUsd: 1250,
+    connectedSigner: wallet.address,
+    amountSol: 0.01,
+    slippageBps: 100,
+    simulationProof: { ok: true }
+  });
+  assert.equal(fresh.poolFreshnessProof.contract, 'bondr-sniper-pool-freshness-proof-v1');
+  assert.equal(fresh.poolFreshnessProof.status, 'ready');
+  assert.equal(fresh.poolFreshnessProof.poolId, poolId);
+  assert.ok(!fresh.blockers.includes('pool-freshness-proof-required'));
+  assert.equal(fresh.poolFreshnessProof.safety.noBroadcast, true);
+
+  const stale = buildSniperTriggerPreview({ ...project, tokenMint: validMintPublicKey }, [wallet], activation, {
+    source: 'webhook',
+    mint: validMintPublicKey,
+    poolId,
+    poolObservedAt: new Date(Date.now() - 120_000).toISOString(),
+    poolSlot: 328_000_001,
+    poolLiquidityUsd: 1250,
+    connectedSigner: wallet.address,
+    amountSol: 0.01,
+    slippageBps: 100,
+    simulationProof: { ok: true }
+  });
+  assert.equal(stale.poolFreshnessProof.status, 'stale');
+  assert.ok(stale.blockers.includes('pool-freshness-proof-required'));
+  assert.ok(stale.blockers.includes('pool-freshness-stale'));
 });
 
 test('task readiness blocks durable worker and fake-volume policy gaps', () => {
@@ -1734,6 +2720,15 @@ test('task queue preview accepts safe task shape but keeps worker and broadcast 
   assert.equal(preview.lifecyclePreview.rows[0]?.controls.cancel, true);
   assert.equal(preview.lifecyclePreview.rows[0]?.nextAction, 'build-unsigned-transaction-after-policy');
   assert.equal(preview.lifecyclePreview.safety.noBroadcast, true);
+  assert.equal(preview.receiptLedgerPreview.contract, 'bondr-task-receipt-ledger-preview-v1');
+  assert.equal(preview.receiptLedgerPreview.status, 'preview-ready');
+  assert.ok(preview.receiptLedgerPreview.requiredReceiptFields.includes('transactionMessageHash'));
+  assert.ok(preview.receiptLedgerPreview.blockers.includes('durable-task-receipt-ledger-missing'));
+  assert.equal(preview.monitorRecoveryPreview.contract, 'bondr-task-monitor-recovery-preview-v1');
+  assert.equal(preview.monitorRecoveryPreview.status, 'preview-ready');
+  assert.ok(preview.monitorRecoveryPreview.watchers[0]?.watches.includes('take-profit'));
+  assert.ok(preview.monitorRecoveryPreview.watchers[0]?.recovery.includes('no-blind-retry'));
+  assert.equal(preview.monitorRecoveryPreview.safety.noAutomaticRecovery, true);
 });
 
 test('task lifecycle preview waits during cooldown and completes at max runs', () => {
@@ -1760,6 +2755,43 @@ test('execution recovery readiness reports monitor gaps and no-blind-retry polic
   assert.ok(readiness.recoveryPolicy.noRetry.includes('slippage-or-stale-market'));
   assert.equal(readiness.recoveryPolicy.noBlindRetry, true);
   assert.ok(readiness.blockers.includes('durable-monitor-worker-missing'));
+});
+
+test('observability and recovery playbooks cover live failure responses', () => {
+  const playbook = readFileSync(new URL('../docs/BONDR_FAILURE_RESPONSE_PLAYBOOKS_2026-08-16.md', import.meta.url), 'utf8');
+  for (const heading of ['Auth Mismatch', 'Provider-Limited', 'Simulation Fail', 'Broadcast Fail', 'Receipt Missing', 'Route Crash']) {
+    assert.match(playbook, new RegExp(`## ${heading}`));
+  }
+  assert.match(playbook, /Do not retry a transaction blindly/);
+  assert.match(playbook, /\/api\/client-error-report/);
+  assert.match(playbook, /\/api\/execution-capabilities/);
+  assert.match(playbook, /\/api\/provider-readiness/);
+  assert.match(playbook, /\/api\/projects\/<projectId>\/launch-reconciliation/);
+  assert.match(playbook, /maxRetries=0/);
+  assert.match(playbook, /blindRetries=false/);
+  assert.match(playbook, /signature, provider, route, expected mint, transaction message hash/);
+});
+
+test('production smoke artifacts are bounded, redacted, and gate-aware', () => {
+  const smoke = readFileSync(new URL('../scripts/bondr-production-smoke.mjs', import.meta.url), 'utf8');
+  assert.match(smoke, /join\('\/tmp'/);
+  assert.match(smoke, /redact\(report\)/);
+  assert.match(smoke, /SECRET_KEY_RE/);
+  assert.match(smoke, /LONG_SECRET_RE/);
+  assert.match(smoke, /broadcastDisabled/);
+  assert.match(smoke, /deploymentDisabled/);
+  assert.match(smoke, /send-signed-transaction smoke must not broadcast/);
+  assert.match(smoke, /contained embedded RSC route error digest/);
+});
+
+test('client error report remains bounded and sanitized for recovery diagnostics', () => {
+  const source = readFileSync(new URL('../apps/web/app/api/client-error-report/route.ts', import.meta.url), 'utf8');
+  assert.match(source, /z\.string\(\)\.max\(120\)/);
+  assert.match(source, /z\.string\(\)\.max\(500\)/);
+  assert.match(source, /recentReports\.splice\(20\)/);
+  assert.match(source, /Bearer \[redacted\]/);
+  assert.match(source, /token\|jwt\|secret\|private\|seed\|password\|authorization\|bearer/i);
+  assert.match(source, /cache-control': 'no-store'/);
 });
 
 test('shadow execution packet compiles execution spine without enabling live movement', async () => {

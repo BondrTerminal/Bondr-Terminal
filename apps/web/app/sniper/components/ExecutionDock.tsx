@@ -24,8 +24,8 @@ type SwapBuild = ExecutionQuote & {
   requiredAccounts?: string[];
 };
 
-type SimulationPayload = { status?: string; error?: string; simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null }; transactionPreview?: TransactionPreview };
-type SignedReviewPayload = { status?: string; error?: string; execution?: string; intentId?: string; expectedSigner?: string; expectedMint?: string; simulationStatus?: string | null; review?: { signerMatched?: boolean; expectedMintReferenced?: boolean; requiredAccountsMatched?: boolean; programsAllowed?: boolean; messageHashMatched?: boolean; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null; altPolicy?: string; safeToBroadcastIfLiveEnabled?: boolean; localSignatureReviewPassed?: boolean; programs?: string[] }; blockers?: string[]; warnings?: string[]; broadcast?: string };
+type SimulationPayload = { status?: string; error?: string; simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null }; simulationProof?: { status?: string; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null }; transactionEvidence?: { transactionMessageHash?: string | null }; transactionPreview?: TransactionPreview };
+type SignedReviewPayload = { status?: string; error?: string; execution?: string; intentId?: string; expectedSigner?: string; expectedMint?: string; simulationStatus?: string | null; simulationTransactionMessageHash?: string | null; review?: { signerMatched?: boolean; expectedMintReferenced?: boolean; requiredAccountsMatched?: boolean; programsAllowed?: boolean; messageHashMatched?: boolean; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null; simulationTransactionMessageHash?: string | null; altPolicy?: string; safeToBroadcastIfLiveEnabled?: boolean; localSignatureReviewPassed?: boolean; programs?: string[] }; blockers?: string[]; warnings?: string[]; broadcast?: string };
 type SignedSwapPayload = { signedTransaction: string; signature?: string; explorerUrl?: string; submitted?: boolean; review?: SignedReviewPayload | null };
 
 
@@ -351,7 +351,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
       setSwapBuild(build);
       if (buildResponse.ok) setQuote(build);
       if (!buildResponse.ok || !build.swap?.swapTransaction) { setLiveMessage(build.error ?? 'Unsigned transaction build failed.'); return; }
-      const simulationResponse = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: 'swap', mint: activeMint, wallet: publicKey }) });
+      const simulationResponse = await fetch('/api/terminal/signer-dry-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unsignedTransaction: build.swap.swapTransaction, action: 'swap', mint: activeMint, wallet: publicKey, expectedSigner: build.expectedSigner ?? publicKey, expectedMint: build.expectedMint ?? activeMint, transactionMessageHash: build.transactionMessageHash ?? null }) });
       const sim = await simulationResponse.json() as SimulationPayload;
       setSimulation(sim);
       if (!simulationResponse.ok || sim.status !== 'ok') { setLiveMessage(sim.simulation?.failureSummary ?? sim.error ?? 'Simulation failed. Signing blocked.'); return; }
@@ -371,7 +371,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapBuild.swap.swapTransaction));
       const signed = await provider.signTransaction(transaction);
       const signedTransaction = bytesToBase64(signed.serialize());
-      const reviewResponse = await fetch('/api/terminal/signed-review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction, intentId: swapBuild.intentId, expectedSigner: swapBuild.expectedSigner ?? publicKey, expectedMint: swapBuild.expectedMint ?? activeMint, transactionMessageHash: swapBuild.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null }) });
+      const reviewResponse = await fetch('/api/terminal/signed-review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction, intentId: swapBuild.intentId, expectedSigner: swapBuild.expectedSigner ?? publicKey, expectedMint: swapBuild.expectedMint ?? activeMint, transactionMessageHash: swapBuild.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null, simulationTransactionMessageHash: simulation?.simulationProof?.transactionMessageHash ?? simulation?.transactionEvidence?.transactionMessageHash ?? null }) });
       const review = await reviewResponse.json().catch(() => null) as SignedReviewPayload | null;
       setSignedReview(review);
       setSignedSwap({ signedTransaction, submitted: false, review });
@@ -386,7 +386,7 @@ export function ExecutionDock({ mint, selectedWalletLabel, wallets = [], project
     if (!signedSwap?.signedTransaction || liveLoading) return;
     setLiveLoading(true); setLiveMessage(null);
     try {
-      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction: signedSwap.signedTransaction, intentId: swapBuild?.intentId, expectedSigner: swapBuild?.expectedSigner, expectedMint: swapBuild?.expectedMint, transactionMessageHash: swapBuild?.transactionMessageHash ?? signedReview?.review?.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null }) });
+      const response = await fetch('/api/send-signed-transaction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ signedTransaction: signedSwap.signedTransaction, intentId: swapBuild?.intentId, expectedSigner: swapBuild?.expectedSigner, expectedMint: swapBuild?.expectedMint, transactionMessageHash: swapBuild?.transactionMessageHash ?? signedReview?.review?.transactionMessageHash ?? null, simulationStatus: simulation?.status ?? null, simulationTransactionMessageHash: simulation?.simulationProof?.transactionMessageHash ?? signedReview?.simulationTransactionMessageHash ?? signedReview?.review?.simulationTransactionMessageHash ?? null }) });
       const sent = await response.json() as { signature?: string; explorerUrl?: string; error?: string };
       if (!response.ok || !sent.signature) { setLiveMessage(sent.error ?? 'Broadcast failed.'); return; }
       setSignedSwap((current) => current ? { ...current, signature: sent.signature, explorerUrl: sent.explorerUrl, submitted: true } : current);

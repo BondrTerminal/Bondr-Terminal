@@ -3,12 +3,14 @@ import { serverEnvConfigured } from './server-env';
 import { configuredSolanaRpc } from './solana-rpc';
 import { gmgnReadiness } from './gmgn';
 import { getSolanaTrackerConfig, getSolanaTrackerCredits, getSolanaTrackerPrice } from './solana-tracker';
+import { getSolanaRpcHealth, type SolanaRpcHealth } from './rpc-health';
+import { providerSecretSafeMessage, providerStateFromRpcHealth } from './provider-truth';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const TIMEOUT_MS = 5_000;
 
-export type ProviderState = 'ok' | 'partial' | 'unavailable' | 'public-fallback' | 'optional-not-configured' | 'blocked-by-live-gate' | 'error';
+export type ProviderState = 'ok' | 'partial' | 'unavailable' | 'provider-limited' | 'modeled' | 'public-fallback' | 'optional-not-configured' | 'blocked-by-live-gate' | 'error';
 
 type RuntimeProbe = {
   status: ProviderState;
@@ -78,6 +80,15 @@ function configured(name: string) {
   return serverEnvConfigured(name);
 }
 
+function probeFromRpcHealth(rpcHealth: SolanaRpcHealth): RuntimeProbe {
+  return {
+    status: providerStateFromRpcHealth(rpcHealth.status),
+    latencyMs: rpcHealth.latencyMs,
+    checkedAt: rpcHealth.observedAt,
+    error: providerSecretSafeMessage(rpcHealth.status === 'live' ? null : rpcHealth.note ?? rpcHealth.warning)
+  };
+}
+
 async function timed<T>(fn: () => Promise<T>, timeoutMs = TIMEOUT_MS): Promise<{ value: T | null; probe: RuntimeProbe }> {
   const started = Date.now();
   const controller = new AbortController();
@@ -91,7 +102,7 @@ async function timed<T>(fn: () => Promise<T>, timeoutMs = TIMEOUT_MS): Promise<{
     return { value, probe: { status: 'ok', latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: null } };
   } catch (error) {
     clearTimeout(timeout);
-    return { value: null, probe: { status: 'unavailable', latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: error instanceof Error ? error.message : 'unknown error' } };
+    return { value: null, probe: { status: 'unavailable', latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: providerSecretSafeMessage(error instanceof Error ? error.message : 'unknown error') } };
   }
 }
 
@@ -127,13 +138,15 @@ async function fetchProbeWithHeaders(url: string, headers: Record<string, string
 
 export async function buildProviderReadiness() {
   const observedAt = new Date().toISOString();
+  const rpcHealth = await getSolanaRpcHealth();
   const rpc = configuredSolanaRpc();
   const connection = new Connection(rpc.url, 'confirmed');
   const birdeyeKey = process.env.BIRDEYE_API_KEY?.trim();
   const solanaTrackerConfig = getSolanaTrackerConfig();
-  const [slotProbe, blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe, birdeyeProbe, solanaTrackerPriceProbe, solanaTrackerCreditsProbe] = await Promise.all([
-    timed(async () => connection.getSlot('confirmed')),
-    timed(async () => connection.getLatestBlockhash('confirmed')),
+  const [blockhashProbe, jupiterProbe, dexProbe, geckoProbe, rugProbe, birdeyeProbe, solanaTrackerPriceProbe, solanaTrackerCreditsProbe] = await Promise.all([
+    rpcHealth.status === 'live'
+      ? timed(async () => connection.getLatestBlockhash('confirmed'))
+      : Promise.resolve({ value: null, probe: probeFromRpcHealth(rpcHealth) }),
     fetchProbe(`https://lite-api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=1000000&slippageBps=100`),
     fetchProbe(`https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`),
     fetchProbe('https://api.geckoterminal.com/api/v2/networks/solana/pools/BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU'),
@@ -144,36 +157,39 @@ export async function buildProviderReadiness() {
   ]);
 
   const heliusConfigured = rpc.provider === 'helius-rpc-url' || rpc.provider === 'helius-api-key';
-  const rpcLatencyOk = (slotProbe.probe.latencyMs ?? 9999) < 1500 && (blockhashProbe.probe.latencyMs ?? 9999) < 1500;
-  const rpcHealthy = slotProbe.probe.status === 'ok' && blockhashProbe.probe.status === 'ok';
-  const rpcLiveSuitable = rpc.configured && rpcHealthy && rpcLatencyOk;
-  const rpcStatus: ProviderState = rpc.configured ? (rpcLiveSuitable ? 'ok' : rpcHealthy ? 'partial' : 'unavailable') : (slotProbe.probe.status === 'ok' ? 'public-fallback' : 'unavailable');
-  const heliusSourceStatus: ProviderState = heliusConfigured ? (rpc.provider === 'helius-api-key' || rpc.provider === 'helius-rpc-url' ? (rpcHealthy ? 'ok' : 'unavailable') : 'ok') : 'optional-not-configured';
+  const rpcLatencyOk = (rpcHealth.latencyMs ?? 9999) < 1500 && (blockhashProbe.probe.latencyMs ?? 9999) < 1500;
+  const rpcHealthy = rpcHealth.status === 'live' && blockhashProbe.probe.status === 'ok';
+  const rpcLiveSuitable = rpcHealth.configured && rpcHealthy && rpcLatencyOk;
+  const rpcStatus = providerStateFromRpcHealth(rpcHealth.status);
+  const heliusSourceStatus: ProviderState = heliusConfigured ? (rpc.provider === 'helius-api-key' || rpc.provider === 'helius-rpc-url' ? providerStateFromRpcHealth(rpcHealth.status) : 'ok') : 'optional-not-configured';
   const birdeyeSourceStatus: ProviderState = birdeyeKey ? (birdeyeProbe.probe.status === 'ok' ? 'ok' : birdeyeProbe.probe.status === 'unavailable' && String(birdeyeProbe.probe.error ?? '').includes('429') ? 'partial' : 'unavailable') : 'optional-not-configured';
   const solanaTrackerSourceStatus: ProviderState = !solanaTrackerConfig.configured ? 'optional-not-configured' : solanaTrackerPriceProbe.status === 'ok' ? 'ok' : solanaTrackerPriceProbe.status === 'rate-limited' ? 'partial' : 'unavailable';
   const gmgn = gmgnReadiness();
   const sources = {
     solanaRpc: {
       status: rpcStatus,
-      configured: rpc.configured,
-      provider: rpc.provider,
-      recentSlot: slotProbe.value,
+      configured: rpcHealth.configured,
+      provider: rpcHealth.selectedProvider,
+      providerLabel: rpcHealth.selectedProviderLabel,
+      recentSlot: rpcHealth.currentSlot,
       latestBlockhashAvailable: blockhashProbe.probe.status === 'ok',
       latestBlockhashLatencyMs: blockhashProbe.probe.latencyMs,
       suitableForLiveMode: rpcLiveSuitable,
       minimumReliabilityThreshold: { configuredPrivateRpc: true, currentSlotAvailable: true, latestBlockhashAvailable: true, slotLatencyMsUnder: 1500, blockhashLatencyMsUnder: 1500, noPublicFallback: true },
-      thresholdPasses: { configuredPrivateRpc: rpc.configured, currentSlotAvailable: slotProbe.probe.status === 'ok', latestBlockhashAvailable: blockhashProbe.probe.status === 'ok', slotLatencyOk: (slotProbe.probe.latencyMs ?? 9999) < 1500, blockhashLatencyOk: (blockhashProbe.probe.latencyMs ?? 9999) < 1500, noPublicFallback: rpc.configured },
-      remediation: rpc.configured ? null : 'Set SOLANA_RPC_URL, QUICKNODE_RPC_URL, TRITON_RPC_URL, SYNDICA_RPC_URL, ALCHEMY_RPC_URL, CHAINSTACK_RPC_URL, ANKR_RPC_URL, JITO_RPC_URL, HELIUS_RPC_URL, or HELIUS_API_KEY before live trading.',
-      latencyMs: slotProbe.probe.latencyMs,
-      rateLimitOrError: slotProbe.probe.error,
+      thresholdPasses: { configuredPrivateRpc: rpcHealth.configured, currentSlotAvailable: rpcHealth.status === 'live' && typeof rpcHealth.currentSlot === 'number', latestBlockhashAvailable: blockhashProbe.probe.status === 'ok', slotLatencyOk: (rpcHealth.latencyMs ?? 9999) < 1500, blockhashLatencyOk: (blockhashProbe.probe.latencyMs ?? 9999) < 1500, noPublicFallback: rpcHealth.configured },
+      remediation: rpcHealth.configured ? null : 'Set SOLANA_RPC_URL, QUICKNODE_RPC_URL, TRITON_RPC_URL, SYNDICA_RPC_URL, ALCHEMY_RPC_URL, CHAINSTACK_RPC_URL, ANKR_RPC_URL, JITO_RPC_URL, HELIUS_RPC_URL, or HELIUS_API_KEY before live trading.',
+      latencyMs: rpcHealth.latencyMs,
+      rateLimitOrError: providerSecretSafeMessage(rpcHealth.status === 'live' ? null : rpcHealth.note ?? rpcHealth.warning),
+      providerSummary: rpcHealth.providerSummary,
+      healthStatus: rpcHealth.status,
       features: ['wallet SOL balances', 'SPL token account scans', 'recent blockhash', 'current slot'],
-      note: rpcLiveSuitable ? 'Configured private Solana RPC meets current live-readiness threshold.' : rpc.configured ? 'Configured Solana RPC is present but does not meet every live-readiness threshold yet.' : 'Using public fallback RPC; safe for read-only checks but not reliable enough for production live mode.'
+      note: rpcLiveSuitable ? 'Configured private Solana RPC meets current live-readiness threshold.' : rpcHealth.configured ? `Configured Solana RPC is ${rpcHealth.status}; it does not meet every live-readiness threshold yet.` : 'Dedicated Solana RPC is not configured; provider readiness agrees with /api/rpc-health modeled state and cannot satisfy live mode.'
     },
     helius: {
       status: heliusSourceStatus,
       configured: heliusConfigured,
-      credentialProbeLatencyMs: heliusConfigured ? slotProbe.probe.latencyMs : null,
-      credentialProbeError: heliusConfigured && heliusSourceStatus !== 'ok' ? slotProbe.probe.error ?? blockhashProbe.probe.error ?? 'Helius RPC probe failed.' : null,
+      credentialProbeLatencyMs: heliusConfigured ? rpcHealth.latencyMs : null,
+      credentialProbeError: heliusConfigured && heliusSourceStatus !== 'ok' ? providerSecretSafeMessage(rpcHealth.note ?? blockhashProbe.probe.error ?? 'Helius RPC probe failed.') : null,
       featuresUnlockedIfConfigured: ['enhanced transaction history', 'more reliable RPC', 'wallet/token transfer parsing', 'holder/fresh-wallet enrichment'],
       note: heliusConfigured ? (heliusSourceStatus === 'ok' ? 'Helius detected and RPC probe succeeded; secret value not exposed.' : 'Helius env is present, but the provider rejected or failed the runtime probe. Verify the key/value in Vercel.') : 'Optional but strongly recommended before live terminal operation.'
     },
@@ -254,8 +270,10 @@ export async function buildProviderReadiness() {
   } as const;
 
   const blockingForLive = [
-    !rpc.configured ? 'Configure reliable private Solana RPC before live trading.' : null,
-    rpc.configured && !rpcLiveSuitable ? 'Configured Solana RPC does not meet live reliability threshold.' : null,
+    !rpcHealth.configured ? 'Configure reliable private Solana RPC before live trading.' : null,
+    rpcHealth.status === 'provider-limited' ? 'Configured Solana RPC is provider-limited; live readiness remains blocked until quota/rate limit clears or a fallback passes.' : null,
+    rpcHealth.status === 'modeled' ? 'RPC health is modeled because no dedicated provider is configured; public fallback cannot satisfy live readiness.' : null,
+    rpcHealth.configured && !rpcLiveSuitable ? 'Configured Solana RPC does not meet live reliability threshold.' : null,
     blockhashProbe.probe.status !== 'ok' ? 'RPC latest blockhash probe unavailable.' : null,
     jupiterProbe.probe.status !== 'ok' ? 'Jupiter quote route unavailable.' : null
   ].filter((item): item is string => Boolean(item));

@@ -115,6 +115,8 @@ type SimulationState = {
   error?: string;
   broadcastEnabled?: boolean;
   simulation?: { err?: unknown; logs?: string[]; unitsConsumed?: number | null; failureSummary?: string | null };
+  simulationProof?: { status?: string; transactionMessageHash?: string | null; expectedTransactionMessageHash?: string | null };
+  transactionEvidence?: { transactionMessageHash?: string | null };
   transactionPreview?: { simulationStatus?: string; blockers?: string[]; warnings?: string[] };
 };
 
@@ -126,6 +128,7 @@ type SignedCreateState = {
   expectedSigner?: string;
   expectedMint?: string;
   transactionMessageHash?: string | null;
+  simulationTransactionMessageHash?: string | null;
   simulationStatus?: string;
 };
 
@@ -134,6 +137,7 @@ type SignedReviewState = {
   execution?: string;
   broadcast?: string;
   intentId?: string;
+  simulationTransactionMessageHash?: string | null;
   blockers?: string[];
   warnings?: string[];
   error?: string;
@@ -144,6 +148,7 @@ type SignedReviewState = {
     expectedMintReferenced?: boolean;
     programsAllowed?: boolean;
     transactionMessageHash?: string | null;
+    simulationTransactionMessageHash?: string | null;
   };
 };
 
@@ -317,7 +322,10 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           unsignedTransaction,
           action: 'create',
           mint: pumpPortalBuild?.result?.requestBody.mint ?? mint,
-          wallet: connectedSigner || payer
+          wallet: connectedSigner || payer,
+          expectedSigner: pumpPortalBuild?.result?.intent?.expectedSigner ?? (connectedSigner || payer),
+          expectedMint: pumpPortalBuild?.result?.intent?.expectedMint ?? pumpPortalBuild?.result?.requestBody.mint ?? mint,
+          transactionMessageHash: pumpPortalBuild?.result?.intent?.transactionMessageHash ?? pumpPortalBuild?.result?.build?.messageHash ?? null
         })
       });
       const payload = await response.json().catch(() => ({})) as SimulationState;
@@ -373,6 +381,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
         expectedSigner: intent.expectedSigner,
         expectedMint: intent.expectedMint,
         transactionMessageHash: intent.transactionMessageHash,
+        simulationTransactionMessageHash: simulation?.simulationProof?.transactionMessageHash ?? simulation?.transactionEvidence?.transactionMessageHash ?? null,
         simulationStatus: 'ok'
       } satisfies SignedCreateState;
       setSignedCreate(signedState);
@@ -400,6 +409,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           expectedSigner: source.expectedSigner,
           expectedMint: source.expectedMint,
           transactionMessageHash: source.transactionMessageHash,
+          simulationTransactionMessageHash: source.simulationTransactionMessageHash,
           simulationStatus: source.simulationStatus
         })
       });
@@ -431,6 +441,7 @@ export function DeploymentLaunchBuilderPanel({ projectId, defaultPayer, deployme
           expectedSigner: signedCreate.expectedSigner,
           expectedMint: signedCreate.expectedMint,
           transactionMessageHash: signedCreate.transactionMessageHash,
+          simulationTransactionMessageHash: signedCreate.simulationTransactionMessageHash ?? signedReview?.simulationTransactionMessageHash ?? signedReview?.review?.simulationTransactionMessageHash ?? null,
           simulationStatus: signedCreate.simulationStatus
         })
       });

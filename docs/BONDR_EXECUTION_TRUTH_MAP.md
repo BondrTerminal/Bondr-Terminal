@@ -53,26 +53,26 @@ Known gaps:
 
 ### Sniper
 
-Current state: manual quote/build/simulate/sign rehearsal.
+Current state: manual quote/build/simulate/sign rehearsal plus read-only trigger preview.
 
 Known gaps:
 
-- Low-latency trigger source is missing.
-- Pool event detection is missing.
+- Durable low-latency trigger source is missing.
+- Pool detector/webhook freshness proof is modeled through `bondr-sniper-pool-freshness-proof-v1`; live indexer observations are still missing.
 - Broadcast gate is closed.
-- Signature receipt/fill reconciliation is missing.
-- Stale quote/slippage/blockhash/account-lock recovery needs live wiring.
+- Durable signature receipt/fill ledger is missing.
+- Stale quote/slippage/blockhash/account-lock recovery classes are modeled; automatic recovery runner is still missing.
 
 ### Task
 
-Current state: config-only.
+Current state: config plus read-only queue/lifecycle/receipt/monitor previews.
 
 Known gaps:
 
 - Durable scheduler/worker is missing.
-- Per-task simulation loop is missing.
-- Task receipts/audit ledger are missing.
-- Pause/resume/cancel, TP/SL watchers, cooldown enforcement, and kill switch are missing.
+- Per-task simulation handoff is still an eventual execution requirement.
+- Task receipt/audit ledger shape is modeled through `bondr-task-receipt-ledger-preview-v1`; durable persistence is missing.
+- Pause/resume/cancel lifecycle, TP/SL/trailing watchers, cooldown enforcement, idempotency, and no-blind-retry recovery classes are modeled; durable worker/monitor/kill-switch enforcement is still missing.
 - Task broadcast remains closed and must not run from a normal Vercel request lifecycle.
 
 ## Surfaces Wired

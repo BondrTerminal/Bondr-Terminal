@@ -34,6 +34,10 @@ export type LaunchReconciliation = {
     confirmedAt: string | null;
     deployer: string | null;
     provider: string | null;
+    transactionMessageHash: string | null;
+    simulationTransactionMessageHash: string | null;
+    simulationStatus: string | null;
+    broadcastPolicy: NonNullable<Project['launchReceipt']>['broadcastPolicy'] | null;
   };
   pair: ReconciledField<PairReconciliationValue>;
   market: ReconciledField<MarketReconciliationValue>;
@@ -153,7 +157,11 @@ export async function buildLaunchReconciliation(project: Project, origin: string
         explorerUrl: receipt?.explorerUrl ?? null,
         confirmedAt: receipt?.confirmedAt ?? null,
         deployer: receipt?.deployer ?? null,
-        provider: receipt?.provider ?? null
+        provider: receipt?.provider ?? null,
+        transactionMessageHash: receipt?.transactionMessageHash ?? null,
+        simulationTransactionMessageHash: receipt?.simulationTransactionMessageHash ?? null,
+        simulationStatus: receipt?.simulationStatus ?? null,
+        broadcastPolicy: receipt?.broadcastPolicy ?? null
       },
       pair: field<PairReconciliationValue>(null, 'dexscreener', observedAt),
       market: field<MarketReconciliationValue>(null, 'pumpfun', observedAt),
@@ -261,7 +269,11 @@ export async function buildLaunchReconciliation(project: Project, origin: string
       explorerUrl: receipt?.explorerUrl ?? null,
       confirmedAt: receipt?.confirmedAt ?? null,
       deployer: receipt?.deployer ?? null,
-      provider: receipt?.provider ?? null
+      provider: receipt?.provider ?? null,
+      transactionMessageHash: receipt?.transactionMessageHash ?? null,
+      simulationTransactionMessageHash: receipt?.simulationTransactionMessageHash ?? null,
+      simulationStatus: receipt?.simulationStatus ?? null,
+      broadcastPolicy: receipt?.broadcastPolicy ?? null
     },
     pair,
     market,

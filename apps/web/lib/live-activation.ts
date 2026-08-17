@@ -1,3 +1,5 @@
+import { buildLiveRiskReadiness, type LiveRiskObservation, type LiveRiskReadiness } from './live-risk-readiness';
+
 type MinimalRpcHealth = {
   status?: string;
   provider?: string;
@@ -20,7 +22,10 @@ export type LiveActivationStatus = {
     maxSolPerSwap: number;
     maxUsdcPerSwap: number;
     maxSlippageBps: number;
+    maxDailyLossSol: number;
+    killSwitchDrawdownBps: number;
   };
+  riskReadiness: LiveRiskReadiness;
   rpcHealth?: MinimalRpcHealth | null;
   authStatus?: {
     configured: boolean;
@@ -46,16 +51,31 @@ function clusterEnv(): LiveActivationStatus['allowedCluster'] {
   return 'mainnet-beta';
 }
 
-export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | null; auth?: { configured: boolean } | null; authenticated?: boolean; authReason?: string | null } = {}): LiveActivationStatus {
+export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | null; auth?: { configured: boolean } | null; authenticated?: boolean; authReason?: string | null; riskObservation?: LiveRiskObservation | null; haltActive?: boolean; haltPaths?: string[] } = {}): LiveActivationStatus {
   const liveTradingEnabled = boolEnv('LIVE_TRADING_ENABLED');
-  const signingEnabled = liveTradingEnabled && boolEnv('LIVE_BETA_SIGNING_ENABLED');
-  const broadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_BROADCAST_ENABLED');
-  const fundingBroadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_FUNDING_BROADCAST_ENABLED') && boolEnv('LIVE_BETA_FUNDING_BROADCAST_ARMED');
-  const deploymentEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_DEPLOYMENT_ENABLED');
   const requireSimulation = process.env.LIVE_REQUIRE_SIMULATION !== 'false';
   const allowedCluster = clusterEnv();
   const rpcHealth = input.rpcHealth ?? null;
   const authConfigured = Boolean(input.auth?.configured);
+  const limits = {
+    maxSolPerSwap: numberEnv('LIVE_MAX_SOL_PER_SWAP', 0.25),
+    maxUsdcPerSwap: numberEnv('LIVE_MAX_USDC_PER_SWAP', 50),
+    maxSlippageBps: numberEnv('LIVE_MAX_SLIPPAGE_BPS', 250),
+    maxDailyLossSol: numberEnv('LIVE_MAX_DAILY_LOSS_SOL', 0.25),
+    killSwitchDrawdownBps: numberEnv('LIVE_KILL_SWITCH_DRAWDOWN_BPS', 500)
+  };
+  const riskReadiness = buildLiveRiskReadiness({
+    limits,
+    observation: input.riskObservation,
+    liveTradingEnabled,
+    haltActive: input.haltActive,
+    haltPaths: input.haltPaths
+  });
+  const riskBlocked = riskReadiness.status === 'blocked';
+  const signingEnabled = liveTradingEnabled && boolEnv('LIVE_BETA_SIGNING_ENABLED') && !riskBlocked;
+  const broadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_BROADCAST_ENABLED') && !riskBlocked;
+  const fundingBroadcastEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_BETA_FUNDING_BROADCAST_ENABLED') && boolEnv('LIVE_BETA_FUNDING_BROADCAST_ARMED') && !riskBlocked;
+  const deploymentEnabled = liveTradingEnabled && signingEnabled && boolEnv('LIVE_DEPLOYMENT_ENABLED') && !riskBlocked;
   const blockers: string[] = [];
   const warnings: string[] = [];
 
@@ -69,6 +89,8 @@ export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | 
   if (rpcHealth && rpcHealth.status !== 'live') warnings.push(`RPC health is ${rpcHealth.status}: ${rpcHealth.note ?? rpcHealth.warning ?? 'provider degraded'}`);
   if (allowedCluster !== 'mainnet-beta') warnings.push(`Live cluster is ${allowedCluster}; explorer links and token availability may differ from mainnet.`);
   if (!authConfigured) warnings.push('Meridian auth is not fully configured; operator session checks may block live actions.');
+  for (const blocker of riskReadiness.blockers) blockers.push(`risk:${blocker}`);
+  for (const warning of riskReadiness.warnings) warnings.push(`Risk readiness: ${warning}`);
 
   const readinessLevel: LiveActivationStatus['readinessLevel'] = deploymentEnabled
     ? 'deployment-ready'
@@ -89,11 +111,8 @@ export function getLiveActivationStatus(input: { rpcHealth?: MinimalRpcHealth | 
     requireSimulation,
     allowedCluster,
     readinessLevel,
-    limits: {
-      maxSolPerSwap: numberEnv('LIVE_MAX_SOL_PER_SWAP', 0.25),
-      maxUsdcPerSwap: numberEnv('LIVE_MAX_USDC_PER_SWAP', 50),
-      maxSlippageBps: numberEnv('LIVE_MAX_SLIPPAGE_BPS', 250)
-    },
+    limits,
+    riskReadiness,
     rpcHealth,
     authStatus: input.auth ? { configured: authConfigured, authenticated: input.authenticated, reason: input.authReason ?? null } : null,
     blockers,

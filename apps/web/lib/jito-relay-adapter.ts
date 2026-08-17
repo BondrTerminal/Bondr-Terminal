@@ -98,6 +98,11 @@ export type BundleReceiptRecord = {
   observedAt: string;
   provider: 'jito-block-engine';
   projectId?: string | null;
+  confirmationStatus?: string | null;
+  landedSlot?: number | null;
+  err?: unknown;
+  statusSource?: 'submitted-response' | 'getInflightBundleStatuses' | 'getBundleStatuses' | 'combined';
+  executionProofStatus?: 'relay-status-only-not-chain-proof';
   relayResponse?: unknown;
 };
 
@@ -145,14 +150,81 @@ function bundleIdsFrom(value: unknown): string[] {
       : [];
 }
 
-function statusFromRaw(raw: unknown): BundleReceiptRecord['status'] {
-  const text = JSON.stringify(raw ?? {}).toLowerCase();
-  if (text.includes('landed')) return 'landed';
-  if (text.includes('finalized')) return 'finalized';
-  if (text.includes('dropped')) return 'dropped';
-  if (text.includes('failed') || text.includes('invalid')) return 'failed';
-  if (text.includes('pending') || text.includes('inflight')) return 'inflight';
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function valueRows(raw: unknown): Record<string, unknown>[] {
+  const record = asRecord(raw);
+  const value = Array.isArray(record.value) ? record.value : Array.isArray(record.result) ? record.result : [];
+  return value.filter((row): row is Record<string, unknown> => row && typeof row === 'object' && !Array.isArray(row));
+}
+
+function bundleIdFromRow(row: Record<string, unknown>) {
+  return asString(row.bundle_id ?? row.bundleId ?? row.bundle);
+}
+
+function findBundleRow(raw: unknown, bundleId: string) {
+  return valueRows(raw).find((row) => bundleIdFromRow(row) === bundleId) ?? null;
+}
+
+function numberOrNull(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function signaturesFromRow(row: Record<string, unknown> | null) {
+  return asStringArray(row?.transactions ?? row?.txSignatures ?? row?.transaction_signatures);
+}
+
+function statusFromRows(inflightRow: Record<string, unknown> | null, finalRow: Record<string, unknown> | null): BundleReceiptRecord['status'] {
+  const err = finalRow?.err ?? inflightRow?.err ?? null;
+  const finalStatus = String(finalRow?.confirmation_status ?? finalRow?.confirmationStatus ?? finalRow?.status ?? '').toLowerCase();
+  const inflightStatus = String(inflightRow?.status ?? '').toLowerCase();
+  if (err) return 'failed';
+  if (finalStatus === 'finalized') return 'finalized';
+  if (finalStatus === 'confirmed' || finalStatus === 'processed' || finalStatus === 'landed') return 'landed';
+  if (finalStatus === 'failed' || finalStatus === 'invalid') return 'failed';
+  if (inflightStatus === 'landed') return 'landed';
+  if (inflightStatus === 'failed' || inflightStatus === 'invalid') return 'failed';
+  if (inflightStatus === 'dropped') return 'dropped';
+  if (inflightStatus === 'pending' || inflightStatus === 'inflight') return 'inflight';
   return 'unknown';
+}
+
+export function normalizeJitoBundleStatusReceipt(input: {
+  bundleId: string;
+  inflight?: unknown;
+  final?: unknown;
+  observedAt: string;
+  rail?: BundleReceiptRecord['rail'];
+  projectId?: string | null;
+}): BundleReceiptRecord {
+  const inflightRow = findBundleRow(input.inflight, input.bundleId);
+  const finalRow = findBundleRow(input.final, input.bundleId);
+  const status = statusFromRows(inflightRow, finalRow);
+  const txSignatures = Array.from(new Set([
+    ...signaturesFromRow(finalRow),
+    ...signaturesFromRow(inflightRow)
+  ]));
+  const confirmationStatus = asString(finalRow?.confirmation_status ?? finalRow?.confirmationStatus ?? null);
+  const landedSlot = numberOrNull(finalRow?.slot ?? finalRow?.landed_slot ?? inflightRow?.landed_slot ?? inflightRow?.landedSlot ?? null);
+  return {
+    contract: 'bondr-bundle-receipt-v1',
+    bundleId: input.bundleId,
+    rail: input.rail ?? 'bundle',
+    status,
+    txSignatures,
+    observedAt: input.observedAt,
+    provider: 'jito-block-engine',
+    projectId: input.projectId ?? null,
+    confirmationStatus,
+    landedSlot,
+    err: finalRow?.err ?? inflightRow?.err ?? null,
+    statusSource: inflightRow && finalRow ? 'combined' : finalRow ? 'getBundleStatuses' : inflightRow ? 'getInflightBundleStatuses' : 'combined',
+    executionProofStatus: 'relay-status-only-not-chain-proof',
+    relayResponse: { inflight: inflightRow, final: finalRow }
+  };
 }
 
 function buildSubmittedReceipt(payload: JitoBundlePayload, bundleId: string | null, relayResponse: unknown, observedAt: string): BundleReceiptRecord | null {
@@ -166,6 +238,8 @@ function buildSubmittedReceipt(payload: JitoBundlePayload, bundleId: string | nu
     observedAt,
     provider: 'jito-block-engine',
     projectId: asString(payload.projectId),
+    statusSource: 'submitted-response',
+    executionProofStatus: 'relay-status-only-not-chain-proof',
     relayResponse
   };
 }
@@ -349,17 +423,7 @@ export async function getJitoBundleStatus(input: { bundleIds?: unknown; projectI
       jitoRpc(relay, 'getInflightBundleStatuses', [bundleIds]),
       jitoRpc(relay, 'getBundleStatuses', [bundleIds])
     ]);
-    const receipts = bundleIds.map((bundleId): BundleReceiptRecord => ({
-      contract: 'bondr-bundle-receipt-v1',
-      bundleId,
-      rail: input.rail ?? 'bundle',
-      status: statusFromRaw({ inflight, final, bundleId }),
-      txSignatures: [],
-      observedAt,
-      provider: 'jito-block-engine',
-      projectId: input.projectId ?? null,
-      relayResponse: { inflight, final }
-    }));
+    const receipts = bundleIds.map((bundleId) => normalizeJitoBundleStatusReceipt({ bundleId, inflight, final, observedAt, rail: input.rail, projectId: input.projectId }));
     return { status: 'ok', observedAt, relay, bundleIds, receipts, raw: { inflight, final }, blockers: [], execution: 'bundle-status-read-only-no-submit' };
   } catch (error) {
     return { status: 'relay-error', observedAt, relay, bundleIds, receipts: [], blockers: ['jito-bundle-status-request-failed'], normalizedError: normalizeJitoRelayError(error), execution: 'bundle-status-read-only-no-submit' };

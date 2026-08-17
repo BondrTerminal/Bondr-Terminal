@@ -1,6 +1,8 @@
 import { PublicKey } from '@solana/web3.js';
 import { buildJitoBundlePreview } from '../../../lib/jito-relay-adapter';
+import { buildJitoPackedTransaction, type JitoPackedInstructionInput, type JitoPackedLookupTableInput } from '../../../lib/jito-packed-transaction-builder';
 import { getJitoRelayReadiness } from '../../../lib/jito-relay-readiness';
+import { buildJitoRouteInstructionSource, type JitoPreparedRouteTransactionInput } from '../../../lib/jito-route-instruction-source';
 import { getLiveActivationStatus } from '../../../lib/live-activation';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,8 @@ function liveTradingEnabled() {
 const MAX_WALLETS = Number(process.env.BUNDLE_MAX_WALLETS ?? '8');
 const MAX_TOTAL_SOL = Number(process.env.BUNDLE_MAX_TOTAL_SOL ?? '0.25');
 const MAX_TOTAL_USDC = Number(process.env.BUNDLE_MAX_TOTAL_USDC ?? '50');
+const PACKED_WALLETS_ENV = Number(process.env.JITO_MAX_WALLETS_PER_PACKED_TRANSACTION);
+const MAX_PACKED_WALLETS_PER_TX = Math.max(1, Math.min(Number.isFinite(PACKED_WALLETS_ENV) ? PACKED_WALLETS_ENV : 4, 6));
 
 type BundleLeg = {
   wallet: string;
@@ -24,7 +28,16 @@ type BundleLeg = {
 type BundleRequest = {
   mint?: string;
   legs?: BundleLeg[];
-  mode?: 'build' | 'preflight';
+  mode?: 'build' | 'preflight' | 'build-packed';
+  payer?: string;
+  recentBlockhash?: string;
+  packedInstructions?: JitoPackedInstructionInput[];
+  preparedTransactions?: JitoPreparedRouteTransactionInput[];
+  lookupTables?: JitoPackedLookupTableInput[] | null;
+  requiredAccounts?: string[] | null;
+  allowedPrograms?: string[] | null;
+  computeUnitLimit?: number | null;
+  computeUnitPriceMicroLamports?: number | null;
 };
 
 function assertPubkey(value: unknown, label: string) {
@@ -77,6 +90,20 @@ export async function GET() {
       previewEndpoint: '/api/relay/jito/bundle-preview',
       submitEndpointFuture: '/api/relay/jito/send-bundle'
     },
+    executionModel: {
+      contract: 'bondr-jito-packed-execution-plan-v1',
+      maxTransactionsPerJitoBundle: relay.limits.maxTransactionsPerBundle,
+      maxPackedWalletsPerTransaction: MAX_PACKED_WALLETS_PER_TX,
+      overflowMode: 'near-synchronous-jito-waves',
+          atomicity: {
+            withinJitoBundle: true,
+            acrossWaves: false
+          },
+          addressLookupTableProofRequiredForPackedTransactions: true,
+          packedTransactionBuildEndpoint: '/api/relay/jito/packed-transaction-build',
+          simulationProofRequiredPerPackedTransaction: true,
+          packedTransactionProofEndpoint: '/api/relay/jito/packed-transaction-proof'
+        },
     relayPreviewContract: bundlePreview.contract,
     relayPreviewEndpoint: '/api/relay/jito/bundle-preview',
     relaySubmitEndpoint: '/api/relay/jito/send-bundle',
@@ -111,6 +138,83 @@ export async function POST(request: Request) {
     const totals = summarize(normalized);
     if (totals.totalSol > MAX_TOTAL_SOL) throw new Error(`Bundle exceeds BUNDLE_MAX_TOTAL_SOL (${MAX_TOTAL_SOL}).`);
     if (totals.totalUsdc > MAX_TOTAL_USDC) throw new Error(`Bundle exceeds BUNDLE_MAX_TOTAL_USDC (${MAX_TOTAL_USDC}).`);
+    const routeInstructionSource = Array.isArray(body?.preparedTransactions) && body.preparedTransactions.length
+      ? buildJitoRouteInstructionSource({ preparedTransactions: body.preparedTransactions })
+      : null;
+    const packedInstructions = Array.isArray(body?.packedInstructions) && body.packedInstructions.length
+      ? body.packedInstructions
+      : routeInstructionSource?.instructions ?? [];
+    const shouldBuildPackedTransaction = body?.mode === 'build-packed' || packedInstructions.length > 0 || Boolean(routeInstructionSource);
+    if (shouldBuildPackedTransaction) {
+      const relay = getJitoRelayReadiness();
+      if (routeInstructionSource?.status === 'blocked') {
+        return Response.json({
+          status: 'blocked',
+          observedAt: new Date().toISOString(),
+          mint,
+          legs: normalized,
+          totals,
+          flowType: 'multi-wallet-route-instruction-source',
+          routeInstructionSource,
+          relaySubmission: false,
+          execution: 'route-instruction-source-blocked-no-signing-no-relay-submit'
+        }, { status: 400 });
+      }
+      const packedBuild = buildJitoPackedTransaction({
+        payer: body?.payer ?? normalized[0]?.wallet ?? '',
+        recentBlockhash: body?.recentBlockhash ?? '',
+        instructions: packedInstructions,
+        lookupTables: body?.lookupTables,
+        expectedMint: mint,
+        requiredAccounts: body?.requiredAccounts,
+        allowedPrograms: body?.allowedPrograms,
+        computeUnitLimit: body?.computeUnitLimit,
+        computeUnitPriceMicroLamports: body?.computeUnitPriceMicroLamports,
+        maxWalletsPerPackedTransaction: MAX_PACKED_WALLETS_PER_TX
+      });
+      const relayPreview = buildJitoBundlePreview({
+        expectedMint: mint,
+        expectedSigners: packedBuild.expectedSigners.length ? packedBuild.expectedSigners : normalized.map((leg) => leg.wallet),
+        tipLamports: relay.tip.minLamports
+      }, getLiveActivationStatus(), relay);
+      return Response.json({
+        status: packedBuild.status === 'built' ? 'ok' : 'blocked',
+        observedAt: new Date().toISOString(),
+        mint,
+        legs: normalized,
+        totals,
+        flowType: 'multi-wallet-packed-transaction-build',
+        stages: { preflight: 'complete', packedTransactionBuild: packedBuild.status, browserWalletSigning: 'required-per-packed-transaction', packedTransactionProof: 'required-after-simulation', waveDispatchPlan: 'required-before-relay', relaySubmission: 'blocked-by-relay-or-broadcast-gate' },
+        routeInstructionSource,
+        packedBuild,
+        relaySubmission: false,
+        relayStatus: relay.status,
+        relayProvider: relay.provider,
+        relay,
+        relayPreview,
+        executionModel: {
+          contract: 'bondr-jito-packed-execution-plan-v1',
+          maxTransactionsPerJitoBundle: relay.limits.maxTransactionsPerBundle,
+          maxPackedWalletsPerTransaction: MAX_PACKED_WALLETS_PER_TX,
+          estimatedPackedTransactions: packedBuild.status === 'built' ? 1 : Math.ceil(normalized.length / MAX_PACKED_WALLETS_PER_TX),
+          estimatedWaves: 1,
+          overflowMode: 'near-synchronous-jito-waves',
+          atomicity: {
+            withinJitoBundle: true,
+            acrossWaves: false
+          },
+          addressLookupTableProofRequiredForPackedTransactions: packedBuild.addressLookupTables.required,
+          packedTransactionBuildEndpoint: '/api/relay/jito/packed-transaction-build',
+          packedTransactionProofEndpoint: '/api/relay/jito/packed-transaction-proof',
+          signingSessionEndpoint: '/api/relay/jito/multi-wallet-signing-session',
+          waveDispatchPlanEndpoint: '/api/relay/jito/wave-dispatch-plan',
+          chainEffectProofEndpoint: '/api/relay/jito/chain-effect-proof'
+        },
+        simulationRequired: true,
+        note: 'Packed transaction built from prepared instruction legs only; no signing, broadcast, or Jito relay submit occurred.',
+        execution: 'packed-transaction-build-only-no-signing-no-relay-submit'
+      }, { status: packedBuild.status === 'built' ? 200 : 400 });
+    }
 
     if (body?.mode === 'preflight' || !liveTradingEnabled()) {
       const relay = getJitoRelayReadiness();
@@ -134,6 +238,22 @@ export async function POST(request: Request) {
         relayProvider: relay.provider,
         relay,
         relayPreview,
+        executionModel: {
+          contract: 'bondr-jito-packed-execution-plan-v1',
+          maxTransactionsPerJitoBundle: relay.limits.maxTransactionsPerBundle,
+          maxPackedWalletsPerTransaction: MAX_PACKED_WALLETS_PER_TX,
+          estimatedPackedTransactions: Math.ceil(normalized.length / MAX_PACKED_WALLETS_PER_TX),
+          estimatedWaves: Math.ceil(Math.ceil(normalized.length / MAX_PACKED_WALLETS_PER_TX) / relay.limits.maxTransactionsPerBundle),
+          overflowMode: 'near-synchronous-jito-waves',
+          atomicity: {
+            withinJitoBundle: true,
+            acrossWaves: false
+          },
+          addressLookupTableProofRequiredForPackedTransactions: normalized.length > 1,
+          packedTransactionBuildEndpoint: '/api/relay/jito/packed-transaction-build',
+          simulationProofRequiredPerPackedTransaction: true,
+          packedTransactionProofEndpoint: '/api/relay/jito/packed-transaction-proof'
+        },
         relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
         supportedRelays: ['jito-block-engine-json-rpc'],
         requiredEnv: relay.requiredEnv,
@@ -189,6 +309,22 @@ export async function POST(request: Request) {
       relayProvider: relay.provider,
       relay,
       relayPreview,
+      executionModel: {
+        contract: 'bondr-jito-packed-execution-plan-v1',
+        maxTransactionsPerJitoBundle: relay.limits.maxTransactionsPerBundle,
+        maxPackedWalletsPerTransaction: MAX_PACKED_WALLETS_PER_TX,
+        estimatedPackedTransactions: Math.ceil(normalized.length / MAX_PACKED_WALLETS_PER_TX),
+        estimatedWaves: Math.ceil(Math.ceil(normalized.length / MAX_PACKED_WALLETS_PER_TX) / relay.limits.maxTransactionsPerBundle),
+        overflowMode: 'near-synchronous-jito-waves',
+        atomicity: {
+          withinJitoBundle: true,
+          acrossWaves: false
+        },
+        addressLookupTableProofRequiredForPackedTransactions: normalized.length > 1,
+        packedTransactionBuildEndpoint: '/api/relay/jito/packed-transaction-build',
+        simulationProofRequiredPerPackedTransaction: true,
+        packedTransactionProofEndpoint: '/api/relay/jito/packed-transaction-proof'
+      },
       relayRequirements: ['Jito/block-engine endpoint configured', 'tip account selection', 'Jito tip cap', 'bundle simulation', 'operator auth', 'durable intent/order tracking', 'explicit broadcast approval'],
       supportedRelays: ['jito-block-engine-json-rpc'],
       requiredEnv: relay.requiredEnv,

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { PublicKey } from '@solana/web3.js';
 import type { LiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
 import { walletPlanEntries, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
@@ -12,6 +13,17 @@ type ReadinessItem = {
   detail: string;
   blockers: string[];
 };
+
+type AutomationProofStatus = 'ready' | 'preview-ready' | 'blocked' | 'stale';
+
+function validPublicKey(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    return new PublicKey(value).toBase58();
+  } catch {
+    return null;
+  }
+}
 
 function collect(items: ReadinessItem[]) {
   return Array.from(new Set(items.flatMap((item) => item.blockers)));
@@ -35,14 +47,14 @@ export function buildSniperExecutionReadiness(project: Project | null, wallets: 
   const sniperWallets = selectedCount(project, 'sniper');
   const hasMint = Boolean(project?.tokenMint);
   const items: ReadinessItem[] = [
-    { label: 'Trigger source', status: 'missing-implementation', detail: 'Needs pool/mint event source, manual trigger policy, or provider webhook.', blockers: ['sniper-trigger-source-missing'] },
-    { label: 'Token/pool detection', status: hasMint ? 'rehearsal-only' : 'blocked', detail: hasMint ? 'Mint exists; pool freshness still needs live indexer proof.' : 'No launched mint/pool to snipe yet.', blockers: hasMint ? ['pool-freshness-indexer-missing'] : ['token-mint-missing'] },
+    { label: 'Trigger source', status: 'rehearsal-only', detail: 'Manual, pool-detector, and webhook trigger sources are modeled; durable live source is still blocked.', blockers: ['durable-sniper-trigger-source-missing'] },
+    { label: 'Token/pool detection', status: hasMint ? 'rehearsal-only' : 'blocked', detail: hasMint ? 'Mint exists; pool freshness proof contract exists but needs live indexer observations.' : 'No launched mint/pool to snipe yet.', blockers: hasMint ? ['pool-freshness-indexer-missing'] : ['token-mint-missing'] },
     { label: 'Quote/build path', status: 'rehearsal-only', detail: 'Terminal quote, unsigned build, and simulation path exists for manual swap rehearsal.', blockers: [] },
     { label: 'Simulation policy', status: activation.requireSimulation ? 'rehearsal-only' : 'blocked', detail: 'Simulation must pass before signature or relay submit.', blockers: activation.requireSimulation ? [] : ['simulation-required-disabled'] },
     { label: 'Signer binding', status: signing?.summary.sniperWallets ? 'blocked' : 'rehearsal-only', detail: sniperWallets ? 'Selected sniper wallets need executable signer proof, not watch-only rows.' : 'Manual terminal uses connected browser signer rehearsal.', blockers: sniperWallets ? ['sniper-wallet-signing-session-missing'] : ['connected-browser-signer-proof-required'] },
     { label: 'Relay/RPC submit policy', status: activation.broadcastEnabled && relay.relayEnabled ? 'rehearsal-only' : 'blocked', detail: 'Sniper submit can use normal RPC or Jito fast path after policy approval.', blockers: [activation.broadcastEnabled ? null : 'broadcast-gate-closed', relay.relayEnabled ? null : 'jito-relay-disabled'].filter((item): item is string => Boolean(item)) },
-    { label: 'Failure recovery', status: 'missing-implementation', detail: 'Needs stale quote, slippage, blockhash expiry, account-lock, and no-blind-retry policy.', blockers: ['sniper-recovery-engine-missing'] },
-    { label: 'Receipts/monitoring', status: 'missing-implementation', detail: 'Needs submitted signature, fill reconciliation, wallet/token refresh, and event monitoring.', blockers: ['sniper-receipt-monitor-missing'] }
+    { label: 'Failure recovery', status: 'rehearsal-only', detail: 'Stale quote, slippage, blockhash expiry, account-lock, and no-blind-retry policy are modeled; runner is not live.', blockers: ['automatic-recovery-runner-missing'] },
+    { label: 'Receipts/monitoring', status: 'rehearsal-only', detail: 'Receipt fields, pool freshness, and monitor requirements are modeled; durable monitor is not live.', blockers: ['sniper-receipt-ledger-missing', 'durable-sniper-monitor-missing'] }
   ];
   return {
     contract: 'bondr-sniper-execution-readiness-v1' as const,
@@ -63,11 +75,66 @@ export function buildSniperExecutionReadiness(project: Project | null, wallets: 
 export type SniperTriggerPreviewInput = {
   source?: 'manual' | 'pool-detector' | 'webhook';
   mint?: string | null;
+  poolId?: string | null;
+  poolObservedAt?: string | null;
+  poolSlot?: number | null;
+  poolLiquidityUsd?: number | null;
   connectedSigner?: string | null;
   amountSol?: number;
   slippageBps?: number;
   simulationProof?: unknown;
 };
+
+export function buildSniperPoolFreshnessProof(input: {
+  source?: SniperTriggerPreviewInput['source'];
+  mint?: string | null;
+  poolId?: string | null;
+  observedAt?: string | null;
+  slot?: number | null;
+  liquidityUsd?: number | null;
+  maxAgeMs?: number | null;
+}) {
+  const source = input.source ?? null;
+  const mint = validPublicKey(input.mint ?? null);
+  const poolId = validPublicKey(input.poolId ?? null);
+  const observedAt = input.observedAt ? Date.parse(input.observedAt) : NaN;
+  const maxAgeMs = Number.isFinite(input.maxAgeMs) && Number(input.maxAgeMs) > 0 ? Number(input.maxAgeMs) : 45_000;
+  const ageMs = Number.isFinite(observedAt) ? Date.now() - observedAt : null;
+  const stale = ageMs !== null && ageMs > maxAgeMs;
+  const liquidityUsd = typeof input.liquidityUsd === 'number' && Number.isFinite(input.liquidityUsd) ? input.liquidityUsd : null;
+  const slot = typeof input.slot === 'number' && Number.isFinite(input.slot) && input.slot > 0 ? Math.floor(input.slot) : null;
+  const blockers = [
+    source ? null : 'sniper-trigger-source-required',
+    source === 'pool-detector' || source === 'webhook' ? null : 'pool-freshness-only-required-for-automated-trigger',
+    mint ? null : 'token-mint-required',
+    poolId ? null : 'pool-id-required',
+    slot ? null : 'pool-slot-required',
+    Number.isFinite(observedAt) ? null : 'pool-observed-at-required',
+    stale ? 'pool-freshness-stale' : null,
+    liquidityUsd !== null && liquidityUsd > 0 ? null : 'pool-liquidity-required'
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    contract: 'bondr-sniper-pool-freshness-proof-v1' as const,
+    status: stale ? 'stale' as AutomationProofStatus : blockers.filter((blocker) => blocker !== 'pool-freshness-only-required-for-automated-trigger').length ? 'blocked' as AutomationProofStatus : 'ready' as AutomationProofStatus,
+    source,
+    mint,
+    poolId,
+    slot,
+    observedAt: Number.isFinite(observedAt) ? new Date(observedAt).toISOString() : null,
+    ageMs,
+    maxAgeMs,
+    liquidityUsd,
+    blockers: Array.from(new Set(blockers)),
+    safety: {
+      noAutonomousTrading: true,
+      noTransactionBuild: true,
+      noSigning: true,
+      noBroadcast: true
+    },
+    execution: 'pool-freshness-proof-only-no-sniper-submit' as const
+  };
+}
 
 export function buildSniperTriggerPreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: SniperTriggerPreviewInput = {}) {
   const readiness = buildSniperExecutionReadiness(project, wallets, activation);
@@ -79,9 +146,21 @@ export function buildSniperTriggerPreview(project: Project | null, wallets: Wall
   const maxSolPerSwap = activation.limits?.maxSolPerSwap ?? 0.25;
   const maxSlippageBps = activation.limits?.maxSlippageBps ?? 250;
   const walletAddresses = wallets.map((wallet) => wallet.address);
+  const poolFreshnessProof = buildSniperPoolFreshnessProof({
+    source: input.source,
+    mint,
+    poolId: input.poolId,
+    observedAt: input.poolObservedAt,
+    slot: input.poolSlot,
+    liquidityUsd: input.poolLiquidityUsd
+  });
   const blockers = [
     input.source ? null : 'trigger-source-required',
     mint ? null : 'token-mint-required',
+    input.source === 'pool-detector' || input.source === 'webhook'
+      ? poolFreshnessProof.status === 'ready' ? null : 'pool-freshness-proof-required'
+      : null,
+    ...(input.source === 'pool-detector' || input.source === 'webhook' ? poolFreshnessProof.blockers.filter((blocker) => blocker !== 'pool-freshness-only-required-for-automated-trigger') : []),
     signer ? null : 'connected-browser-signer-proof-required',
     signer && walletAddresses.length && !walletAddresses.includes(signer) ? 'connected-signer-not-in-wallet-plan' : null,
     amountSol > 0 ? null : 'sniper-amount-required',
@@ -98,10 +177,12 @@ export function buildSniperTriggerPreview(project: Project | null, wallets: Wall
     trigger: {
       source: input.source ?? null,
       mint,
+      poolId: input.poolId ?? null,
       amountSol,
       slippageBps,
       connectedSigner: signer
     },
+    poolFreshnessProof,
     readiness,
     relay: {
       relayEnabled: relay.relayEnabled,
@@ -125,14 +206,14 @@ export function buildTaskExecutionReadiness(project: Project | null, wallets: Wa
   const taskWallets = selectedCount(project, 'task');
   const items: ReadinessItem[] = [
     { label: 'Durable worker', status: 'missing-implementation', detail: 'Task execution cannot run inside ordinary Vercel request handlers.', blockers: ['durable-task-worker-missing'] },
-    { label: 'Schedule/queue model', status: 'missing-implementation', detail: 'Needs durable queue records, next-run time, max runs, and idempotency keys.', blockers: ['task-queue-model-missing'] },
-    { label: 'Pause/resume/cancel', status: 'missing-implementation', detail: 'Operator must be able to stop tasks immediately before any live automation.', blockers: ['task-lifecycle-controls-missing'] },
+    { label: 'Schedule/queue model', status: 'rehearsal-only', detail: 'Queue preview models records, next-run conditions, max runs, cooldown, and idempotency keys.', blockers: ['task-queue-persistence-missing'] },
+    { label: 'Pause/resume/cancel', status: 'rehearsal-only', detail: 'Lifecycle preview models pause/resume/cancel controls before worker persistence.', blockers: ['task-lifecycle-persistence-missing'] },
     { label: 'Signer binding', status: signing?.summary.taskWallets ? 'blocked' : 'rehearsal-only', detail: taskWallets ? 'Task wallets need executable signer/session policy.' : 'No task wallets selected for execution.', blockers: taskWallets ? ['task-wallet-signing-session-missing'] : ['task-wallets-not-selected'] },
     { label: 'Cooldown and max runs', status: taskWallets ? 'rehearsal-only' : 'blocked', detail: 'Config fields exist; worker enforcement is still missing.', blockers: taskWallets ? ['task-worker-enforcement-missing'] : ['task-wallets-not-selected'] },
-    { label: 'TP/SL/trailing watchers', status: 'missing-implementation', detail: 'Needs live price/event monitoring loop for exit automation.', blockers: ['task-risk-watchers-missing'] },
+    { label: 'TP/SL/trailing watchers', status: 'rehearsal-only', detail: 'Monitor/recovery preview names TP/SL/trailing watchers; live price/event worker remains blocked.', blockers: ['durable-monitor-worker-missing'] },
     { label: 'Anti-self-trade guard', status: 'blocked', detail: 'Tasks must never create fake volume, self-trade loops, or undisclosed support behavior.', blockers: ['anti-self-trade-policy-required', 'anti-fake-volume-policy-required'] },
     { label: 'Relay/RPC policy', status: activation.broadcastEnabled && relay.relayEnabled ? 'rehearsal-only' : 'blocked', detail: 'Task submit policy must choose normal RPC vs Jito by urgency and risk.', blockers: [activation.broadcastEnabled ? null : 'broadcast-gate-closed', relay.relayEnabled ? null : 'jito-relay-disabled'].filter((item): item is string => Boolean(item)) },
-    { label: 'Receipts/recovery', status: 'missing-implementation', detail: 'Needs audit ledger, retries, expired blockhash rebuild, and kill switch.', blockers: ['task-receipt-recovery-missing'] }
+    { label: 'Receipts/recovery', status: 'rehearsal-only', detail: 'Receipt ledger fields and recovery classes are modeled; durable ledger/runner remain blocked.', blockers: ['durable-task-receipt-ledger-missing', 'automatic-recovery-runner-missing'] }
   ];
   return {
     contract: 'bondr-task-execution-readiness-v1' as const,
@@ -200,6 +281,41 @@ export type TaskLifecyclePreview = {
     noBroadcast: true;
     noFakeVolume: true;
   };
+};
+
+export type TaskReceiptLedgerPreview = {
+  contract: 'bondr-task-receipt-ledger-preview-v1';
+  status: 'preview-ready' | 'blocked';
+  requiredReceiptFields: string[];
+  idempotencyKeys: string[];
+  blockers: string[];
+  safety: {
+    noPersistence: true;
+    noSigning: true;
+    noBroadcast: true;
+    auditRequiredBeforeWorker: true;
+  };
+  execution: 'receipt-ledger-preview-only-no-worker-no-broadcast';
+};
+
+export type TaskMonitorRecoveryPreview = {
+  contract: 'bondr-task-monitor-recovery-preview-v1';
+  status: 'preview-ready' | 'blocked';
+  watchers: Array<{
+    taskId: string;
+    walletId: string;
+    taskType: WalletPlanEntry['taskType'] | 'timed-buy';
+    watches: string[];
+    recovery: string[];
+  }>;
+  blockers: string[];
+  safety: {
+    noLiveMonitor: true;
+    noAutomaticRecovery: true;
+    noSigning: true;
+    noBroadcast: true;
+  };
+  execution: 'monitor-recovery-preview-only-no-worker-no-trading';
 };
 
 function hash(value: unknown) {
@@ -321,6 +437,59 @@ export function buildTaskLifecyclePreview(project: Project | null, wallets: Wall
   };
 }
 
+export function buildTaskReceiptLedgerPreview(lifecycle: TaskLifecyclePreview): TaskReceiptLedgerPreview {
+  const idempotencyKeys = lifecycle.rows.map((row) => row.idempotencyKey);
+  const blockers = [
+    lifecycle.rows.length ? null : 'task-lifecycle-row-required',
+    'durable-task-receipt-ledger-missing',
+    'task-worker-not-live'
+  ].filter((item): item is string => Boolean(item));
+  return {
+    contract: 'bondr-task-receipt-ledger-preview-v1',
+    status: lifecycle.rows.length ? 'preview-ready' : 'blocked',
+    requiredReceiptFields: ['taskId', 'idempotencyKey', 'walletId', 'route', 'side', 'expectedMint', 'expectedSigner', 'transactionMessageHash', 'simulationTransactionMessageHash', 'signedReviewId', 'signature', 'slot', 'status', 'error', 'observedAt'],
+    idempotencyKeys,
+    blockers,
+    safety: {
+      noPersistence: true,
+      noSigning: true,
+      noBroadcast: true,
+      auditRequiredBeforeWorker: true
+    },
+    execution: 'receipt-ledger-preview-only-no-worker-no-broadcast'
+  };
+}
+
+export function buildTaskMonitorRecoveryPreview(lifecycle: TaskLifecyclePreview): TaskMonitorRecoveryPreview {
+  const watchers = lifecycle.rows.map((row) => ({
+    taskId: row.taskId,
+    walletId: row.walletId,
+    taskType: row.taskType,
+    watches: row.side === 'sell'
+      ? ['price-change', 'take-profit', 'stop-loss', 'trailing-drawdown', 'wallet-token-balance', 'broadcast-receipt']
+      : ['scheduled-time', 'wallet-sol-balance', 'quote-freshness', 'broadcast-receipt'],
+    recovery: ['expired-blockhash-rebuild-required', 'stale-quote-requote-required', 'account-lock-wait-required', 'simulation-fail-stop-required', 'no-blind-retry']
+  }));
+  const blockers = [
+    watchers.length ? null : 'task-monitor-row-required',
+    'durable-monitor-worker-missing',
+    'automatic-recovery-runner-missing'
+  ].filter((item): item is string => Boolean(item));
+  return {
+    contract: 'bondr-task-monitor-recovery-preview-v1',
+    status: watchers.length ? 'preview-ready' : 'blocked',
+    watchers,
+    blockers,
+    safety: {
+      noLiveMonitor: true,
+      noAutomaticRecovery: true,
+      noSigning: true,
+      noBroadcast: true
+    },
+    execution: 'monitor-recovery-preview-only-no-worker-no-trading'
+  };
+}
+
 export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[], activation: LiveActivationStatus, input: TaskQueuePreviewInput = {}) {
   const readiness = buildTaskExecutionReadiness(project, wallets, activation);
   const walletIds = (input.walletIds ?? []).filter((walletId) => wallets.some((wallet) => wallet.id === walletId));
@@ -339,6 +508,9 @@ export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[]
     'task-queue-persistence-missing',
     activation.broadcastEnabled ? null : 'broadcast-gate-closed'
   ].filter((item): item is string => Boolean(item));
+  const lifecyclePreview = buildTaskLifecyclePreview(project, wallets, activation, { ...input, walletIds });
+  const receiptLedgerPreview = buildTaskReceiptLedgerPreview(lifecyclePreview);
+  const monitorRecoveryPreview = buildTaskMonitorRecoveryPreview(lifecyclePreview);
   return {
     contract: 'bondr-task-queue-preview-v1' as const,
     status: blockers.filter((blocker) => !['durable-task-worker-missing', 'task-queue-persistence-missing', 'broadcast-gate-closed'].includes(blocker)).length ? 'blocked' : 'preview-ready',
@@ -361,7 +533,9 @@ export function buildTaskQueuePreview(project: Project | null, wallets: Wallet[]
       idempotency: 'modeled-before-worker'
     },
     readiness,
-    lifecyclePreview: buildTaskLifecyclePreview(project, wallets, activation, { ...input, walletIds }),
+    lifecyclePreview,
+    receiptLedgerPreview,
+    monitorRecoveryPreview,
     blockers,
     safety: {
       noAutonomousTrading: true,

@@ -5,6 +5,7 @@ import { buildTransactionPreview } from '../../../../lib/transaction-preview';
 import type { TransactionPreviewAction } from '../../../../lib/transaction-preview';
 import { getLiveActivationStatus } from '../../../../lib/live-activation';
 import { isProviderLimitedError, providerLimitedNote } from '../../../../lib/provider-truth';
+import { decodeTransactionPolicy } from '../../../../lib/transaction-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +55,7 @@ function summarizeSimulationFailure(err: unknown, logs: string[] | null | undefi
 
 export async function POST(request: Request) {
   const observedAt = new Date().toISOString();
-  let body: { unsignedTransaction?: string; signedTransaction?: string; action?: string; mint?: string; wallet?: string };
+  let body: { unsignedTransaction?: string; signedTransaction?: string; action?: string; mint?: string; wallet?: string; expectedSigner?: string; expectedMint?: string; transactionMessageHash?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -92,8 +93,10 @@ export async function POST(request: Request) {
   }
 
   let transaction: Transaction | VersionedTransaction;
+  let decoded: ReturnType<typeof decodeTransactionPolicy>;
   try {
     transaction = decodeTransaction(raw);
+    decoded = decodeTransactionPolicy(Buffer.from(raw, 'base64'));
   } catch (error) {
     return Response.json({
       status: 'error',
@@ -113,6 +116,53 @@ export async function POST(request: Request) {
     }, { status: 400 });
   }
 
+  const expectedSigner = body.expectedSigner ?? body.wallet ?? null;
+  const expectedMint = body.expectedMint ?? body.mint ?? null;
+  const expectedMessageHash = body.transactionMessageHash ?? null;
+  const handoffBlockers = [
+    expectedSigner && !decoded.signerKeys.includes(expectedSigner) ? 'Simulation handoff rejected: transaction does not include expectedSigner.' : null,
+    expectedMint && !decoded.accountKeys.includes(expectedMint) ? 'Simulation handoff rejected: transaction does not reference expectedMint.' : null,
+    expectedMessageHash && decoded.messageHash !== expectedMessageHash ? 'Simulation handoff rejected: transaction message hash does not match the built intent.' : null
+  ].filter((item): item is string => Boolean(item));
+  const handoffEvidence = {
+    transactionMessageHash: decoded.messageHash,
+    expectedTransactionMessageHash: expectedMessageHash,
+    expectedSigner,
+    expectedMint,
+    signerMatched: expectedSigner ? decoded.signerKeys.includes(expectedSigner) : null,
+    expectedMintReferenced: expectedMint ? decoded.accountKeys.includes(expectedMint) : null,
+    programs: decoded.programs,
+    usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables),
+    unresolvedAddressLookupTables: decoded.unresolvedAddressLookupTables ?? []
+  };
+
+  if (handoffBlockers.length) {
+    return Response.json({
+      status: 'blocked',
+      observedAt,
+      error: handoffBlockers[0],
+      execution: 'simulation-policy-blocked-no-signing-no-broadcast',
+      transactionEvidence: handoffEvidence,
+      simulationProof: {
+        status: 'blocked',
+        transactionMessageHash: decoded.messageHash,
+        expectedTransactionMessageHash: expectedMessageHash,
+        observedAt
+      },
+      transactionPreview: buildTransactionPreview({
+        status: 'blocked',
+        mode: 'simulation-ready',
+        action,
+        tokenMint: expectedMint ?? body.mint,
+        wallet: expectedSigner ?? body.wallet,
+        route: '/api/terminal/signer-dry-run',
+        simulationStatus: 'failed',
+        blockers: handoffBlockers,
+        warnings: ['No signing or broadcast was attempted.']
+      })
+    }, { status: 409 });
+  }
+
   const rpc = configuredSolanaRpc();
   const rpcHealth = await getSolanaRpcHealth();
   const liveActivation = getLiveActivationStatus({ rpcHealth });
@@ -129,6 +179,13 @@ export async function POST(request: Request) {
       execution: 'simulation-only-provider-blocked',
       rpcProvider: rpc.provider,
       rpcHealth: { status: rpcHealth.status, quotaLimited: rpcHealth.quotaLimited, provider: rpcHealth.selectedProvider, providerLabel: rpcHealth.selectedProviderLabel, note: rpcHealth.note },
+      transactionEvidence: handoffEvidence,
+      simulationProof: {
+        status: providerState,
+        transactionMessageHash: decoded.messageHash,
+        expectedTransactionMessageHash: expectedMessageHash,
+        observedAt
+      },
       transactionPreview: buildTransactionPreview({
         status: 'blocked',
         mode: 'simulation-ready',
@@ -160,11 +217,20 @@ export async function POST(request: Request) {
       broadcastEnabled: liveActivation.broadcastEnabled && !failed,
       requireSimulation: liveActivation.requireSimulation,
       rpcProvider: rpc.provider,
+      transactionEvidence: handoffEvidence,
       simulation: {
         err: simulation.value.err,
         logs: simulation.value.logs ?? [],
         unitsConsumed: simulation.value.unitsConsumed ?? null,
         failureSummary,
+      },
+      simulationProof: {
+        status: failed ? 'failed' : 'ok',
+        transactionMessageHash: decoded.messageHash,
+        expectedTransactionMessageHash: expectedMessageHash,
+        provider: rpc.provider,
+        unitsConsumed: simulation.value.unitsConsumed ?? null,
+        observedAt
       },
       transactionPreview: buildTransactionPreview({
         status: failed ? 'blocked' : 'ok',
@@ -187,6 +253,13 @@ export async function POST(request: Request) {
       observedAt,
       error: message,
       rpcProvider: rpc.provider,
+      transactionEvidence: handoffEvidence,
+      simulationProof: {
+        status: providerLimited ? 'provider-limited' : 'unavailable',
+        transactionMessageHash: decoded.messageHash,
+        expectedTransactionMessageHash: expectedMessageHash,
+        observedAt
+      },
       transactionPreview: buildTransactionPreview({
         status: 'error',
         mode: 'simulation-ready',

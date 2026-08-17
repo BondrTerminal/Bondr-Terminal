@@ -905,7 +905,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             <div className="launchPathPanelHeader">
               <span>Raydium path</span>
               <strong>Original LP add + automated LP burn</strong>
-              <small>This path is configuration-only until the real Raydium LP builder, LP token resolver, burn transaction builder, and simulation proof exist.</small>
+              <small>This path is configuration-only until Raydium config discovery and post-broadcast LP account proof are complete.</small>
             </div>
             <div className="launchAdapterReadinessCard blocked"><strong>Raydium original LP + burn</strong><small>SPL token deploy, Raydium LP add, LP mint/account verification, burn transaction, simulation proof.</small><em>builder-missing</em></div>
             <div>
@@ -923,7 +923,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
                 ['Raydium original LP add builder', 'missing'],
                 ['LP mint/account resolver', 'missing'],
                 ['Automated LP burn transaction', 'gated'],
-                ['LP add + burn simulation proof', 'missing']
+                ['LP add + burn simulation proof', 'gated']
               ].map(([label, status]) => (
                 <div className={status === 'implemented' ? 'ready' : status === 'gated' ? 'review' : 'blocked'} key={label}>
                   <span>{label}</span>
@@ -933,7 +933,7 @@ export function LaunchConfigEditor({ project, wallets }: Props) {
             </div>
             <div className="launchRouteBlockerNote">
               <strong>Raydium is not launch-developed yet.</strong>
-              <small>Missing real LP add builder, LP mint/account derivation, verified LP account proof, and simulation proof. The burn transaction builder exists but stays gated until LP account verification clears.</small>
+              <small>Missing Raydium config discovery and post-broadcast LP account proof. LP add, simulation policy, verified burn transaction, and burn simulation handoff stay gated until proof inputs clear.</small>
             </div>
           </section>
         </div>

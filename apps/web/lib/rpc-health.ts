@@ -1,6 +1,6 @@
 import { Connection } from '@solana/web3.js';
 import { configuredDedicatedSolanaRpcs, configuredSolanaRpc, type SolanaRpcConfig, type SolanaRpcProvider } from './solana-rpc';
-import { isProviderLimitedError } from './provider-truth';
+import { isProviderLimitedError, providerSecretSafeMessage } from './provider-truth';
 
 export type RpcHealthStatus = 'live' | 'provider-limited' | 'modeled' | 'unavailable';
 
@@ -118,8 +118,9 @@ async function checkProvider(rpc: SolanaRpcConfig, observedAt: string): Promise<
     return { ...base, currentSlot: slot, latencyMs: Date.now() - started, status: 'live', note: `${base.providerLabel} dedicated RPC responded successfully.` };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'RPC health check failed.';
+    const safeMessage = providerSecretSafeMessage(message) ?? 'RPC health check failed.';
     const isQuota = quotaLimited(message);
-    return { ...base, latencyMs: Date.now() - started, status: isQuota ? 'provider-limited' : 'unavailable', note: isQuota ? `Provider-limited: ${base.providerLabel} RPC health check could not complete because the provider rejected, timed out, or quota-limited the request: ${message}` : `${base.providerLabel} dedicated RPC configured but unavailable for health check: ${message}`, quotaLimited: isQuota, warning: isQuota ? 'Provider-limited: quota/rate/timeout reached; this is provider state, not wallet or transaction truth.' : base.warning };
+    return { ...base, latencyMs: Date.now() - started, status: isQuota ? 'provider-limited' : 'unavailable', note: isQuota ? `Provider-limited: ${base.providerLabel} RPC health check could not complete because the provider rejected, timed out, or quota-limited the request: ${safeMessage}` : `${base.providerLabel} dedicated RPC configured but unavailable for health check: ${safeMessage}`, quotaLimited: isQuota, warning: isQuota ? 'Provider-limited: quota/rate/timeout reached; this is provider state, not wallet or transaction truth.' : base.warning };
   }
 }
 

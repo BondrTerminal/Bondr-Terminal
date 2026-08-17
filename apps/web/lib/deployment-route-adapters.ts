@@ -60,11 +60,11 @@ export const DEPLOYMENT_ROUTE_ADAPTERS: DeploymentRouteAdapter[] = [
     supportLevel: 'research',
     completionStatus: 'mapped-not-developed',
     builderStatus: 'rehearsal-only',
-    requiredInputs: ['up to five wallet intents', 'signed transactions per wallet', 'Jito endpoint', 'Jito tip cap', 'bundle simulation result'],
-    apiFlow: ['build array body', 'deserialize each transaction', 'verify wallet/mint/amount policies', 'sign per wallet', 'submit bundle only after approval'],
-    signingModel: 'one approved signer per bundle leg; no server custody',
-    safeguards: ['max five legs', 'total SOL cap', 'Jito tip cap', 'no self-trade loop', 'all-or-nothing bundle status tracking'],
-    blockedUntil: ['Jito provider configured', 'bundle simulation implemented', 'explicit bundle approval']
+    requiredInputs: ['wallet intents', 'packed v0 transaction plan', 'address lookup table proof when multiple wallets share a transaction', 'signed transaction set capped at five transactions per Jito bundle', 'Jito endpoint', 'Jito tip cap', 'bundle simulation result'],
+    apiFlow: ['plan wallet rails', 'pack compatible wallet legs into v0 transactions', 'group transactions into Jito-sized waves', 'verify wallet/mint/amount policies', 'simulate each packed transaction', 'browser sign per required wallet', 'build a per-wave dispatch payload only after approval and prior-wave receipt proof', 'prove post-chain wallet effects after relay landing'],
+    signingModel: 'one approved signer per wallet in each packed transaction; no server custody',
+    safeguards: ['max five transactions per Jito bundle', 'packed-wallet transaction simulation', 'near-synchronous wave labels for overflow wallets', 'total SOL cap', 'Jito tip cap', 'no self-trade loop', 'all-or-nothing bundle status tracking per wave'],
+    blockedUntil: ['Jito provider configured', 'real route instruction sources connected to packed builder', 'explicit live bundle approval', 'chain effect proof fed by real post-landing account observations']
   },
   {
     id: 'raydium-original-lp-burn',
@@ -148,10 +148,10 @@ export function buildDeploymentLaunchReadiness(project: Project, wallets: Wallet
       developed: false,
       adapterId: selectedRouteAdapter.id,
       builderStatus: 'lp-plan-ready-sdk-adapter-present' as const,
-      missingBuilders: ['post-broadcast-lp-account-proof', 'lp-burn-simulation-proof'],
-      gatedBuilders: ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder'],
+      missingBuilders: [] as string[],
+      gatedBuilders: ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'post-broadcast-lp-account-proof', 'lp-burn-transaction-builder', 'lp-burn-simulation-handoff'],
       blockers: raydiumLaunchReadiness.lpPlan.blockers,
-      summary: 'Raydium is selectable and has a gated unsigned CPMM pool builder plus simulation policy, but it is not launch-developed until config discovery, LP account proof, and LP burn simulation are complete.'
+      summary: 'Raydium is selectable and has gated unsigned CPMM pool, LP account proof, LP burn, and simulation handoff builders, but it is not launch-developed until config discovery and real post-broadcast proof inputs are complete.'
     }
     : {
       platform: 'pump' as const,

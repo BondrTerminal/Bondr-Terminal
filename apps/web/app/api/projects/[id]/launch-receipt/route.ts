@@ -29,7 +29,9 @@ export async function POST(request: Request, { params }: Params) {
     confirmedAt: body.confirmedAt ?? null,
     intentId: body.intentId ?? null,
     transactionMessageHash: body.transactionMessageHash ?? null,
-    simulationStatus: body.simulationStatus ?? null
+    simulationTransactionMessageHash: body.simulationTransactionMessageHash ?? null,
+    simulationStatus: body.simulationStatus ?? null,
+    broadcastPolicy: body.broadcastPolicy ?? null
   });
 
   if (result.status !== 'ok') {

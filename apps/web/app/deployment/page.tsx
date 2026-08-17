@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic';
 const capabilityMap = [
   ['launch builder', 'real-gated', 'SPL unsigned mint builder exists; deployment gate is closed.'],
   ['bundle sequencer', 'preview', 'Capped multi-wallet validation exists; Jito policy preview exists and live relay submit remains blocked.'],
+  ['Jito packed builder', 'rehearsal-only', 'Bundle sequencer can compile Pump.fun/Raydium/Jupiter route-policy-proven source transactions into unsigned packed v0 transactions.'],
+  ['Jito wave dispatch', 'rehearsal-only', 'Packed proof, signing session, wave approval, and chain-effect proof endpoints are staged.'],
   ['snipe / protection', 'partial', 'Terminal execution class is proven; deployment-specific rules remain gated.'],
   ['task automation', 'config-only', 'Timed buys/sells, smart sell, TP/SL, caps, and cooldowns are planning rails.'],
   ['liquidity setup', 'partial', 'Liquidity Engine can inspect pools; LP creation builders need adapter work.'],
@@ -31,6 +33,11 @@ const routeMap = [
   ['/api/projects/[id]/launch-receipt', 'Post-launch receipt reconciliation', 'real'],
   ['/api/projects/[id]/launch-reconciliation', 'Read-only market reconciliation from launch receipt', 'real'],
   ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
+  ['/api/authenticated-qa-checklist', 'Authenticated manual QA checklist', 'real'],
+  ['/api/relay/jito/packed-transaction-build', 'Jito packed v0 transaction builder', 'rehearsal-only'],
+  ['/api/relay/jito/multi-wallet-signing-session', 'Jito multi-wallet signature tracker', 'rehearsal-only'],
+  ['/api/relay/jito/wave-dispatch-plan', 'Jito per-wave dispatch approval plan', 'rehearsal-only'],
+  ['/api/relay/jito/chain-effect-proof', 'Jito post-landing chain effect proof', 'rehearsal-only'],
   ['/api/relay/jito/bundle-preview', 'Jito signed-bundle policy preview', 'preview'],
   ['/api/relay/jito/send-bundle', 'Blocked Jito sendBundle stub', 'closed'],
   ['/api/sniper/readiness', 'Sniper trigger/submit readiness', 'preview'],
@@ -40,6 +47,15 @@ const routeMap = [
 ];
 
 const launchPathLabels = ['pump.fun', 'raydium'];
+const jitoOrchestration = [
+  ['1', 'Accept', 'Pump.fun/Raydium/Jupiter route policy proof'],
+  ['2', 'Pack', '/api/bundle-sequencer mode=build-packed'],
+  ['3', 'Prove', '/api/relay/jito/packed-transaction-proof'],
+  ['4', 'Sign', '/api/relay/jito/multi-wallet-signing-session'],
+  ['5', 'Approve', '/api/relay/jito/wave-dispatch-plan'],
+  ['6', 'Relay', '/api/relay/jito/send-bundle gated'],
+  ['7', 'Settle', '/api/relay/jito/chain-effect-proof']
+];
 const routeAdapters = [
   ['Pump.fun', 'PumpPortal create/trade-local', 'ready', 'IPFS metadata, dev buy, local signing, dry-run first.'],
   ['Raydium', 'Original LP + burn', 'mapped', 'SPL token deploy, Raydium LP add, LP-token burn, simulation first.']
@@ -265,9 +281,24 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
                   <div><span>Signature</span><strong>{formatAddress(launchReceipt.signature)}</strong></div>
                   <div><span>Route</span><strong>{launchReceipt.route}</strong></div>
                   <div><span>Provider</span><strong>{launchReceipt.provider ?? 'unknown'}</strong></div>
+                  <div><span>Simulation</span><strong>{launchReceipt.simulationStatus ?? 'unknown'}</strong><small>{formatAddress(launchReceipt.simulationTransactionMessageHash ?? launchReceipt.transactionMessageHash ?? null)}</small></div>
+                  <div><span>Retries</span><strong>{launchReceipt.broadcastPolicy?.maxRetries ?? 'unknown'}</strong><small>{launchReceipt.broadcastPolicy?.blindRetries === false ? 'no blind retries' : 'policy not recorded'}</small></div>
                   <div className="wide"><span>Explorer</span><strong><a href={launchReceipt.explorerUrl} target="_blank" rel="noreferrer">Open Solscan</a></strong></div>
                 </div>
               ) : <div className="deploymentRailEmpty">No launch receipt recorded for this project yet.</div>}
+            </section>
+
+            <section className="deploymentRailPanel">
+              <div className="railPanelHeader"><span>Jito orchestration</span><strong>{launchReadiness?.railCounts.bundle ? 'selected' : 'staged'}</strong></div>
+              <div className="deploymentWalletRailList compact">
+                {jitoOrchestration.map(([index, label, route]) => (
+                  <div className="deploymentWalletRailRow" key={label}>
+                    <strong>{index}. {label}</strong>
+                    <code>{route}</code>
+                    <span>{label === 'Relay' ? 'gate closed' : 'ready path'}</span>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section className="deploymentRailPanel">

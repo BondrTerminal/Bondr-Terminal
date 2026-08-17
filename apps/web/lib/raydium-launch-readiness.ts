@@ -25,16 +25,13 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
     route && route.raydiumWithheldTokenPct >= 0 && route.raydiumWithheldTokenPct <= 100 ? null : 'withheld-token-policy-required',
     route?.burnLiquidity ? null : 'lp-burn-policy-required'
   ].filter((item): item is string => Boolean(item));
-  const missingBuilderIds = [
-    'post-broadcast-lp-account-proof',
-    'raydium-lp-burn-simulation-proof'
-  ];
-  const gatedBuilderIds = ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'lp-burn-transaction-builder'];
+  const missingBuilderIds: string[] = [];
+  const gatedBuilderIds = ['raydium-original-lp-plan', 'raydium-cpmm-create-pool-adapter', 'raydium-lp-simulation-policy', 'post-broadcast-lp-account-proof', 'lp-burn-transaction-builder', 'lp-burn-simulation-handoff'];
 
   return {
     contract: 'bondr-raydium-launch-readiness-v1' as const,
     selected: raydiumSelected,
-    status: missingBuilderIds.length ? 'builder-missing' as const : 'ready',
+    status: 'blocked' as const,
     developed: false,
     execution: 'readiness-only-unsigned-raydium-build-gated-no-signing-no-broadcast' as const,
     lpPlan,
@@ -69,10 +66,10 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
       {
         id: 'lp-token-identify',
         label: 'LP token/account identification',
-        status: 'config-ready' as RaydiumStageStatus,
-        builder: 'post-LP transaction account resolver',
-        requiredInputs: ['Raydium pool id', 'owner token accounts', 'LP mint', 'LP token account'],
-        outputProof: ['verified LP mint', 'verified LP token account owner', 'expected LP balance']
+        status: 'implemented' as RaydiumStageStatus,
+        builder: '/api/deployment/raydium/lp-account-proof -> bondr-raydium-post-broadcast-lp-account-proof-v1',
+        requiredInputs: ['confirmed Raydium LP transaction signature', 'expected Raydium pool id', 'expected owner wallet', 'optional explicit LP token account'],
+        outputProof: ['confirmed LP transaction account-key match', 'Raydium pool account LP mint decode', 'verified owner LP token account', 'positive LP balance']
       },
       {
         id: 'lp-burn-build',
@@ -87,7 +84,7 @@ export function buildRaydiumLaunchReadiness(project: Project | null, wallets: Wa
         id: 'simulate-and-review',
         label: 'Simulation and review',
         status: 'config-ready' as RaydiumStageStatus,
-        builder: '/api/transaction-policy/simulate-or-provider-simulate',
+        builder: '/api/transaction-policy/simulate-or-provider-simulate + buildSimulationVerifiedLpBurnSignatureHandoff',
         requiredInputs: ['SPL mint tx', 'Raydium LP tx', 'LP burn tx', 'fresh blockhashes'],
         outputProof: ['simulation success for each leg', 'account delta review', 'no hidden signer/program injection']
       }

@@ -12,13 +12,21 @@ function numberParam(value: string | null) {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function sourceParam(value: unknown): SniperTriggerPreviewInput['source'] {
+  return value === 'manual' || value === 'pool-detector' || value === 'webhook' ? value : undefined;
+}
+
 function inputFrom(request: Request, body?: Body | null) {
   const { searchParams } = new URL(request.url);
   return {
     projectId: (typeof body?.projectId === 'string' ? body.projectId : searchParams.get('project'))?.trim() || null,
     preview: {
-      source: body?.source ?? (searchParams.get('source') === 'manual' ? 'manual' : undefined),
+      source: sourceParam(body?.source ?? searchParams.get('source')),
       mint: (typeof body?.mint === 'string' ? body.mint : searchParams.get('mint'))?.trim() || null,
+      poolId: (typeof body?.poolId === 'string' ? body.poolId : searchParams.get('poolId'))?.trim() || null,
+      poolObservedAt: (typeof body?.poolObservedAt === 'string' ? body.poolObservedAt : searchParams.get('poolObservedAt'))?.trim() || null,
+      poolSlot: typeof body?.poolSlot === 'number' ? body.poolSlot : numberParam(searchParams.get('poolSlot')),
+      poolLiquidityUsd: typeof body?.poolLiquidityUsd === 'number' ? body.poolLiquidityUsd : numberParam(searchParams.get('poolLiquidityUsd')),
       connectedSigner: (typeof body?.connectedSigner === 'string' ? body.connectedSigner : searchParams.get('connectedSigner'))?.trim() || null,
       amountSol: typeof body?.amountSol === 'number' ? body.amountSol : numberParam(searchParams.get('amountSol')),
       slippageBps: typeof body?.slippageBps === 'number' ? body.slippageBps : numberParam(searchParams.get('slippageBps')),

@@ -4,6 +4,7 @@ import { createIntentAsync, hashJson, updateIntentAsync } from '../../../lib/liv
 import { DEFAULT_ALLOWED_SWAP_PROGRAMS, decodeTransactionPolicy } from '../../../lib/transaction-policy';
 import { meridianAuthRequiredResponse } from '../../../lib/meridian-auth';
 import { buildTransactionPreview, liveDisabledPreview } from '../../../lib/transaction-preview';
+import { getLiveActivationStatus, type LiveActivationStatus } from '../../../lib/live-activation';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,13 +14,6 @@ const JUPITER_QUOTE_URL = process.env.JUPITER_QUOTE_URL ?? 'https://lite-api.jup
 const JUPITER_SWAP_URL = process.env.JUPITER_SWAP_URL ?? 'https://lite-api.jup.ag/swap/v1/swap';
 const TIMEOUT_MS = 10_000;
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-
-function liveTradingEnabled() {
-  return process.env.LIVE_TRADING_ENABLED === 'true';
-}
-const MAX_SOL_PER_SWAP = Number(process.env.LIVE_MAX_SOL_PER_SWAP ?? '0.05');
-const MAX_USDC_PER_SWAP = Number(process.env.LIVE_MAX_USDC_PER_SWAP ?? '10');
-const MAX_SLIPPAGE_BPS = Number(process.env.LIVE_MAX_SLIPPAGE_BPS ?? '500');
 
 type SwapRequest = {
   mint?: string;
@@ -59,13 +53,13 @@ function parsePositiveAmount(raw: unknown): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function parseSlippageBps(raw: unknown): { ok: true; value: number } | { ok: false; error: string } {
+function parseSlippageBps(raw: unknown, maxSlippageBps: number): { ok: true; value: number } | { ok: false; error: string } {
   if (raw === null || raw === undefined || raw === '' || raw === 'Auto') return { ok: true, value: 100 };
   const value = typeof raw === 'number' ? raw : Number(String(raw).replace(/bps/i, '').trim());
   if (!Number.isFinite(value)) return { ok: true, value: 100 };
   const rounded = Math.round(value);
   if (rounded < 1) return { ok: false, error: 'Slippage must be at least 1 bps.' };
-  if (rounded > MAX_SLIPPAGE_BPS) return { ok: false, error: `Requested slippage ${rounded} bps exceeds LIVE_MAX_SLIPPAGE_BPS (${MAX_SLIPPAGE_BPS}).` };
+  if (rounded > maxSlippageBps) return { ok: false, error: `Requested slippage ${rounded} bps exceeds LIVE_MAX_SLIPPAGE_BPS (${maxSlippageBps}).` };
   return { ok: true, value: rounded };
 }
 
@@ -103,17 +97,18 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit): Promise<Re
   }
 }
 
-function rejectIfLiveDisabled() {
-  if (liveTradingEnabled()) return null;
+function rejectIfLiveDisabled(liveActivation: LiveActivationStatus) {
+  if (liveActivation.signingEnabled) return null;
   return Response.json({
     status: 'blocked-by-live-gate',
     observedAt: new Date().toISOString(),
-    error: 'Live trading is disabled. Set LIVE_TRADING_ENABLED=true only after approving signer custody, preflight, wallet funding, max-size, slippage, and kill-switch rules.',
+    error: 'Live swap build is disabled. Set live/signing gates only after approving signer custody, preflight, wallet funding, max-size, slippage, drawdown, daily-loss, and kill-switch rules.',
     execution: 'live-disabled',
-    liveTradingEnabled: false,
-    signingEnabled: false,
-    broadcastEnabled: false,
-    deploymentEnabled: false,
+    liveTradingEnabled: liveActivation.liveTradingEnabled,
+    signingEnabled: liveActivation.signingEnabled,
+    broadcastEnabled: liveActivation.broadcastEnabled,
+    deploymentEnabled: liveActivation.deploymentEnabled,
+    liveActivation,
     signer: 'browser-wallet-required',
     serverSigning: false,
     transactionPreview: liveDisabledPreview('swap', '/api/execution-swap')
@@ -121,7 +116,8 @@ function rejectIfLiveDisabled() {
 }
 
 export async function POST(request: Request) {
-  const disabled = rejectIfLiveDisabled();
+  const liveActivation = getLiveActivationStatus();
+  const disabled = rejectIfLiveDisabled(liveActivation);
   if (disabled) return disabled;
   const authBlocked = await meridianAuthRequiredResponse(request);
   if (authBlocked) return authBlocked;
@@ -150,13 +146,13 @@ export async function POST(request: Request) {
   if (!amount) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: 'Live swap requires a numeric amount. Percent sells are not enabled yet.', execution: 'swap-build-rejected' }, { status: 400 });
 
   const spendAsset = body.spendAsset === 'USDC' ? 'USDC' : 'SOL';
-  if (side === 'buy' && spendAsset === 'SOL' && amount > MAX_SOL_PER_SWAP) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: `Amount exceeds LIVE_MAX_SOL_PER_SWAP (${MAX_SOL_PER_SWAP} SOL).`, execution: 'swap-build-rejected' }, { status: 400 });
-  if (side === 'buy' && spendAsset === 'USDC' && amount > MAX_USDC_PER_SWAP) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: `Amount exceeds LIVE_MAX_USDC_PER_SWAP (${MAX_USDC_PER_SWAP} USDC).`, execution: 'swap-build-rejected' }, { status: 400 });
+  if (side === 'buy' && spendAsset === 'SOL' && amount > liveActivation.limits.maxSolPerSwap) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: `Amount exceeds LIVE_MAX_SOL_PER_SWAP (${liveActivation.limits.maxSolPerSwap} SOL).`, execution: 'swap-build-rejected', liveActivation }, { status: 400 });
+  if (side === 'buy' && spendAsset === 'USDC' && amount > liveActivation.limits.maxUsdcPerSwap) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: `Amount exceeds LIVE_MAX_USDC_PER_SWAP (${liveActivation.limits.maxUsdcPerSwap} USDC).`, execution: 'swap-build-rejected', liveActivation }, { status: 400 });
 
   const quoteMint = spendAsset === 'USDC' ? USDC_MINT : SOL_MINT;
   const inputMint = side === 'buy' ? quoteMint : mint;
   const outputMint = side === 'buy' ? mint : quoteMint;
-  const slippage = parseSlippageBps(body.slippageBps);
+  const slippage = parseSlippageBps(body.slippageBps, liveActivation.limits.maxSlippageBps);
   if (!slippage.ok) return Response.json({ status: 'error', observedAt: new Date().toISOString(), error: slippage.error, execution: 'swap-build-rejected', blocker: 'slippage-out-of-bounds' }, { status: 400 });
   const slippageBps = slippage.value;
 
@@ -228,6 +224,26 @@ export async function POST(request: Request) {
       allowedPrograms: intent.allowedPrograms,
       requiredAccounts: intent.requiredAccounts,
       transactionMessageHash: intent.transactionMessageHash,
+      handoffEvidence: {
+        phase: 'unsigned-build',
+        nextRequiredPhase: 'simulation',
+        nextRoute: '/api/terminal/signer-dry-run',
+        intentId: intent.id,
+        expectedSigner: userPublicKey,
+        expectedMint: mint,
+        expectedSide: side,
+        expectedAmount: String(amount),
+        slippageBps,
+        inputMint,
+        outputMint,
+        rawAmount,
+        allowedPrograms: intent.allowedPrograms,
+        requiredAccounts: intent.requiredAccounts,
+        quoteHash: intent.quoteHash,
+        routeHash: intent.routeHash,
+        transactionMessageHash: intent.transactionMessageHash,
+        simulationRequired: true
+      },
       request: { mint, side, amount, spendAsset, slippageBps, inputMint, outputMint, rawAmount, userPublicKey },
       quote: {
         inAmount: quote.inAmount ?? rawAmount,

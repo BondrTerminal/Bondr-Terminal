@@ -104,7 +104,14 @@ export type LaunchReceipt = {
   confirmedAt?: string;
   intentId?: string | null;
   transactionMessageHash?: string | null;
+  simulationTransactionMessageHash?: string | null;
   simulationStatus?: string | null;
+  broadcastPolicy?: {
+    maxRetries: number;
+    blindRetries: boolean;
+    skipPreflight: boolean;
+    preflightCommitment: string;
+  } | null;
 };
 
 export type Project = {

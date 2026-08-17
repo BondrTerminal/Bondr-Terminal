@@ -55,6 +55,18 @@ export async function GET(request: Request) {
       rpcHealth.status === 'live' ? 82 : 42,
       [`RPC provider: ${rpcHealth.providerLabel ?? rpcHealth.provider}`, `RPC status: ${rpcHealth.status}`],
       rpcHealth.quotaLimited ? ['Configured RPC is quota-limited; add quota or fallback before live beta.'] : rpcHealth.status === 'live' ? [] : [rpcHealth.note ?? rpcHealth.warning ?? 'RPC degraded.']
+    ),
+    risk: category(
+      liveActivation.riskReadiness.status === 'ready' ? 'mostly-ready' : 'blocked',
+      liveActivation.riskReadiness.status === 'ready' ? 84 : 34,
+      [
+        `Max swap: ${liveActivation.limits.maxSolPerSwap} SOL / ${liveActivation.limits.maxUsdcPerSwap} USDC`,
+        `Max slippage: ${liveActivation.limits.maxSlippageBps} bps`,
+        `Daily loss cap: ${liveActivation.limits.maxDailyLossSol} SOL`,
+        `Drawdown kill switch: ${liveActivation.limits.killSwitchDrawdownBps} bps`,
+        `HALT active: ${liveActivation.riskReadiness.killSwitch.active}`
+      ],
+      liveActivation.riskReadiness.blockers
     )
   };
 

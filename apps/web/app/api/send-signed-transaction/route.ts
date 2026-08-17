@@ -16,6 +16,7 @@ function liveTradingEnabled() {
 }
 
 const MAX_SIGNED_TX_BYTES = 32_000;
+const SINGLE_BROADCAST_MAX_RETRIES = 0;
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 type SendRequest = {
@@ -27,6 +28,7 @@ type SendRequest = {
   expectedMint?: string;
   expectedSide?: 'buy' | 'sell' | 'Buy' | 'Sell';
   simulationStatus?: string | null;
+  simulationTransactionMessageHash?: string | null;
   transactionMessageHash?: string | null;
   operation?: 'fund' | 'funding' | 'swap' | string;
 };
@@ -138,6 +140,13 @@ export async function POST(request: Request) {
   const expectedSigner = body.expectedSigner ?? intent?.expectedSigner ?? null;
   const expectedMint = body.expectedMint ?? intent?.expectedMint ?? null;
   const simulationError = body.simulationStatus === 'ok' ? null : 'Broadcast requires a fresh ok simulationStatus tied to the signed transaction review.';
+  const expectedTransactionMessageHash = intent?.transactionMessageHash ?? body.transactionMessageHash ?? null;
+  const simulationTransactionMessageHash = body.simulationTransactionMessageHash ?? null;
+  const simulationProofError = !fundingRequest && !simulationTransactionMessageHash
+    ? 'Broadcast requires simulationTransactionMessageHash from the simulation proof.'
+    : !fundingRequest && simulationTransactionMessageHash && expectedTransactionMessageHash && simulationTransactionMessageHash !== expectedTransactionMessageHash
+      ? 'Broadcast simulation proof message hash does not match the stored transaction intent.'
+      : null;
   let policy: ReturnType<typeof policyCheck> | null = null;
   let fundingPolicy: ReturnType<typeof fundingPolicyCheck> | null = null;
 
@@ -150,12 +159,12 @@ export async function POST(request: Request) {
       return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error: simulationError ?? 'Signed funding transaction failed funding policy.', execution: 'funding-broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...fundingPolicy.blockers], decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables), systemTransfers: decoded.systemTransfers }, fundingPolicy: { transfer: fundingPolicy.transfer, maxLamports: fundingPolicy.maxLamports, approvedSource: FUNDING_TEST_SOURCE, approvedDestination: FUNDING_TEST_DESTINATION }, serverSigning: false }, { status: 400 });
     }
   } else {
-    policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null, transactionMessageHash: intent?.transactionMessageHash ?? body.transactionMessageHash ?? null, allowWalletAssertionHashMismatch: true });
+    policy = policyCheck({ decoded, intent, intentId: body.intentId ?? null, expectedSigner: expectedSigner ?? null, expectedMint: expectedMint ?? null, transactionMessageHash: expectedTransactionMessageHash, allowWalletAssertionHashMismatch: true });
     const intentError = validateIntent(body.intentId ?? null, expectedSigner, expectedMint, decoded);
-    if (intentError || simulationError || !policy.safeToBroadcastIfLiveEnabled) {
-      const error = intentError ?? simulationError ?? 'Signed transaction failed intent policy.';
+    if (intentError || simulationError || simulationProofError || !policy.safeToBroadcastIfLiveEnabled) {
+      const error = intentError ?? simulationError ?? simulationProofError ?? 'Signed transaction failed intent policy.';
       if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_blocked', note: error ?? policy.blockers.join(' | ') });
-      return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error, execution: 'broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...policy.blockers], warnings: policy.warnings, decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables), unresolvedAddressLookupTables: decoded.unresolvedAddressLookupTables ?? [] }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt, transactionMessageHash: intent.transactionMessageHash } : null, serverSigning: false }, { status: 400 });
+      return Response.json({ status: 'broadcast_blocked', observedAt: new Date().toISOString(), error, execution: 'broadcast-rejected', blockers: [...(simulationError ? [simulationError] : []), ...(simulationProofError ? [simulationProofError] : []), ...policy.blockers], warnings: policy.warnings, decoded: { kind: decoded.kind, signerCount: decoded.signerKeys.length, programs: decoded.programs, messageHash: decoded.messageHash, usesAddressLookupTables: Boolean(decoded.usesAddressLookupTables), unresolvedAddressLookupTables: decoded.unresolvedAddressLookupTables ?? [] }, intent: intent ? { id: intent.id, status: intent.status, expiresAt: intent.expiresAt, transactionMessageHash: intent.transactionMessageHash } : null, simulationTransactionMessageHash, serverSigning: false }, { status: 400 });
     }
     if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_requested' });
   }
@@ -163,7 +172,7 @@ export async function POST(request: Request) {
   try {
     const signature = await connection.sendRawTransaction(raw, {
       skipPreflight: false,
-      maxRetries: 3,
+      maxRetries: SINGLE_BROADCAST_MAX_RETRIES,
       preflightCommitment: 'confirmed'
     });
     if (body.intentId && intent) await updateIntentAsync(body.intentId, { status: 'broadcast_sent', note: `Broadcast submitted: ${signature}` });
@@ -178,7 +187,14 @@ export async function POST(request: Request) {
         observedAt: new Date().toISOString(),
         intentId: body.intentId ?? null,
         transactionMessageHash: intent?.transactionMessageHash ?? body.transactionMessageHash ?? null,
-        simulationStatus: body.simulationStatus ?? null
+        simulationTransactionMessageHash,
+        simulationStatus: body.simulationStatus ?? null,
+        broadcastPolicy: {
+          maxRetries: SINGLE_BROADCAST_MAX_RETRIES,
+          blindRetries: false,
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        }
       })
       : null;
 
@@ -195,6 +211,13 @@ export async function POST(request: Request) {
       expectedMint: expectedMint ?? null,
       expectedSide: body.expectedSide ?? null,
       simulationStatus: body.simulationStatus ?? null,
+      simulationTransactionMessageHash,
+      broadcastPolicy: {
+        maxRetries: SINGLE_BROADCAST_MAX_RETRIES,
+        blindRetries: false,
+        preflightCommitment: 'confirmed',
+        skipPreflight: false
+      },
       rpcProvider: rpc.provider,
       signature,
       launchReceiptPersistence,

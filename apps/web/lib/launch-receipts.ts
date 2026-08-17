@@ -6,6 +6,7 @@ import { atomicJsonWrite, mutationMode } from './mutation-safety';
 
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SIGNATURE_RE = /^[1-9A-HJ-NP-Za-km-z]{64,120}$/;
+const MESSAGE_HASH_RE = /^[a-f0-9]{64}$/i;
 
 export type LaunchReceiptInput = {
   projectId: string;
@@ -19,7 +20,14 @@ export type LaunchReceiptInput = {
   confirmedAt?: string | null;
   intentId?: string | null;
   transactionMessageHash?: string | null;
+  simulationTransactionMessageHash?: string | null;
   simulationStatus?: string | null;
+  broadcastPolicy?: {
+    maxRetries?: number | null;
+    blindRetries?: boolean | null;
+    skipPreflight?: boolean | null;
+    preflightCommitment?: string | null;
+  } | null;
 };
 
 function clean(value: string | null | undefined, max = 240) {
@@ -53,11 +61,37 @@ function optionalIso(value: string | null | undefined) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
+function optionalMessageHash(value: string | null | undefined) {
+  const cleaned = clean(value, 80);
+  if (!cleaned) return null;
+  return MESSAGE_HASH_RE.test(cleaned) ? cleaned.toLowerCase() : undefined;
+}
+
+function normalizeBroadcastPolicy(input: LaunchReceiptInput['broadcastPolicy']) {
+  if (!input) return null;
+  const maxRetries = Number(input.maxRetries);
+  return {
+    maxRetries: Number.isFinite(maxRetries) && maxRetries >= 0 ? maxRetries : 0,
+    blindRetries: input.blindRetries === true,
+    skipPreflight: input.skipPreflight === true,
+    preflightCommitment: clean(input.preflightCommitment, 40) || 'confirmed'
+  };
+}
+
 export function normalizeLaunchReceipt(input: LaunchReceiptInput): { receipt?: LaunchReceipt; error?: string } {
   const signature = clean(input.signature, 140);
   const tokenMint = clean(input.tokenMint, 64);
   if (!SIGNATURE_RE.test(signature)) return { error: 'Valid Solana transaction signature is required.' };
   if (!validAddress(tokenMint)) return { error: 'Valid launched token mint is required.' };
+  const transactionMessageHash = optionalMessageHash(input.transactionMessageHash);
+  if (transactionMessageHash === undefined) return { error: 'Valid transaction message hash is required when provided.' };
+  const simulationTransactionMessageHash = optionalMessageHash(input.simulationTransactionMessageHash);
+  if (simulationTransactionMessageHash === undefined) return { error: 'Valid simulation transaction message hash is required when provided.' };
+  if (transactionMessageHash && simulationTransactionMessageHash && transactionMessageHash !== simulationTransactionMessageHash) {
+    return { error: 'Simulation proof hash must match the launched transaction message hash.' };
+  }
+  const simulationStatus = clean(input.simulationStatus, 40) || null;
+  if (simulationStatus && simulationStatus !== 'ok') return { error: 'Launch receipt simulation status must be ok when provided.' };
   const observedAt = optionalIso(input.observedAt) ?? new Date().toISOString();
   const confirmedAt = optionalIso(input.confirmedAt);
   return {
@@ -73,8 +107,10 @@ export function normalizeLaunchReceipt(input: LaunchReceiptInput): { receipt?: L
       observedAt,
       confirmedAt: confirmedAt ?? undefined,
       intentId: clean(input.intentId, 140) || null,
-      transactionMessageHash: clean(input.transactionMessageHash, 140) || null,
-      simulationStatus: clean(input.simulationStatus, 40) || null
+      transactionMessageHash,
+      simulationTransactionMessageHash,
+      simulationStatus,
+      broadcastPolicy: normalizeBroadcastPolicy(input.broadcastPolicy)
     }
   };
 }

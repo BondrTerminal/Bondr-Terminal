@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Keypair } from '@solana/web3.js';
+import { buildJitoPackedTransactionProof } from '../apps/web/lib/jito-packed-transaction-proof.js';
 import { DEFAULT_ALLOWED_SWAP_PROGRAMS, fundingPolicyCheck, policyCheck, type DecodedTransactionPolicy } from '../apps/web/lib/transaction-policy.js';
 
 const SPL_TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
@@ -90,6 +92,65 @@ test('policy check allows resolved lookup table transactions', () => {
 
   assert.equal(result.safeToBroadcastIfLiveEnabled, true);
   assert.deepEqual(result.blockers, []);
+});
+
+test('jito packed transaction proof requires address lookup table proof for multi-wallet transactions', () => {
+  const signerA = Keypair.generate().publicKey.toBase58();
+  const signerB = Keypair.generate().publicKey.toBase58();
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [signerA, signerB],
+    accountKeys: [signerA, signerB, MINT, SPL_TOKEN_PROGRAM_ID],
+    programs: [SPL_TOKEN_PROGRAM_ID],
+    messageHash: 'a'.repeat(64),
+    usesAddressLookupTables: false,
+    unresolvedAddressLookupTables: []
+  };
+
+  const proof = buildJitoPackedTransactionProof({
+    decoded,
+    serializedBytes: 900,
+    expectedSigners: [signerA, signerB],
+    expectedMint: MINT,
+    transactionMessageHash: 'a'.repeat(64),
+    simulationProof: { status: 'ok', transactionMessageHash: 'a'.repeat(64), unitsConsumed: 120000, provider: 'test-rpc' }
+  });
+
+  assert.equal(proof.contract, 'bondr-jito-packed-transaction-proof-v1');
+  assert.equal(proof.status, 'blocked');
+  assert.equal(proof.addressLookupTables.proofStatus, 'required-but-not-used');
+  assert.ok(proof.blockers.includes('address-lookup-table-required-for-packed-wallet-transaction'));
+  assert.equal(proof.safety.noSigning, true);
+  assert.equal(proof.safety.noRelaySubmit, true);
+});
+
+test('jito packed transaction proof verifies resolved simulated packed transactions', () => {
+  const signerA = Keypair.generate().publicKey.toBase58();
+  const signerB = Keypair.generate().publicKey.toBase58();
+  const decoded: DecodedTransactionPolicy = {
+    kind: 'versioned',
+    signerKeys: [signerA, signerB],
+    accountKeys: [signerA, signerB, MINT, SPL_TOKEN_PROGRAM_ID],
+    programs: [SPL_TOKEN_PROGRAM_ID],
+    messageHash: 'b'.repeat(64),
+    usesAddressLookupTables: true,
+    unresolvedAddressLookupTables: []
+  };
+
+  const proof = buildJitoPackedTransactionProof({
+    decoded,
+    serializedBytes: 900,
+    expectedSigners: [signerA, signerB],
+    expectedMint: MINT,
+    transactionMessageHash: 'b'.repeat(64),
+    simulationProof: { status: 'ok', transactionMessageHash: 'b'.repeat(64), unitsConsumed: 120000, provider: 'test-rpc' }
+  });
+
+  assert.equal(proof.status, 'verified');
+  assert.equal(proof.walletCount, 2);
+  assert.equal(proof.addressLookupTables.proofStatus, 'required-and-resolved');
+  assert.equal(proof.simulationProof.messageHashMatched, true);
+  assert.deepEqual(proof.blockers, []);
 });
 
 test('sync decoder handles unresolved versioned lookup-table transactions for build hashing', async () => {

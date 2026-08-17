@@ -28,7 +28,12 @@ function inputFrom(request: Request, body?: Body | null) {
       maxRuns: typeof body?.maxRuns === 'number' ? body.maxRuns : numberParam(searchParams.get('maxRuns')),
       cooldownSeconds: typeof body?.cooldownSeconds === 'number' ? body.cooldownSeconds : numberParam(searchParams.get('cooldownSeconds')),
       riskRuleId: (typeof body?.riskRuleId === 'string' ? body.riskRuleId : searchParams.get('riskRuleId'))?.trim() || null,
-      paused: body?.paused !== false
+      paused: body?.paused !== false,
+      completedRuns: typeof body?.completedRuns === 'number' ? body.completedRuns : numberParam(searchParams.get('completedRuns')),
+      lastRunSecondsAgo: typeof body?.lastRunSecondsAgo === 'number' ? body.lastRunSecondsAgo : numberParam(searchParams.get('lastRunSecondsAgo')),
+      priceChangePct: typeof body?.priceChangePct === 'number' ? body.priceChangePct : numberParam(searchParams.get('priceChangePct')),
+      peakGainPct: typeof body?.peakGainPct === 'number' ? body.peakGainPct : numberParam(searchParams.get('peakGainPct')),
+      drawdownFromPeakPct: typeof body?.drawdownFromPeakPct === 'number' ? body.drawdownFromPeakPct : numberParam(searchParams.get('drawdownFromPeakPct'))
     } satisfies TaskQueuePreviewInput
   };
 }

@@ -1,6 +1,8 @@
 import { walletPlanEntries, type MeridianStore, type Project, type Wallet, type WalletPlanEntry } from './meridian-store';
 import type { getLiveActivationStatus } from './live-activation';
 import { getJitoRelayReadiness } from './jito-relay-readiness';
+import { buildExecutionRecoveryReadiness } from './execution-recovery-readiness';
+import { buildSniperExecutionReadiness, buildTaskExecutionReadiness } from './sniper-task-readiness';
 
 export type ExecutionTruthStatus = 'ready' | 'rehearsal-only' | 'blocked' | 'missing-implementation';
 export type ExecutionSpineStep = 'builder' | 'signer' | 'simulation' | 'relay-broadcast' | 'receipt' | 'monitor' | 'recovery';
@@ -86,6 +88,9 @@ export function buildExecutionTruthMap(input: {
   const bundlePlans = selectedPlans(project, 'bundle');
   const sniperPlans = selectedPlans(project, 'sniper');
   const taskPlans = selectedPlans(project, 'task');
+  const sniperReadiness = buildSniperExecutionReadiness(project, wallets, input.activation);
+  const taskReadiness = buildTaskExecutionReadiness(project, wallets, input.activation);
+  const recoveryReadiness = buildExecutionRecoveryReadiness();
   const nonDev = nonDevPlans(project);
   const watchOnlyNonDev = nonDev.filter((entry) => (walletMap.get(entry.walletId)?.custodyMode ?? 'watch-only') !== 'managed-local');
   const imageUrl = project?.metadata.imageUrl ?? '';
@@ -98,13 +103,13 @@ export function buildExecutionTruthMap(input: {
     label: 'Deployment',
     selected: hasProject,
     summary: hasProject ? `${project?.metadata.symbol || project?.ticker || 'Token'} launch rehearsal` : 'No project selected',
-    nextAction: ipfsReady ? 'Build PumpPortal create preview contract.' : 'Add IPFS metadata pipeline and token metadata preview.',
+    nextAction: ipfsReady ? 'Run build -> simulation -> signed review with launch receipt proof.' : 'Add IPFS metadata pipeline and token metadata preview.',
     steps: [
-      step('builder', 'missing-implementation', 'PumpPortal create builder is mapped but not implemented live.', ['pumpportal-create-builder-missing']),
+      step('builder', 'rehearsal-only', 'Pump.fun direct unsigned builder exists behind explicit gates; no server signing.'),
       step('signer', hasProject ? 'rehearsal-only' : 'blocked', 'Browser dev-wallet signing rehearsal only.', hasProject ? [] : ['project-missing']),
-      step('simulation', 'rehearsal-only', 'Dry-run and transaction simulation contract exists; deployment-specific simulation still needs builder payload.'),
+      step('simulation', 'rehearsal-only', 'Dry-run and transaction simulation bind proof to the unsigned transaction message hash.'),
       step('relay-broadcast', input.activation.deploymentEnabled && input.activation.broadcastEnabled ? 'rehearsal-only' : 'blocked', 'Deploy and broadcast gates remain explicit.', [input.activation.deploymentEnabled ? '' : 'deployment-gate-closed', input.activation.broadcastEnabled ? '' : 'broadcast-gate-closed'].filter(Boolean)),
-      step('receipt', 'missing-implementation', 'Post-launch mint/signature/project-state capture is not implemented.', ['deployment-receipt-tracker-missing']),
+      step('receipt', 'rehearsal-only', 'Launch receipt persistence and manual reconciliation are proof-bound and auth-protected.'),
       step('monitor', ipfsReady ? 'rehearsal-only' : 'blocked', 'Launch monitor needs CA/pool after deploy; IPFS metadata required before real create.', ipfsReady ? [] : ['ipfs-metadata-uri-missing']),
       step('recovery', 'missing-implementation', 'Deploy rebuild/expiry/failure recovery flow is not implemented.', ['deployment-recovery-flow-missing'])
     ]
@@ -115,15 +120,15 @@ export function buildExecutionTruthMap(input: {
     label: 'Bundle',
     selected: bundlePlans.length > 0,
     summary: bundlePlans.length ? `${bundlePlans.length} selected bundle wallet(s)` : 'No bundle wallets selected',
-    nextAction: relay.relayEnabled ? 'Add signed bundle preview and status polling.' : 'Configure Jito relay readiness and signed-bundle policy.',
+    nextAction: relay.relayEnabled ? 'Run route-policy-proven Pump.fun/Raydium/Jupiter inputs through packed build UI and controlled relay-gate test later.' : 'Keep Jito relay disabled until route-policy-proven inputs complete packed proof/sign/wave/chain-effect rehearsal.',
     steps: [
-      step('builder', 'rehearsal-only', 'Bundle sequencer validates legs and can build unsigned swap legs when gates allow.'),
-      step('signer', watchOnlyNonDev.length ? 'blocked' : bundlePlans.length ? 'rehearsal-only' : 'blocked', 'Non-dev bundle wallets must be executable signers, not watch-only rows.', watchOnlyNonDev.length ? ['multi-wallet-signing-orchestration-missing'] : bundlePlans.length ? [] : ['bundle-wallets-not-selected']),
-      step('simulation', 'rehearsal-only', 'Bundle simulation is required before Jito relay submit.'),
+      step('builder', 'rehearsal-only', 'Bundle sequencer can accept Pump.fun/Raydium/Jupiter route-policy-proven source transactions and build packed unsigned v0 transactions.'),
+      step('signer', watchOnlyNonDev.length ? 'blocked' : bundlePlans.length ? 'rehearsal-only' : 'blocked', 'Multi-wallet signing session tracks required signatures by transaction message hash.', watchOnlyNonDev.length ? ['non-dev-wallets-must-be-executable-signers'] : bundlePlans.length ? [] : ['bundle-wallets-not-selected']),
+      step('simulation', 'rehearsal-only', 'Packed transaction proof requires ok simulation evidence bound to the packed message hash.'),
       step('relay-broadcast', relay.relayEnabled && input.activation.broadcastEnabled ? 'rehearsal-only' : 'blocked', 'Jito relay submit is not open until relay and broadcast gates are both approved.', [relay.relayEnabled ? '' : 'jito-relay-disabled', input.activation.broadcastEnabled ? '' : 'broadcast-gate-closed'].filter(Boolean)),
-      step('receipt', 'missing-implementation', 'Bundle ID, inflight status, landed/dropped/finalized tracking still needed.', ['bundle-status-tracker-missing']),
-      step('monitor', 'missing-implementation', 'Post-bundle wallet balance and buyer-state monitoring still needed.', ['bundle-post-state-monitor-missing']),
-      step('recovery', 'missing-implementation', 'Blockhash expiry/rebuild and no-blind-retry policy still needed for bundle flow.', ['bundle-recovery-flow-missing'])
+      step('receipt', 'rehearsal-only', 'Bundle status receipts normalize Jito inflight/final rows but remain relay-only proof.'),
+      step('monitor', 'rehearsal-only', 'Post-chain effect proof requires wallet/mint/signature/slot/token-delta observations after landing.'),
+      step('recovery', 'rehearsal-only', 'Signing sessions and wave plans expose blockhash expiry, prior-wave receipt, and no-blind-submit requirements.')
     ]
   });
 
@@ -132,15 +137,15 @@ export function buildExecutionTruthMap(input: {
     label: 'Sniper',
     selected: sniperPlans.length > 0,
     summary: sniperPlans.length ? `${sniperPlans.length} selected sniper wallet(s)` : 'Terminal supports manual quote/build/simulate/sign rehearsal',
-    nextAction: 'Add sniper trigger readiness endpoint and event source.',
+    nextAction: 'Use /api/sniper/trigger-preview for manual trigger proof, then add durable pool/webhook trigger sources.',
     steps: [
-      step('builder', 'rehearsal-only', 'Terminal quote/build/simulate path exists for manual trades.'),
+      step('builder', 'rehearsal-only', 'Terminal quote/build/simulate path exists, and sniper trigger preview models manual/pool/webhook sources plus pool freshness without building a buy.', sniperReadiness.blockers.includes('durable-sniper-trigger-source-missing') ? ['durable-sniper-trigger-source-missing'] : []),
       step('signer', watchOnlyNonDev.length && sniperPlans.length ? 'blocked' : 'rehearsal-only', 'Selected sniper wallet must match an executable signer.', watchOnlyNonDev.length && sniperPlans.length ? ['sniper-signer-orchestration-missing'] : []),
       step('simulation', input.activation.requireSimulation ? 'rehearsal-only' : 'blocked', 'Simulation is required by live activation policy.', input.activation.requireSimulation ? [] : ['simulation-requirement-disabled']),
       step('relay-broadcast', input.activation.broadcastEnabled ? 'rehearsal-only' : 'blocked', 'Manual terminal broadcast is closed in A-profile.', input.activation.broadcastEnabled ? [] : ['broadcast-gate-closed']),
-      step('receipt', 'missing-implementation', 'Post-submit signature receipt and fill reconciliation need live broadcast proof.', ['sniper-receipt-tracker-missing']),
-      step('monitor', 'missing-implementation', 'Low-latency trigger source, pool event detection, and post-buy monitoring are not implemented.', ['sniper-trigger-engine-missing']),
-      step('recovery', 'missing-implementation', 'Sniper stale quote, slippage, blockhash, and account-lock recovery policy still needs wiring.', ['sniper-recovery-flow-missing'])
+      step('receipt', 'rehearsal-only', 'Post-submit signature receipt and fill reconciliation are modeled as required proof before live sniper execution.', sniperReadiness.blockers.filter((blocker) => blocker === 'sniper-receipt-ledger-missing' || blocker === 'durable-sniper-monitor-missing')),
+      step('monitor', 'blocked', 'Low-latency trigger source, pool freshness proof, and post-buy monitoring are required before autonomous sniper mode.', ['sniper-trigger-engine-missing', ...sniperReadiness.blockers.filter((blocker) => blocker === 'pool-freshness-indexer-missing')]),
+      step('recovery', 'rehearsal-only', 'Recovery policy classifies stale quotes, expired blockhash, account locks, and no-blind-retry behavior.', recoveryReadiness.blockers.includes('automatic-recovery-runner-missing') ? ['automatic-recovery-runner-missing'] : [])
     ]
   });
 
@@ -149,15 +154,15 @@ export function buildExecutionTruthMap(input: {
     label: 'Task',
     selected: taskPlans.length > 0,
     summary: taskPlans.length ? `${taskPlans.length} task wallet(s) configured` : 'Task rail is config-only',
-    nextAction: 'Add durable task runner/worker readiness before any automation.',
+    nextAction: 'Use /api/tasks/queue-preview for lifecycle proof, then add durable worker persistence before any automation.',
     steps: [
-      step('builder', taskPlans.length ? 'rehearsal-only' : 'blocked', 'Task config schema exists; execution builders are not task-bound yet.', taskPlans.length ? [] : ['task-wallets-not-selected']),
+      step('builder', taskPlans.length ? 'rehearsal-only' : 'blocked', 'Task queue preview models task shape, schedule, idempotency, cooldown, and lifecycle without building transactions.', taskPlans.length ? [] : ['task-wallets-not-selected']),
       step('signer', watchOnlyNonDev.length && taskPlans.length ? 'blocked' : 'rehearsal-only', 'Task wallets need executable signer model.', watchOnlyNonDev.length && taskPlans.length ? ['task-signer-orchestration-missing'] : []),
-      step('simulation', 'missing-implementation', 'Per-task simulation before execution is not implemented.', ['task-simulation-loop-missing']),
+      step('simulation', 'rehearsal-only', 'Task lifecycle preview marks ready tasks as unsigned-build candidates; every eventual execution still requires quote/build/simulation proof.', input.activation.requireSimulation ? [] : ['simulation-requirement-disabled']),
       step('relay-broadcast', 'blocked', 'Task broadcast remains closed and must not run from normal request lifecycle.', ['task-broadcast-disabled']),
-      step('receipt', 'missing-implementation', 'Task execution receipts and audit ledger are missing.', ['task-receipt-ledger-missing']),
-      step('monitor', 'missing-implementation', 'Durable scheduler/worker, TP/SL watchers, and pause/resume/cancel are missing.', ['durable-task-runner-missing']),
-      step('recovery', 'missing-implementation', 'Task retry/cooldown/kill-switch recovery is missing.', ['task-recovery-flow-missing'])
+      step('receipt', 'rehearsal-only', 'Task execution receipt fields and audit ledger preview are modeled before live automation.', taskReadiness.blockers.filter((blocker) => blocker === 'durable-task-receipt-ledger-missing' || blocker === 'automatic-recovery-runner-missing')),
+      step('monitor', 'blocked', 'Durable scheduler/worker, TP/SL watchers, and pause/resume/cancel persistence remain required before automation.', ['durable-task-runner-missing', ...taskReadiness.blockers.filter((blocker) => blocker === 'durable-monitor-worker-missing')]),
+      step('recovery', 'rehearsal-only', 'Cooldown, max-run, kill-switch, and no-blind-retry recovery rules are modeled before worker implementation.', recoveryReadiness.blockers.includes('automatic-recovery-runner-missing') ? ['automatic-recovery-runner-missing'] : [])
     ]
   });
 

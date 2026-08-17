@@ -17,6 +17,7 @@ type SignedReviewRequest = {
   expectedMint?: string;
   transactionMessageHash?: string | null;
   simulationStatus?: string | null;
+  simulationTransactionMessageHash?: string | null;
 };
 
 function validAddress(value: string | null | undefined) {
@@ -59,10 +60,14 @@ export async function POST(request: Request) {
 
   const expectedSigner = body.expectedSigner ?? intent.expectedSigner;
   const expectedMint = body.expectedMint ?? intent.expectedMint;
+  const expectedTransactionMessageHash = intent.transactionMessageHash ?? body.transactionMessageHash ?? null;
+  const simulationTransactionMessageHash = body.simulationTransactionMessageHash ?? null;
   const blockers: string[] = [];
   if (!validAddress(expectedSigner)) blockers.push('expectedSigner is missing or invalid.');
   if (!validAddress(expectedMint)) blockers.push('expectedMint is missing or invalid.');
   if (body.simulationStatus !== 'ok') blockers.push('Simulation result must be ok before a signed payload is accepted for review.');
+  if (!simulationTransactionMessageHash) blockers.push('Signed review requires simulationTransactionMessageHash so the simulation proof is bound to the signed payload.');
+  if (simulationTransactionMessageHash && expectedTransactionMessageHash && simulationTransactionMessageHash !== expectedTransactionMessageHash) blockers.push('Simulation proof message hash does not match the stored transaction intent.');
 
   let decoded: ReturnType<typeof decodeTransactionPolicy> | null = null;
   if (!blockers.length) {
@@ -74,7 +79,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const policy = decoded ? policyCheck({ decoded, intent, intentId: body.intentId, expectedSigner, expectedMint, transactionMessageHash: intent.transactionMessageHash ?? body.transactionMessageHash ?? null, allowWalletAssertionHashMismatch: true }) : null;
+  const policy = decoded ? policyCheck({ decoded, intent, intentId: body.intentId, expectedSigner, expectedMint, transactionMessageHash: expectedTransactionMessageHash, allowWalletAssertionHashMismatch: true }) : null;
   const hardBlockers = [...blockers, ...(policy?.blockers ?? [])];
   const warnings = [
     'Review only: no transaction was broadcast.',
@@ -98,6 +103,7 @@ export async function POST(request: Request) {
     expectedSigner,
     expectedMint,
     simulationStatus: body.simulationStatus ?? null,
+    simulationTransactionMessageHash,
     review: {
       signerMatched: Boolean(policy?.signerMatched),
       expectedMintReferenced: Boolean(policy?.expectedMintReferenced),
@@ -105,7 +111,8 @@ export async function POST(request: Request) {
       programsAllowed: Boolean(policy?.programsAllowed),
       messageHashMatched: policy?.messageHashMatched ?? null,
       transactionMessageHash: policy?.transactionMessageHash ?? decoded?.messageHash ?? null,
-      expectedTransactionMessageHash: body.transactionMessageHash ?? intent.transactionMessageHash ?? null,
+      expectedTransactionMessageHash,
+      simulationTransactionMessageHash,
       altPolicy: decoded?.usesAddressLookupTables
         ? decoded.unresolvedAddressLookupTables?.length
           ? 'lookup-resolution-incomplete'

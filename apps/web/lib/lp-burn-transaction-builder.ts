@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import type { RaydiumLpTokenAccountProof } from './raydium-lp-proof';
 
@@ -11,6 +12,14 @@ export type LpBurnBuildInput = {
   amount: number;
   decimals: number;
   recentBlockhash: string;
+};
+
+export type LpBurnSimulationProof = {
+  status?: string | null;
+  transactionMessageHash?: string | null;
+  err?: unknown;
+  provider?: string | null;
+  unitsConsumed?: number | null;
 };
 
 function parsePk(value: string, label: string) {
@@ -57,6 +66,7 @@ export function buildLpBurnTransaction(input: LpBurnBuildInput) {
   tx.feePayer = owner;
   tx.recentBlockhash = input.recentBlockhash;
   tx.add(createBurnCheckedInstruction(lpTokenAccount, lpMint, owner, amount, input.decimals));
+  const transactionMessageHash = createHash('sha256').update(tx.serializeMessage()).digest('hex');
 
   return {
     contract: 'bondr-lp-burn-transaction-v1' as const,
@@ -68,6 +78,7 @@ export function buildLpBurnTransaction(input: LpBurnBuildInput) {
     tokenProgram: TOKEN_PROGRAM_ID.toBase58(),
     requiredSigners: [owner.toBase58()],
     amountRaw: amount.toString(),
+    transactionMessageHash,
     transactionBase64: tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
     safety: {
       noSigning: true,
@@ -93,6 +104,44 @@ export function buildVerifiedLpBurnTransaction(input: LpBurnBuildInput & { proof
       ...transaction.safety,
       requiresVerifiedLpAccount: true,
       proofBoundBeforeBuild: true as const
+    }
+  };
+}
+
+export function buildSimulationVerifiedLpBurnSignatureHandoff(input: LpBurnBuildInput & { proof: RaydiumLpTokenAccountProof; simulationProof?: LpBurnSimulationProof | null }) {
+  const transaction = buildVerifiedLpBurnTransaction(input);
+  const proof = input.simulationProof ?? null;
+  const blockers = [
+    proof ? null : 'lp-burn-simulation-proof-required',
+    proof && proof.status !== 'ok' ? 'lp-burn-simulation-status-not-ok' : null,
+    proof && proof.err != null ? 'lp-burn-simulation-failed' : null,
+    proof && proof.transactionMessageHash !== transaction.transactionMessageHash ? 'lp-burn-simulation-hash-mismatch' : null
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    ...transaction,
+    contract: 'bondr-lp-burn-signature-handoff-v1' as const,
+    status: blockers.length ? 'blocked' as const : 'ready' as const,
+    execution: 'unsigned-verified-lp-burn-simulation-bound-no-signing-no-broadcast' as const,
+    simulationProof: {
+      required: true as const,
+      provided: Boolean(proof),
+      status: proof?.status ?? null,
+      transactionMessageHash: proof?.transactionMessageHash ?? null,
+      err: proof?.err ?? null,
+      provider: proof?.provider ?? null,
+      unitsConsumed: proof?.unitsConsumed ?? null
+    },
+    safeToRequestSignature: blockers.length === 0,
+    blockers,
+    safety: {
+      ...transaction.safety,
+      requiresVerifiedLpAccount: true as const,
+      requiresSimulationBeforeSigning: true as const,
+      proofBoundBeforeBuild: true as const,
+      simulationProofBoundBeforeSignature: true as const,
+      noSigning: true as const,
+      noBroadcast: true as const
     }
   };
 }
