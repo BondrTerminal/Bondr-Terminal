@@ -1,4 +1,4 @@
-import { eventsForProject, launchPreflight, readinessScore, stripMeridianInlineAssetData, walletPlanEntries, walletsForGroup, type Project, type MeridianStore } from '../../lib/meridian-store';
+import { eventsForProject, launchPreflight, readinessScore, stripMeridianInlineAssetData, walletPlanEntries, type Project, type MeridianStore } from '../../lib/meridian-store';
 import { getMeridianWalletStore } from '../../lib/durable-wallet-store';
 import { buildMeridianHubContext } from '../../lib/meridian-context';
 import { getSolanaRpcHealth } from '../../lib/rpc-health';
@@ -133,7 +133,11 @@ export default async function DeploymentPage({ searchParams }: DeploymentPagePro
   const selectedProject = selectedContext?.project;
   const projects = selectedProject ? [selectedProject] : hubContext.projects.map((context) => context.project);
   const activeProject = selectedProject ?? projects[0];
-  const activeWallets = selectedContext?.wallets ?? (activeProject ? walletsForGroup(activeProject.walletGroupId, store).filter((wallet) => !wallet.archived) : []);
+  const activeWallets = activeProject
+    ? store.wallets
+      .filter((wallet) => !wallet.archived)
+      .sort((left, right) => Number(right.groupId === activeProject.walletGroupId) - Number(left.groupId === activeProject.walletGroupId) || left.role.localeCompare(right.role))
+    : [];
   const launchReadiness = activeProject ? buildDeploymentLaunchReadiness(activeProject, activeWallets, activation) : null;
   const activeReadiness = activeProject ? readinessScore(activeProject, store) : null;
   const activePreflight = activeProject ? launchPreflight(activeProject, store) : [];

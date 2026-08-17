@@ -16207,6 +16207,68 @@ body > .createProjectModal .professionalCreateProjectShell {
   color: rgba(249, 235, 224, 0.6);
   overflow-wrap: anywhere;
 }
+.deploymentWalletSourcePanel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.72fr) minmax(210px, 0.52fr) minmax(240px, 0.7fr);
+  gap: 10px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(249, 235, 224, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.deploymentWalletSourcePanel > div,
+.deploymentWalletSourcePanel label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.deploymentWalletSourcePanel span,
+.deploymentWalletSourceCounts span {
+  color: rgba(249, 235, 224, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.deploymentWalletSourcePanel strong {
+  color: #f9ebe0;
+  font-size: 1rem;
+}
+.deploymentWalletSourcePanel small {
+  color: rgba(249, 235, 224, 0.62);
+  line-height: 1.35;
+}
+.deploymentWalletSourcePanel input,
+.deploymentWalletSourcePanel select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid rgba(249, 235, 224, 0.13);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(0, 0, 0, 0.26);
+  color: #f9ebe0;
+}
+.deploymentWalletSourceCounts {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px !important;
+}
+.deploymentWalletSourceCounts > div {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(249, 235, 224, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.deploymentWalletSourceCounts strong {
+  font-size: 1rem;
+}
 .deploymentExecutionMatrix {
   display: grid;
   gap: 14px;
@@ -16277,6 +16339,7 @@ body > .createProjectModal .professionalCreateProjectShell {
 .deploymentMatrixLayer.task { border-left: 2px solid rgba(212, 181, 255, 0.42); }
 @media (max-width: 1180px) {
   .deploymentExecutionMatrixHeader,
+  .deploymentWalletSourcePanel,
   .deploymentMatrixWalletHeader,
   .deploymentMatrixRailLayers {
     grid-template-columns: 1fr;

@@ -303,6 +303,8 @@ function phaseClass(phase: NonNullable<WalletPlanEntry['executionPhase']>) {
 }
 
 function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId }: { project: Project; wallets: Wallet[]; initial: LaunchConfig; selectedDevWalletId: string }) {
+  const [walletSearch, setWalletSearch] = useState('');
+  const [walletScope, setWalletScope] = useState<'all' | 'project' | 'global' | 'selected' | 'signer'>('all');
   const totals = wallets.reduce((acc, wallet) => {
     const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
     const phase = phaseFromPlan(plan);
@@ -315,6 +317,20 @@ function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId 
     acc.max += maxBuySol(plan);
     return acc;
   }, { balance: 0, active: 0, bundle: 0, sniper: 0, task: 0, planned: 0, max: 0 });
+  const normalizedSearch = walletSearch.trim().toLowerCase();
+  const filteredWallets = wallets.filter((wallet) => {
+    const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+    const phase = phaseFromPlan(plan);
+    const selected = phase !== 'observe';
+    const inProjectGroup = wallet.groupId === project.walletGroupId;
+    const matchesScope = walletScope === 'all'
+      || (walletScope === 'project' && inProjectGroup)
+      || (walletScope === 'global' && !inProjectGroup)
+      || (walletScope === 'selected' && selected)
+      || (walletScope === 'signer' && (wallet.custodyMode === 'managed-local' || phase === 'dev'));
+    const haystack = `${wallet.role} ${wallet.address} ${wallet.balanceSol} ${wallet.custodyMode ?? 'watch-only'} ${wallet.scope} ${wallet.groupId} ${wallet.purpose} ${phase}`.toLowerCase();
+    return matchesScope && (!normalizedSearch || haystack.includes(normalizedSearch));
+  });
 
   return (
     <section className="deploymentExecutionMatrixPanel" aria-label="Deployment execution matrix">
@@ -344,8 +360,35 @@ function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId 
         <div><span>04</span><strong>Review</strong><small>save, dry-run, then gate check</small></div>
       </div>
 
+      <section className="deploymentWalletSourcePanel" aria-label="Launch wallet source">
+        <div>
+          <span>Wallet source</span>
+          <strong>{wallets.length} Portfolio wallet{wallets.length === 1 ? '' : 's'} available</strong>
+          <small>{totals.active} selected for launch · project group {project.walletGroupId}</small>
+        </div>
+        <label>
+          <span>Search</span>
+          <input value={walletSearch} onChange={(event) => setWalletSearch(event.currentTarget.value)} placeholder="role, address, balance, custody, scope" />
+        </label>
+        <label>
+          <span>Scope</span>
+          <select value={walletScope} onChange={(event) => setWalletScope(event.currentTarget.value as typeof walletScope)}>
+            <option value="all">All Portfolio wallets</option>
+            <option value="project">Project group</option>
+            <option value="global">Global / other groups</option>
+            <option value="selected">Selected launch wallets</option>
+            <option value="signer">Signer-critical</option>
+          </select>
+        </label>
+        <div className="deploymentWalletSourceCounts">
+          <div><span>Project</span><strong>{wallets.filter((wallet) => wallet.groupId === project.walletGroupId).length}</strong></div>
+          <div><span>Other</span><strong>{wallets.filter((wallet) => wallet.groupId !== project.walletGroupId).length}</strong></div>
+          <div><span>Shown</span><strong>{filteredWallets.length}</strong></div>
+        </div>
+      </section>
+
       <div className="deploymentExecutionMatrix">
-        {wallets.map((wallet) => {
+        {filteredWallets.map((wallet) => {
           const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
           const phase = phaseFromPlan(plan);
           const fallbackTakeProfit = plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
@@ -430,7 +473,8 @@ function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId 
             </section>
           );
         })}
-        {!wallets.length && <div className="deploymentExecutionMatrixEmpty">No wallets are attached to this project wallet group.</div>}
+        {!wallets.length && <div className="deploymentExecutionMatrixEmpty">No Portfolio wallets are available for launch selection.</div>}
+        {Boolean(wallets.length && !filteredWallets.length) && <div className="deploymentExecutionMatrixEmpty">No wallets match the current launch wallet filters.</div>}
       </div>
     </section>
   );

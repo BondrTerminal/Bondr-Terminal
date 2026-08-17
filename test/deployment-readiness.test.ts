@@ -40,6 +40,7 @@ import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydi
 
 const durableWalletStoreSource = readFileSync(new URL('../apps/web/lib/durable-wallet-store.ts', import.meta.url), 'utf8');
 const launchConfigEditorSource = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
+const deploymentPageSource = readFileSync(new URL('../apps/web/app/deployment/page.tsx', import.meta.url), 'utf8');
 const globalCssSource = readFileSync(new URL('../apps/web/app/globals.css', import.meta.url), 'utf8');
 
 const wallet: Wallet = {
@@ -161,6 +162,11 @@ test('deployment editor consolidates dev bundle sniper and task wallet controls 
   assert.match(launchConfigEditorSource, /function LaunchExecutionMatrix/);
   assert.match(launchConfigEditorSource, /Deploy execution matrix/);
   assert.match(launchConfigEditorSource, /deploymentMatrixPath/);
+  assert.match(launchConfigEditorSource, /deploymentWalletSourcePanel/);
+  assert.match(launchConfigEditorSource, /Portfolio wallet/);
+  assert.match(launchConfigEditorSource, /walletSearch/);
+  assert.match(launchConfigEditorSource, /walletScope/);
+  assert.match(launchConfigEditorSource, /All Portfolio wallets/);
   assert.match(launchConfigEditorSource, /deploymentMatrixWalletBlock/);
   assert.match(launchConfigEditorSource, /deploymentMatrixRailLayers/);
   assert.match(launchConfigEditorSource, /name=\{`rail\.\$\{wallet\.id\}`\}/);
@@ -180,8 +186,11 @@ test('deployment editor consolidates dev bundle sniper and task wallet controls 
   assert.match(launchConfigEditorSource, /Deployment execution, signing, Jito relay submit, and broadcast remain gated/);
   assert.match(globalCssSource, /\.deploymentMatrixRailButtons label:has\(input:checked\)/);
   assert.match(globalCssSource, /\.deploymentMatrixPath/);
+  assert.match(globalCssSource, /\.deploymentWalletSourcePanel/);
   assert.match(globalCssSource, /\.deploymentMatrixWalletHeader/);
   assert.match(globalCssSource, /\.deploymentMatrixRailLayers/);
+  assert.match(deploymentPageSource, /store\.wallets\s*\n\s*\.filter\(\(wallet\) => !wallet\.archived\)/);
+  assert.doesNotMatch(deploymentPageSource, /LaunchConfigEditor project=\{activeProject\} wallets=\{selectedContext\?\.wallets/);
 });
 
 test('Meridian view payloads strip inline project asset data', () => {
