@@ -4,7 +4,7 @@ Date: 2026-08-16
 
 Goal: complete every live-readiness section up to the point where it is ready for controlled testing. This document stops before testing, signing, broadcast, funding, token launch, LP creation, Jito relay submission, env gate changes, or production mutation.
 
-Current remaining-test list is exposed in production by the read-only `/api/live-test-plan` contract. It maps every remaining controlled test to the harness/proof route that should stay deployed, and records retired harnesses so they are not reintroduced.
+Current remaining-test list is exposed in production by the read-only `/api/live-test-plan` contract. It treats only Jito bundle launch and sniper/task automation as new remaining test targets, separates already-proven recurring safety checks, and records retired harnesses so they are not reintroduced.
 
 ## Saved pre-live test ladder
 
@@ -175,7 +175,7 @@ Hard rule: live must open in stages, not as one switch.
    - 2026-08-16 progress: unauthenticated production smoke passed across 16 page routes and 7 API checks with live/signing/broadcast/deployment gates closed. Authenticated browser QA still needs operator session/manual wallet review.
    - 2026-08-16 progress: local authenticated route pass succeeded using the Meridian session endpoint without exposing the operator key. `/`, `/profile`, `/portfolio`, `/wallets`, `/deployment?project=sda`, `/sniper?project=sda`, `/liquidity?project=sda`, `/token-analyzer`, `/projects`, and `/project-dashboard` all returned 200 without the app error shell; execution capabilities kept live, signing, broadcast, funding broadcast, and deployment disabled. Remaining human check: visually confirm Turnkey/Profile Audit and browser-wallet alignment in Yakuzamoto's real browser session.
    - 2026-08-17 cleanup: removed the temporary authenticated manual QA checklist API after the route set was smoke-tested and deployed. Ongoing verification uses production smoke plus the Profile Audit UI instead of a dedicated harness route.
-   - 2026-08-17 progress: added `/api/live-test-plan` as the canonical read-only list of remaining controlled tests and the harness/proof routes that should remain deployed. Retired harnesses listed there: `/live-beta-test` and `/api/authenticated-qa-checklist`.
+   - 2026-08-17 progress: added `/api/live-test-plan` as the canonical read-only list of remaining controlled tests and the harness/proof routes that should remain deployed. Corrected it so the only new test targets are Jito bundle launch and sniper/task automation; previously proven checks live under recurring safety checks. Retired harnesses listed there: `/live-beta-test` and `/api/authenticated-qa-checklist`.
 2. Finish provider/RPC readiness agreement and secret-redaction review.
    - 2026-08-16 progress: `/api/provider-readiness` now derives Solana RPC live/modeled/provider-limited/unavailable status from the same shared RPC health model used by `/api/rpc-health` and `/api/terminal/live-readiness`; provider-limited/modeled states remain live blockers.
    - 2026-08-16 progress: provider error messages, provider-limited notes, bearer headers, credential query params, and secret-shaped URL paths are redacted before readiness responses surface them.

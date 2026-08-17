@@ -21,12 +21,21 @@ export type RetiredHarness = {
   reason: string;
 };
 
+export type RecurringSafetyCheck = {
+  id: string;
+  label: string;
+  status: 'cleared-current-production' | 'recurring-after-deploy' | 'manual-cleared';
+  harnesses: string[];
+  note: string;
+};
+
 export type LiveTestPlan = {
   contract: 'bondr-live-test-plan-v1';
-  status: 'ready-with-gated-tests';
+  status: 'new-tests-focused';
   liveExecutionAllowed: false;
   remainingCount: number;
   items: LiveTestPlanItem[];
+  recurringSafetyChecks: RecurringSafetyCheck[];
   retainedHarnesses: string[];
   retiredHarnesses: RetiredHarness[];
   safety: {
@@ -40,83 +49,6 @@ export type LiveTestPlan = {
 };
 
 const items: LiveTestPlanItem[] = [
-  {
-    id: 'baseline-app-smoke',
-    label: 'Baseline app route smoke',
-    status: 'needs-run',
-    harnessStatus: 'external-command',
-    harnesses: ['pnpm smoke:bondr', '/api/execution-capabilities', '/api/pre-live-dry-run'],
-    runWhen: 'After every deploy and before any live-gate ceremony.',
-    successProof: ['production smoke pages=16/apis=7/failures=0', 'all execution gates false unless explicitly testing a gate'],
-    blockers: [],
-    retireHarnessWhen: 'Never; this becomes permanent release verification.'
-  },
-  {
-    id: 'auth-profile-wallet-alignment',
-    label: 'Auth/Profile and browser-wallet alignment',
-    status: 'manual-review',
-    harnessStatus: 'implemented',
-    harnesses: ['/profile', '/api/account/readiness', '/api/turnkey/readiness', '/api/wallet-rail'],
-    runWhen: 'Before signing tests and after any Turnkey/auth/storage change.',
-    successProof: ['Profile Audit aligned', 'expected Turnkey subject matches active scoped subject', 'browser signer matches selected execution wallet'],
-    blockers: ['requires Yakuzamoto real browser session'],
-    retireHarnessWhen: 'Never; Profile Audit is an operator safety surface, not a disposable harness.'
-  },
-  {
-    id: 'provider-rpc-readiness',
-    label: 'Provider/RPC readiness agreement',
-    status: 'needs-run',
-    harnessStatus: 'implemented',
-    harnesses: ['/api/provider-readiness', '/api/rpc-health', '/api/terminal/live-readiness'],
-    runWhen: 'Before quote/build/simulation, before live gate opens, and after provider/env changes.',
-    successProof: ['provider readiness and rpc health agree', 'provider secrets redacted', 'provider-limited states block live readiness'],
-    blockers: ['real provider capacity may still be external'],
-    retireHarnessWhen: 'Never; provider health is a permanent preflight.'
-  },
-  {
-    id: 'quote-build-simulate-sign',
-    label: 'Quote -> unsigned build -> simulate -> signed review',
-    status: 'needs-run',
-    harnessStatus: 'implemented-gated',
-    harnesses: ['/api/execution-quote', '/api/execution-swap', '/api/terminal/signer-dry-run', '/api/terminal/signed-review'],
-    runWhen: 'With the intended browser signer before any broadcast/deployment gate is opened.',
-    successProof: ['unsigned build returns message hash evidence', 'simulation proof hash matches build hash', 'signed review blocks tampered payloads'],
-    blockers: ['requires real browser wallet signature for final manual proof'],
-    retireHarnessWhen: 'Only after the same proof chain is embedded in the normal Terminal/Deployment flow and no standalone route is needed.'
-  },
-  {
-    id: 'single-broadcast-gate',
-    label: 'Tiny single-broadcast gate test and rollback',
-    status: 'ready-for-controlled-run',
-    harnessStatus: 'implemented-gated',
-    harnesses: ['/api/send-signed-transaction', '/api/execution-capabilities', '/api/terminal/live-readiness', 'docs/BONDR_SINGLE_BROADCAST_ROLLBACK_RUNBOOK_2026-08-16.md'],
-    runWhen: 'Only after explicit approval to temporarily open the minimum live/signing/broadcast gates.',
-    successProof: ['one submit attempt only', 'maxRetries=0', 'skipPreflight=false', 'rollback returns all gates false'],
-    blockers: ['requires explicit live gate approval', 'requires rollback operator at keyboard'],
-    retireHarnessWhen: 'Never; rollback and blocked-submit probes are permanent safety equipment.'
-  },
-  {
-    id: 'pumpfun-controlled-launch',
-    label: 'Pump.fun controlled launch path',
-    status: 'ready-for-controlled-run',
-    harnessStatus: 'implemented-gated',
-    harnesses: ['/api/deployment/pumpportal/preview', '/api/deployment/pumpportal/build-create', '/api/pre-live-dry-run', '/api/projects/[id]/launch-receipt', '/api/projects/[id]/launch-reconciliation'],
-    runWhen: 'After IPFS metadata, dev wallet, signer proof, simulation proof, and explicit deployment gate approval.',
-    successProof: ['provider build returns unsigned handoff', 'simulation proof binds to create tx hash', 'receipt persists signature/mint/provider/route'],
-    blockers: ['deployment gate closed', 'broadcast gate closed', 'requires explicit launch approval'],
-    retireHarnessWhen: 'Retire preview-only copy only after live Deployment UI owns the same proof steps directly.'
-  },
-  {
-    id: 'raydium-lp-burn',
-    label: 'Raydium LP add, LP account proof, and LP burn',
-    status: 'needs-real-inputs',
-    harnessStatus: 'implemented-gated',
-    harnesses: ['/api/deployment/raydium/config', '/api/deployment/raydium/build-lp', '/api/transaction-policy/simulate-or-provider-simulate', '/api/deployment/raydium/lp-account-proof'],
-    runWhen: 'After a controlled Raydium LP transaction signature, pool id, owner, and positive LP token account exist.',
-    successProof: ['Raydium config validates CPMM/public-key inputs', 'LP build has no signing/broadcast', 'post-broadcast LP proof verifies pool/LP mint/owner/amount', 'LP burn handoff requires matching simulation proof'],
-    blockers: ['needs actual controlled Raydium LP transaction tuple'],
-    retireHarnessWhen: 'Only after real Raydium flow produces these proofs automatically inside Deployment.'
-  },
   {
     id: 'jito-bundle-launch',
     label: 'Jito packed bundle launch rail',
@@ -138,39 +70,79 @@ const items: LiveTestPlanItem[] = [
     successProof: ['pool freshness proof passes', 'wallet allowlist and signer binding pass', 'TP/SL/trailing/cooldown lifecycle is correct', 'no fake-volume/self-trade path exists'],
     blockers: ['durable trigger source missing', 'durable task worker missing', 'automatic recovery runner missing'],
     retireHarnessWhen: 'Only after durable automation workers expose equivalent dry-run and proof receipts.'
+  }
+];
+
+const recurringSafetyChecks: RecurringSafetyCheck[] = [
+  {
+    id: 'baseline-app-smoke',
+    label: 'Baseline app route smoke',
+    status: 'cleared-current-production',
+    harnesses: ['pnpm smoke:bondr', '/api/execution-capabilities', '/api/pre-live-dry-run'],
+    note: 'Already run on current production; repeat after every deploy.'
+  },
+  {
+    id: 'auth-profile-wallet-alignment',
+    label: 'Auth/Profile and browser-wallet alignment',
+    status: 'manual-cleared',
+    harnesses: ['/profile', '/api/account/readiness', '/api/turnkey/readiness', '/api/wallet-rail'],
+    note: 'Yakuzamoto confirmed Profile Audit aligned for the current Phantom signer; repeat after auth/wallet changes.'
+  },
+  {
+    id: 'provider-rpc-readiness',
+    label: 'Provider/RPC readiness agreement',
+    status: 'cleared-current-production',
+    harnesses: ['/api/provider-readiness', '/api/rpc-health', '/api/terminal/live-readiness'],
+    note: 'Already run on current production; repeat before any live-gate ceremony.'
+  },
+  {
+    id: 'quote-build-simulate-sign',
+    label: 'Quote -> unsigned build -> simulate -> signed review',
+    status: 'cleared-current-production',
+    harnesses: ['/api/execution-quote', '/api/execution-swap', '/api/terminal/signer-dry-run', '/api/terminal/signed-review'],
+    note: 'Existing browser signing flow was already tested; machine-side policy probes passed on current production.'
+  },
+  {
+    id: 'single-broadcast-gate',
+    label: 'Tiny single-broadcast gate test and rollback',
+    status: 'recurring-after-deploy',
+    harnesses: ['/api/send-signed-transaction', '/api/execution-capabilities', '/api/terminal/live-readiness', 'docs/BONDR_SINGLE_BROADCAST_ROLLBACK_RUNBOOK_2026-08-16.md'],
+    note: 'Not new harness work; run only when intentionally opening a live broadcast gate.'
+  },
+  {
+    id: 'pumpfun-controlled-launch',
+    label: 'Pump.fun controlled launch path',
+    status: 'cleared-current-production',
+    harnesses: ['/api/deployment/pumpportal/preview', '/api/deployment/pumpportal/build-create', '/api/pre-live-dry-run', '/api/projects/[id]/launch-receipt', '/api/projects/[id]/launch-reconciliation'],
+    note: 'Controlled Pump.fun launch path already tested; retain probes for future launches.'
+  },
+  {
+    id: 'raydium-lp-burn',
+    label: 'Raydium LP add, LP account proof, and LP burn',
+    status: 'recurring-after-deploy',
+    harnesses: ['/api/deployment/raydium/config', '/api/deployment/raydium/build-lp', '/api/transaction-policy/simulate-or-provider-simulate', '/api/deployment/raydium/lp-account-proof'],
+    note: 'Not a new test target for this phase unless a real Raydium LP tuple is provided.'
   },
   {
     id: 'risk-kill-switch',
     label: 'Risk limits and kill-switch behavior',
-    status: 'needs-real-inputs',
-    harnessStatus: 'implemented',
+    status: 'cleared-current-production',
     harnesses: ['/api/execution-capabilities', '/api/terminal/live-readiness', '/api/pre-live-dry-run', 'HALT file probe'],
-    runWhen: 'Before any live signing/broadcast/deployment gate opens and during rollback drills.',
-    successProof: ['daily loss/drawdown observations are present', 'HALT blocks signing/broadcast/deployment', 'risk limits are shared across execution paths'],
-    blockers: ['production needs real live drawdown/daily-loss observation source'],
-    retireHarnessWhen: 'Never; risk readiness is permanent.'
+    note: 'Machine-side risk readiness passed; live drawdown source remains a future live-mode requirement.'
   },
   {
     id: 'security-custody',
     label: 'Security, custody, and mutation gate probes',
-    status: 'needs-run',
-    harnessStatus: 'implemented',
+    status: 'cleared-current-production',
     harnesses: ['/api/wallet-vault', '/api/send-signed-transaction', '/api/projects/[id]/launch-config', '/api/projects/[id]/launch-receipt', '/api/deployment/pumpportal/build-create'],
-    runWhen: 'After every deploy and before any live-gate ceremony.',
-    successProof: ['wallet vault POST 403', 'signed submit blocked while gates closed', 'sensitive mutations require Meridian auth', 'no private-key UI returns'],
-    blockers: [],
-    retireHarnessWhen: 'Never; these are permanent safety probes.'
+    note: 'Already run on current production; repeat after every deploy.'
   },
   {
     id: 'observability-recovery',
     label: 'Observability and recovery proof',
-    status: 'manual-review',
-    harnessStatus: 'implemented',
+    status: 'cleared-current-production',
     harnesses: ['/api/client-error-report', '/api/execution/recovery-status', 'docs/BONDR_FAILURE_RESPONSE_PLAYBOOKS_2026-08-16.md', '/tmp/bondr-smoke-*.json'],
-    runWhen: 'After any route failure, failed broadcast simulation, or deploy.',
-    successProof: ['client error report is bounded/redacted', 'route error screen exposes route/digest/type', 'smoke artifact exists and is redacted', 'failure playbook maps to recovery proof'],
-    blockers: ['real browser failed-closed path only occurs when a crash is observed'],
-    retireHarnessWhen: 'Never; recovery evidence is permanent.'
+    note: 'Machine-side redaction/recovery status passed; real crash recovery is event-driven.'
   }
 ];
 
@@ -194,11 +166,12 @@ const retiredHarnesses: RetiredHarness[] = [
 export function buildLiveTestPlan(): LiveTestPlan {
   return {
     contract: 'bondr-live-test-plan-v1',
-    status: 'ready-with-gated-tests',
+    status: 'new-tests-focused',
     liveExecutionAllowed: false,
     remainingCount: items.length,
     items,
-    retainedHarnesses: Array.from(new Set(items.flatMap((item) => item.harnesses))).sort(),
+    recurringSafetyChecks,
+    retainedHarnesses: Array.from(new Set([...items.flatMap((item) => item.harnesses), ...recurringSafetyChecks.flatMap((item) => item.harnesses)])).sort(),
     retiredHarnesses,
     safety: {
       readOnly: true,
