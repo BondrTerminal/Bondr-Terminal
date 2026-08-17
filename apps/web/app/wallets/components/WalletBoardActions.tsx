@@ -7,6 +7,7 @@ import { getProfileScopedActiveWallet, getProfileScopedWalletRailDraft, setProfi
 type WalletAction = 'phantom' | 'track' | 'send' | 'receive' | 'archive' | 'group' | 'export' | null;
 type WalletFilter = 'all' | 'project' | 'global' | 'trading' | 'treasury' | 'archived' | 'deployer' | 'launch' | 'reserve';
 type RailPhase = 'dev' | 'bundle' | 'sniper' | 'task' | 'observe';
+type WalletViewMode = 'simple' | 'advanced' | 'expert';
 
 type BoardWallet = {
   id: string;
@@ -197,6 +198,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const [jitoStatus, setJitoStatus] = useState<JitoStatus | null>(null);
   const [sendBuildResult, setSendBuildResult] = useState<SendBuildResult>({ status: 'idle', message: 'Load the capped funding test, then build the unsigned transaction.' });
   const [railDraft, setRailDraft] = useState<Record<RailPhase, string[]>>(() => initialRailDraft(wallets));
+  const [viewMode, setViewMode] = useState<WalletViewMode>('simple');
   const [loading, setLoading] = useState(false);
   const visibleWallets = useMemo(() => wallets.filter((wallet) => matchesFilter(wallet, filter, selectedGroupId)), [wallets, filter, selectedGroupId]);
   const activeWallets = wallets.filter((wallet) => !wallet.archived);
@@ -237,6 +239,14 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
   const walletActivityRows = [...wallets]
     .sort((a, b) => String(b.lastActivity).localeCompare(String(a.lastActivity)))
     .slice(0, 6);
+  const needsFundingCount = activeWallets.filter((wallet) => wallet.balanceStatus === 'live' ? wallet.balanceSol <= 0 : wallet.balanceStatus !== 'live').length;
+  const readyWalletCount = activeWallets.filter((wallet) => !wallet.archived && wallet.balanceStatus === 'live' && wallet.balanceSol > 0).length;
+  const signerReadyCount = activeWallets.filter((wallet) => canWalletSign(wallet, selectedActiveWallet)).length;
+  const walletViewModes: Array<{ id: WalletViewMode; label: string; detail: string }> = [
+    { id: 'simple', label: 'Simple', detail: 'retail setup' },
+    { id: 'advanced', label: 'Advanced', detail: 'rails + readiness' },
+    { id: 'expert', label: 'Expert', detail: 'full controls' }
+  ];
 
   function openAction(nextAction: Exclude<WalletAction, null>) {
     setAddressInput('');
@@ -642,6 +652,8 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
       <div className="walletBoardMetrics">
         <div><span>Total SOL</span><strong>{totalSol.toFixed(4)}</strong><small>source-labeled balance: live, modeled, or provider-limited</small></div>
         <div><span>Active</span><strong>{activeCount}</strong><small>wallets available</small></div>
+        <div><span>Ready</span><strong>{readyWalletCount}</strong><small>live balance and available for setup</small></div>
+        <div><span>Needs attention</span><strong>{needsFundingCount}</strong><small>funding, provider, or balance review</small></div>
         <div><span>Archived</span><strong>{archivedCount}</strong><small>audit retained</small></div>
         <div><span>Hydration</span><strong>{hydrationStatus}</strong><small>{hydrationProvider}</small></div>
         <div><span>Server custody</span><strong>disabled</strong><small>{managedWalletCount ? `${managedWalletCount} legacy managed record(s)` : 'browser/watch-only only'}</small></div>
@@ -649,7 +661,7 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
 
       <div className="walletReadinessRail" aria-label="Wallet readiness">
         <div><span>Selected wallet</span><strong>{selectedWallet ? selectedWallet.shortAddress : 'none'}</strong><small>{selectedWallet ? selectedWallet.role : 'Select a wallet row'}</small></div>
-        <div><span>Signer match</span><strong>{fromWallet && selectedActiveWallet === fromWallet.address ? 'matched' : 'review'}</strong><small>{fromWallet ? `Send source ${fromWallet.shortAddress}` : 'No send source'}</small></div>
+        <div><span>Signer match</span><strong>{signerReadyCount ? `${signerReadyCount} ready` : 'review'}</strong><small>{fromWallet ? `Send source ${fromWallet.shortAddress}` : 'No send source'}</small></div>
         <div><span>Signing</span><strong>{executionCapabilities?.signingEnabled ? 'enabled' : 'disabled'}</strong><small>{executionCapabilities?.readinessLevel ?? executionCapabilities?.readiness ?? 'checking readiness'}</small></div>
         <div><span>General broadcast</span><strong>{generalBroadcastEnabled ? 'enabled' : 'disabled'}</strong><small>Broad sends remain policy-gated</small></div>
         <div><span>Funding test</span><strong>{fundingGateEnabled ? 'enabled' : 'disabled'}</strong><small>{fundingTestShape ? 'approved shape loaded' : 'load capped test'}</small></div>
@@ -765,22 +777,43 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
         </div>
       </section>
 
-      <nav className="walletBoardTabs" aria-label="Wallet board filters">
-        {tabs.map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} onClick={() => setFilter(value)} key={value}>{label}</button>)}
-      </nav>
+      <section className="walletMatrixControlBar" aria-label="Wallet matrix controls">
+        <div>
+          <span>Wallet matrix</span>
+          <strong>{viewMode === 'simple' ? 'Simple setup view' : viewMode === 'advanced' ? 'Advanced routing view' : 'Expert operations view'}</strong>
+          <small>{visibleWallets.length} visible · rows stay role-first, with advanced controls revealed only when needed.</small>
+        </div>
+        <nav className="walletViewModeTabs" aria-label="Wallet matrix view mode">
+          {walletViewModes.map((mode) => (
+            <button type="button" className={viewMode === mode.id ? 'active' : ''} onClick={() => setViewMode(mode.id)} key={mode.id}>
+              <strong>{mode.label}</strong>
+              <span>{mode.detail}</span>
+            </button>
+          ))}
+        </nav>
+        <nav className="walletBoardTabs" aria-label="Wallet board filters">
+          {tabs.map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} onClick={() => setFilter(value)} key={value}>{label}</button>)}
+        </nav>
+      </section>
 
       {message && <div className={`walletBoardMessage ${message.type}`}>{message.text}</div>}
 
       <div className="walletListWrap">
-        <div className="walletList" role="table" aria-label="Wallet list">
-          <div className="walletListRow walletListHead" role="row">
-            <span></span><span>Wallet</span><span>Address</span><span>Balance</span><span>Group</span><span>Activity</span><span>Status</span><span>Actions</span>
+        <div className={`walletList walletMatrix-${viewMode}`} role="table" aria-label="Wallet list">
+          <div className={`walletListRow walletListHead walletMatrixRow walletMatrix-${viewMode}`} role="row">
+            {viewMode === 'simple'
+              ? <><span>Wallet</span><span>Role</span><span>Balance</span><span>Readiness</span><span>Next action</span></>
+              : viewMode === 'advanced'
+                ? <><span>Wallet</span><span>Address</span><span>Balance</span><span>Group</span><span>Rail</span><span>Readiness</span><span>Actions</span></>
+                : <><span>Use</span><span>Wallet</span><span>Address</span><span>Balance</span><span>Group</span><span>Activity</span><span>Status</span><span>Rail controls</span><span>Actions</span></>}
           </div>
           {visibleWallets.map((wallet) => {
             const railPhase = phaseForWallet(wallet.id);
             const signerReady = canWalletSign(wallet, selectedActiveWallet);
+            const readinessLabel = signerReady ? 'Ready' : wallet.balanceStatus !== 'live' ? 'Needs balance' : wallet.balanceSol <= 0 ? 'Needs funding' : 'Needs signer';
+            const nextActionLabel = signerReady ? 'Open Launch' : wallet.balanceStatus !== 'live' || wallet.balanceSol <= 0 ? 'Receive' : 'Select signer';
             return (
-            <div className={`walletListRow walletCenterBoxRow walletBoxLayout rail-${railPhase}`} role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
+            <div className={`walletListRow walletCenterBoxRow walletBoxLayout walletMatrixRow walletMatrix-${viewMode} rail-${railPhase}`} role="row" key={wallet.id} onDoubleClick={() => setDetailWalletId(wallet.id)}>
               <div className="walletBoxLayer walletBoxTopLayer">
                 <label className="walletSelectCell"><input type="checkbox" checked={selectedActiveWallet === wallet.address} readOnly title={selectedActiveWallet === wallet.address ? 'Active in this browser' : 'Not active'} /> {selectedActiveWallet === wallet.address ? 'active' : 'selectable'}</label>
                 <span className={wallet.archived ? 'statusChip warn' : wallet.status === 'active' ? 'statusChip good' : 'statusChip'}>{wallet.archived ? 'archived' : wallet.status}</span>
@@ -797,7 +830,8 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
                 <div className="walletBalanceCell"><strong>{walletSolDisplay(wallet)}</strong><small title={wallet.balanceNote}>{wallet.balanceStatus === 'provider-limited' ? 'provider-limited' : wallet.balanceStatus === 'modeled' ? 'modeled · not live funds' : wallet.balanceStatus} · {wallet.balanceSource}</small></div>
                 <div className="walletGroupCell"><strong>{wallet.groupName}</strong><small>{wallet.custodyMode === 'managed-local' ? 'legacy managed record; key actions disabled' : 'watch-only no key'}</small></div>
                 <div className="walletActivityCell"><strong>{wallet.lastActivity}</strong><small>{wallet.lastActivityDetail}</small></div>
-                <div className="walletSignerCell"><strong>{signerReady ? 'signer ready' : 'signer blocked'}</strong><small>{wallet.custodyMode === 'managed-local' ? 'select matching browser wallet instead' : selectedActiveWallet === wallet.address ? 'browser signer matches' : 'watch-only or inactive browser signer'}</small></div>
+                <div className="walletSignerCell"><strong>{readinessLabel}</strong><small>{wallet.custodyMode === 'managed-local' ? 'select matching browser wallet instead' : selectedActiveWallet === wallet.address ? 'browser signer matches' : 'watch-only or inactive browser signer'}</small></div>
+                <div className="walletNextActionCell"><strong>{nextActionLabel}</strong><small>{railLabel(railPhase)} · {wallet.roleBadge}</small></div>
               </div>
               <div className="walletRailAssignLayer">
                 <button type="button" className={railPhase === 'dev' ? 'active' : ''} onClick={() => assignWalletRail(wallet.id, 'dev')}>Dev</button>
@@ -807,13 +841,15 @@ export function WalletBoardActions({ wallets, groups, selectedProjectName, selec
                 <button type="button" className={railPhase === 'observe' ? 'active' : ''} onClick={() => assignWalletRail(wallet.id, 'observe')}>Observe</button>
               </div>
               <div className="walletRowActions">
-                <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('send'); }}>Send</button>
                 <button type="button" onClick={() => selectWallet(wallet)}>{selectedActiveWallet === wallet.address ? 'Selected' : 'Select'}</button>
                 <button type="button" onClick={() => { setReceiveWalletId(wallet.id); openAction('receive'); }}>Receive</button>
-                <button type="button" onClick={() => setDetailWalletId(wallet.id)}>Details</button>
-                <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('export'); }}>Public Record</button>
-                <button type="button" onClick={() => updateWallet(wallet.id, { archived: !wallet.archived, archiveReason: wallet.archived ? '' : 'Archived from Wallet Board row action.' }, wallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{wallet.archived ? 'Restore' : 'Archive'}</button>
-                <a href={deploymentHref}>Launch Prep</a><a href={terminalHref}>Terminal</a><a href={portfolioHref}>Portfolio</a>
+                <a href={deploymentHref}>Launch Prep</a>
+                {viewMode !== 'simple' && <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('send'); }}>Send</button>}
+                {viewMode !== 'simple' && <button type="button" onClick={() => setDetailWalletId(wallet.id)}>Details</button>}
+                {viewMode !== 'simple' && <a href={terminalHref}>Terminal</a>}
+                {viewMode === 'expert' && <button type="button" onClick={() => { setFromWalletId(wallet.id); openAction('export'); }}>Public Record</button>}
+                {viewMode === 'expert' && <button type="button" onClick={() => updateWallet(wallet.id, { archived: !wallet.archived, archiveReason: wallet.archived ? '' : 'Archived from Wallet Board row action.' }, wallet.archived ? 'Wallet restored.' : 'Wallet archived.')}>{wallet.archived ? 'Restore' : 'Archive'}</button>}
+                {viewMode === 'expert' && <a href={portfolioHref}>Portfolio</a>}
               </div>
             </div>
           )})}

@@ -18923,6 +18923,245 @@ body > .createProjectModal .professionalCreateProjectShell {
   width: 100% !important;
   justify-self: stretch !important;
 }
+
+/* Retail wallet command matrix — fitted rows with progressive detail. */
+.walletMatrixControlBar {
+  display: grid;
+  grid-template-columns: minmax(240px, .8fr) minmax(280px, .9fr) minmax(0, 1.35fr);
+  gap: var(--bondr-panel-gap, 14px);
+  align-items: stretch;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(7, 6, 5, .74);
+}
+.walletMatrixControlBar > div,
+.walletViewModeTabs,
+.walletMatrixControlBar .walletBoardTabs {
+  min-width: 0;
+}
+.walletMatrixControlBar > div {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+.walletMatrixControlBar > div span,
+.walletViewModeTabs button span {
+  color: var(--muted, #9b8d84);
+  font-size: .7rem;
+  font-weight: 950;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.walletMatrixControlBar > div strong {
+  color: var(--bondr-linen, #f9ebe0);
+  font-size: clamp(1.15rem, 1.45vw, 1.7rem);
+  line-height: 1;
+}
+.walletMatrixControlBar > div small {
+  color: var(--muted, #9b8d84);
+  line-height: 1.35;
+}
+.walletViewModeTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.walletViewModeTabs button {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 13px;
+  padding: 10px;
+  background: rgba(255, 255, 255, .045);
+  color: var(--text, #f9ebe0);
+  cursor: pointer;
+  text-align: left;
+}
+.walletViewModeTabs button strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: .86rem;
+}
+.walletViewModeTabs button.active {
+  border-color: rgba(255, 127, 17, .48);
+  background: rgba(255, 127, 17, .14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.walletMatrixControlBar .walletBoardTabs {
+  align-self: stretch;
+  align-content: start;
+}
+.walletList.walletMatrix-simple,
+.walletList.walletMatrix-advanced,
+.walletList.walletMatrix-expert {
+  overflow-x: auto;
+}
+.walletListRow.walletMatrixRow {
+  width: 100%;
+  border-bottom: 1px solid rgba(249, 235, 224, .1);
+}
+.walletListHead.walletMatrixRow {
+  color: var(--muted, #9b8d84);
+  font-size: .7rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.walletCenterBoxRow.walletMatrix-simple {
+  grid-template-columns: minmax(250px, 1.25fr) minmax(150px, .62fr) minmax(360px, 1.45fr) minmax(260px, .95fr);
+  min-width: 1040px;
+  gap: 12px;
+}
+.walletListHead.walletMatrix-simple {
+  grid-template-columns: minmax(250px, 1.25fr) minmax(150px, .62fr) minmax(140px, .48fr) minmax(180px, .58fr) minmax(260px, .95fr);
+  min-width: 1040px;
+}
+.walletCenterBoxRow.walletMatrix-advanced {
+  grid-template-columns: minmax(300px, 1.1fr) minmax(480px, 1.55fr) minmax(260px, .85fr) minmax(380px, 1.05fr);
+  min-width: 1420px;
+  gap: 12px;
+}
+.walletListHead.walletMatrix-advanced {
+  grid-template-columns: minmax(220px, .85fr) minmax(250px, 1fr) minmax(150px, .58fr) minmax(170px, .62fr) minmax(250px, .9fr) minmax(180px, .7fr) minmax(240px, .9fr);
+  min-width: 1420px;
+}
+.walletCenterBoxRow.walletMatrix-expert {
+  grid-template-columns: minmax(140px, .45fr) minmax(320px, 1fr) minmax(520px, 1.55fr) minmax(360px, 1fr) minmax(360px, 1.08fr) minmax(430px, 1.22fr);
+  min-width: 1900px;
+  gap: 12px;
+}
+.walletListHead.walletMatrix-expert {
+  grid-template-columns: minmax(80px, .28fr) minmax(230px, .82fr) minmax(260px, .92fr) minmax(150px, .54fr) minmax(170px, .58fr) minmax(180px, .62fr) minmax(140px, .48fr) minmax(250px, .86fr) minmax(320px, 1.1fr);
+  min-width: 1900px;
+}
+.walletMatrix-simple .walletBoxIdentityLayer {
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.walletMatrix-simple .walletAddressCell input,
+.walletMatrix-simple .walletGroupCell,
+.walletMatrix-simple .walletActivityCell,
+.walletMatrix-simple .walletRailAssignLayer {
+  display: none !important;
+}
+.walletMatrix-simple .walletBoxTopLayer {
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+}
+.walletMatrix-simple .walletBoxMetaLayer {
+  grid-column: auto;
+  grid-template-columns: minmax(130px, .7fr) minmax(150px, .75fr) minmax(150px, .75fr) !important;
+  align-items: stretch;
+}
+.walletMatrix-simple .walletRowActions {
+  grid-column: auto;
+  justify-content: flex-start;
+  align-content: center;
+}
+.walletMatrix-advanced .walletBoxIdentityLayer {
+  grid-column: auto;
+  grid-template-columns: minmax(170px, .72fr) minmax(220px, 1fr) !important;
+}
+.walletMatrix-advanced .walletBoxMetaLayer {
+  grid-column: auto;
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) !important;
+}
+.walletMatrix-advanced .walletActivityCell {
+  display: none !important;
+}
+.walletMatrix-advanced .walletRailAssignLayer {
+  grid-column: auto;
+  align-content: center;
+}
+.walletMatrix-advanced .walletRowActions {
+  grid-column: auto;
+  align-content: center;
+}
+.walletMatrix-expert .walletBoxTopLayer,
+.walletMatrix-expert .walletBoxIdentityLayer,
+.walletMatrix-expert .walletBoxMetaLayer,
+.walletMatrix-expert .walletRailAssignLayer,
+.walletMatrix-expert .walletRowActions {
+  grid-column: auto;
+}
+.walletMatrix-expert .walletBoxIdentityLayer {
+  grid-template-columns: minmax(170px, .72fr) minmax(230px, 1fr) !important;
+}
+.walletMatrix-expert .walletBoxMetaLayer {
+  grid-template-columns: repeat(4, minmax(145px, 1fr)) !important;
+}
+.walletNextActionCell,
+.walletSignerCell {
+  min-width: 0;
+}
+.walletNextActionCell strong,
+.walletSignerCell strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walletNextActionCell small,
+.walletSignerCell small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #9b8d84);
+  font-size: .72rem;
+  line-height: 1.3;
+}
+.walletRailAssignLayer {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(70px, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.walletRailAssignLayer button {
+  min-width: 0;
+  border: 1px solid rgba(249, 235, 224, .14);
+  border-radius: 10px;
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, .045);
+  color: var(--muted, #9b8d84);
+  font-size: .72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.walletRailAssignLayer button.active {
+  border-color: rgba(255, 127, 17, .46);
+  background: rgba(255, 127, 17, .14);
+  color: var(--bondr-linen, #f9ebe0);
+}
+@media (max-width: 1180px) {
+  .walletMatrixControlBar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .walletCenterBoxRow.walletMatrix-simple,
+  .walletCenterBoxRow.walletMatrix-advanced,
+  .walletCenterBoxRow.walletMatrix-expert,
+  .walletListHead.walletMatrix-simple,
+  .walletListHead.walletMatrix-advanced,
+  .walletListHead.walletMatrix-expert {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+  .walletMatrix-simple .walletBoxMetaLayer,
+  .walletMatrix-advanced .walletBoxMetaLayer,
+  .walletMatrix-expert .walletBoxMetaLayer,
+  .walletMatrix-advanced .walletBoxIdentityLayer,
+  .walletMatrix-expert .walletBoxIdentityLayer {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .walletListHead.walletMatrixRow {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .walletViewModeTabs,
+  .walletRailAssignLayer {
+    grid-template-columns: 1fr;
+  }
+}
 .bondrFinalShell .compactTradeGrid .terminalChartColumn,
 .bondrFinalShell .compactTradeGrid .premiumChartColumn {
   min-height: clamp(520px, 58vh, 780px) !important;

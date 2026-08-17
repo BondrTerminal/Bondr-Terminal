@@ -41,6 +41,7 @@ import { POST as raydiumBuildLpPost } from '../apps/web/app/api/deployment/raydi
 const durableWalletStoreSource = readFileSync(new URL('../apps/web/lib/durable-wallet-store.ts', import.meta.url), 'utf8');
 const launchConfigEditorSource = readFileSync(new URL('../apps/web/app/deployment/components/LaunchConfigEditor.tsx', import.meta.url), 'utf8');
 const deploymentPageSource = readFileSync(new URL('../apps/web/app/deployment/page.tsx', import.meta.url), 'utf8');
+const walletBoardSource = readFileSync(new URL('../apps/web/app/wallets/components/WalletBoardActions.tsx', import.meta.url), 'utf8');
 const globalCssSource = readFileSync(new URL('../apps/web/app/globals.css', import.meta.url), 'utf8');
 
 const wallet: Wallet = {
@@ -216,6 +217,29 @@ test('sitewide layout uses calibrated operator workspaces instead of oversized c
   assert.doesNotMatch(globalCssSource, /BONDR sitewide workspace expansion/);
   assert.match(globalCssSource, /@media \(min-width: 1600px\)/);
   assert.match(globalCssSource, /@media \(max-width: 1180px\)/);
+});
+
+test('wallet center uses a retail-first progressive wallet command matrix', () => {
+  assert.match(walletBoardSource, /type WalletViewMode = 'simple' \| 'advanced' \| 'expert'/);
+  assert.match(walletBoardSource, /useState<WalletViewMode>\('simple'\)/);
+  assert.match(walletBoardSource, /Wallet matrix/);
+  assert.match(walletBoardSource, /Simple setup view/);
+  assert.match(walletBoardSource, /Advanced routing view/);
+  assert.match(walletBoardSource, /Expert operations view/);
+  assert.match(walletBoardSource, /walletViewModes\.map/);
+  assert.match(walletBoardSource, /walletMatrix-\$\{viewMode\}/);
+  assert.match(walletBoardSource, /const readinessLabel = signerReady \? 'Ready'/);
+  assert.match(walletBoardSource, /const nextActionLabel = signerReady \? 'Open Launch'/);
+  assert.match(walletBoardSource, /viewMode !== 'simple' && <button type="button" onClick=\{\(\) => \{ setFromWalletId\(wallet\.id\); openAction\('send'\); \}\}>Send<\/button>/);
+  assert.match(walletBoardSource, /viewMode === 'expert' && <button type="button" onClick=\{\(\) => \{ setFromWalletId\(wallet\.id\); openAction\('export'\); \}\}>Public Record<\/button>/);
+  assert.match(globalCssSource, /Retail wallet command matrix/);
+  assert.match(globalCssSource, /\.walletMatrixControlBar\s*\{/);
+  assert.match(globalCssSource, /\.walletViewModeTabs\s*\{/);
+  assert.match(globalCssSource, /\.walletCenterBoxRow\.walletMatrix-simple\s*\{/);
+  assert.match(globalCssSource, /\.walletMatrix-simple \.walletRailAssignLayer\s*\{/);
+  assert.match(globalCssSource, /\.walletCenterBoxRow\.walletMatrix-advanced\s*\{/);
+  assert.match(globalCssSource, /\.walletCenterBoxRow\.walletMatrix-expert\s*\{/);
+  assert.match(globalCssSource, /\.walletRailAssignLayer\s*\{/);
 });
 
 test('Meridian view payloads strip inline project asset data', () => {
