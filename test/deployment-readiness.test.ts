@@ -160,6 +160,9 @@ test('deployment readiness tolerates partial launch config rows without wallet p
 test('deployment editor consolidates dev bundle sniper and task wallet controls into deploy matrix', () => {
   assert.match(launchConfigEditorSource, /function LaunchExecutionMatrix/);
   assert.match(launchConfigEditorSource, /Deploy execution matrix/);
+  assert.match(launchConfigEditorSource, /deploymentMatrixPath/);
+  assert.match(launchConfigEditorSource, /deploymentMatrixWalletBlock/);
+  assert.match(launchConfigEditorSource, /deploymentMatrixRailLayers/);
   assert.match(launchConfigEditorSource, /name=\{`rail\.\$\{wallet\.id\}`\}/);
   assert.match(launchConfigEditorSource, /phaseForWallet\(form, wallet, index, devWalletId\)/);
   assert.match(launchConfigEditorSource, /phase === 'dev' \? `devPlan\.\$\{wallet\.id\}`/);
@@ -176,6 +179,9 @@ test('deployment editor consolidates dev bundle sniper and task wallet controls 
   assert.match(launchConfigEditorSource, /const maxBuySol = phase === 'task'\s+\? taskBuyMaxSol/);
   assert.match(launchConfigEditorSource, /Deployment execution, signing, Jito relay submit, and broadcast remain gated/);
   assert.match(globalCssSource, /\.deploymentMatrixRailButtons label:has\(input:checked\)/);
+  assert.match(globalCssSource, /\.deploymentMatrixPath/);
+  assert.match(globalCssSource, /\.deploymentMatrixWalletHeader/);
+  assert.match(globalCssSource, /\.deploymentMatrixRailLayers/);
 });
 
 test('Meridian view payloads strip inline project asset data', () => {

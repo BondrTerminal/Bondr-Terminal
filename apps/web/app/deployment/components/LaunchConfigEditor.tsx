@@ -337,72 +337,46 @@ function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId 
         </div>
       </div>
 
-      <div className="deploymentExecutionMatrixScroll">
-        <div className="deploymentExecutionMatrix" role="table">
-          <div className="deploymentExecutionMatrixRow head" role="row">
-            <span>Wallet</span>
-            <span>Rail</span>
-            <span>Balance</span>
-            <span>Dev Range</span>
-            <span>Bundle Range</span>
-            <span>Snipe Range</span>
-            <span>Task Range</span>
-            <span>Signer</span>
-          </div>
-          {wallets.map((wallet) => {
-            const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
-            const phase = phaseFromPlan(plan);
-            const fallbackTakeProfit = plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
-            const buyMin = minBuySol(plan);
-            const buyMax = maxBuySol(plan);
-            const taskBuyMin = plan?.taskBuyMinSol ?? buyMin;
-            const taskBuyMax = plan?.taskBuyMaxSol ?? buyMax;
-            return (
-              <div className={`deploymentExecutionMatrixRow rail-${phase}`} role="row" key={wallet.id}>
+      <div className="deploymentMatrixPath">
+        <div><span>01</span><strong>Rail</strong><small>assign each wallet</small></div>
+        <div><span>02</span><strong>Range</strong><small>set SOL min and max</small></div>
+        <div><span>03</span><strong>Risk</strong><small>slip, stops, timing</small></div>
+        <div><span>04</span><strong>Review</strong><small>save, dry-run, then gate check</small></div>
+      </div>
+
+      <div className="deploymentExecutionMatrix">
+        {wallets.map((wallet) => {
+          const plan = initial.walletPlan.find((entry) => entry.walletId === wallet.id);
+          const phase = phaseFromPlan(plan);
+          const fallbackTakeProfit = plan?.takeProfitPercents?.length ? plan.takeProfitPercents : initial.devWalletRules.takeProfitPercents;
+          const buyMin = minBuySol(plan);
+          const buyMax = maxBuySol(plan);
+          const taskBuyMin = plan?.taskBuyMinSol ?? buyMin;
+          const taskBuyMax = plan?.taskBuyMaxSol ?? buyMax;
+          return (
+            <section className={`deploymentMatrixWalletBlock rail-${phase}`} key={wallet.id}>
+              <div className="deploymentMatrixWalletHeader">
                 <div className="deploymentMatrixWalletCell">
+                  <span>Wallet</span>
                   <strong>{wallet.role || 'Wallet'}</strong>
                   <code title={wallet.address}>{short(wallet.address)}</code>
                   <small>{wallet.purpose || wallet.status}</small>
                 </div>
-                <div className="deploymentMatrixRailButtons" role="radiogroup" aria-label={`${wallet.role} launch rail`}>
-                  {(['dev', 'bundle', 'sniper', 'task', 'observe'] as Array<NonNullable<WalletPlanEntry['executionPhase']>>).map((rail) => (
-                    <label className={phase === rail ? 'active' : ''} key={rail}>
-                      <input name={`rail.${wallet.id}`} type="radio" value={rail} defaultChecked={phase === rail} />
-                      <span>{rail === 'sniper' ? 'snipe' : rail}</span>
-                    </label>
-                  ))}
+                <div className="deploymentMatrixRailChoice">
+                  <span>Rail</span>
+                  <div className="deploymentMatrixRailButtons" role="radiogroup" aria-label={`${wallet.role} launch rail`}>
+                    {(['dev', 'bundle', 'sniper', 'task', 'observe'] as Array<NonNullable<WalletPlanEntry['executionPhase']>>).map((rail) => (
+                      <label className={phase === rail ? 'active' : ''} key={rail}>
+                        <input name={`rail.${wallet.id}`} type="radio" value={rail} defaultChecked={phase === rail} />
+                        <span>{rail === 'sniper' ? 'snipe' : rail}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="deploymentMatrixBalanceCell">
+                  <span>Balance</span>
                   <strong>{wallet.balanceSol.toFixed(4)} SOL</strong>
                   <small>{wallet.custodyMode ?? 'watch-only'} · {wallet.status}</small>
-                </div>
-                <div className="deploymentMatrixFieldStack">
-                  <WalletPlanNumberField label="min SOL" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
-                  <WalletPlanNumberField label="max SOL" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
-                  <WalletPlanNumberField label="slip" name={`devPlan.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                </div>
-                <div className="deploymentMatrixFieldStack">
-                  <WalletPlanNumberField label="min SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
-                  <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
-                  <WalletPlanNumberField label="slip" name={`bundle.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                </div>
-                <div className="deploymentMatrixFieldStack sniper">
-                  <WalletPlanNumberField label="min SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
-                  <WalletPlanNumberField label="max SOL" name={`sniper.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
-                  <WalletPlanNumberField label="slip" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
-                  <WalletPlanNumberField label="stop %" name={`sniper.${wallet.id}.stopLossPct`} max="0" step="0.1" value={plan?.stopLossPct || initial.devWalletRules.stopLossPct} placeholder="-18" />
-                  <WalletPlanTextField label="take profit" name={`sniper.${wallet.id}.takeProfitPercents`} value={formatPctList(fallbackTakeProfit)} placeholder="35, 75, 150" />
-                  <WalletPlanNumberField label="sell cap" name={`sniper.${wallet.id}.perTxSellCapPct`} min="0" max="100" step="0.1" value={plan?.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct} placeholder="25" />
-                  <WalletPlanNumberField label="cooldown" name={`sniper.${wallet.id}.cooldownSeconds`} min="0" step="1" value={plan?.cooldownSeconds || initial.devWalletRules.cooldownSeconds} placeholder="60" />
-                </div>
-                <div className="deploymentMatrixFieldStack task">
-                  <WalletPlanNumberField label="buy min" name={`task.${wallet.id}.buyMinSol`} min="0" step="0.001" value={taskBuyMin} placeholder="0.100" />
-                  <WalletPlanNumberField label="buy max" name={`task.${wallet.id}.buyMaxSol`} min="0" step="0.001" value={taskBuyMax} placeholder="2.000" />
-                  <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
-                  <WalletPlanNumberField label="total max" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? taskBuyMax} placeholder="4.000" />
-                  <WalletPlanNumberField label="delay" name={`task.${wallet.id}.delaySeconds`} min="0" step="1" value={plan?.taskDelaySeconds ?? 0} placeholder="0" />
-                  <WalletPlanNumberField label="interval" name={`task.${wallet.id}.intervalSeconds`} min="0" step="1" value={plan?.taskIntervalSeconds ?? 0} placeholder="60" />
-                  <WalletPlanNumberField label="runs" name={`task.${wallet.id}.maxExecutions`} min="1" step="1" value={plan?.taskMaxExecutions ?? 1} placeholder="1" />
                 </div>
                 <div className="deploymentMatrixSignerCell">
                   <span className={phaseClass(phase)}>{phase === 'sniper' ? 'snipe' : phase}</span>
@@ -410,10 +384,53 @@ function LaunchExecutionMatrix({ project, wallets, initial, selectedDevWalletId 
                   <small>{phase === 'observe' ? 'excluded from launch plan' : phase === 'dev' ? 'must match browser signer' : 'requires future multi-wallet signer proof'}</small>
                 </div>
               </div>
-            );
-          })}
-          {!wallets.length && <div className="deploymentExecutionMatrixEmpty">No wallets are attached to this project wallet group.</div>}
-        </div>
+
+              <div className="deploymentMatrixRailLayers">
+                <div className="deploymentMatrixLayer dev">
+                  <div><span>Dev buy</span><strong>{phase === 'dev' ? 'Selected' : 'Ready if selected'}</strong></div>
+                  <div className="deploymentMatrixFieldStack">
+                    <WalletPlanNumberField label="min SOL" name={`devPlan.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                    <WalletPlanNumberField label="max SOL" name={`devPlan.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                    <WalletPlanNumberField label="slip" name={`devPlan.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                  </div>
+                </div>
+                <div className="deploymentMatrixLayer bundle">
+                  <div><span>Bundle buy</span><strong>{phase === 'bundle' ? 'Selected' : 'Ready if selected'}</strong></div>
+                  <div className="deploymentMatrixFieldStack">
+                    <WalletPlanNumberField label="min SOL" name={`bundle.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                    <WalletPlanNumberField label="max SOL" name={`bundle.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                    <WalletPlanNumberField label="slip" name={`bundle.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                  </div>
+                </div>
+                <div className="deploymentMatrixLayer sniper">
+                  <div><span>Snipe rail</span><strong>{phase === 'sniper' ? 'Selected' : 'Ready if selected'}</strong></div>
+                  <div className="deploymentMatrixFieldStack sniper">
+                    <WalletPlanNumberField label="min SOL" name={`sniper.${wallet.id}.plannedBuySol`} min="0" step="0.001" value={buyMin} placeholder="0.100" />
+                    <WalletPlanNumberField label="max SOL" name={`sniper.${wallet.id}.maxBuySol`} min="0" step="0.001" value={buyMax} placeholder="2.000" />
+                    <WalletPlanNumberField label="slip" name={`sniper.${wallet.id}.maxSlippageBps`} min="1" step="1" value={plan?.maxSlippageBps ?? initial.route.slippageBps} placeholder="100" />
+                    <WalletPlanNumberField label="stop %" name={`sniper.${wallet.id}.stopLossPct`} max="0" step="0.1" value={plan?.stopLossPct || initial.devWalletRules.stopLossPct} placeholder="-18" />
+                    <WalletPlanTextField label="take profit" name={`sniper.${wallet.id}.takeProfitPercents`} value={formatPctList(fallbackTakeProfit)} placeholder="35, 75, 150" />
+                    <WalletPlanNumberField label="sell cap" name={`sniper.${wallet.id}.perTxSellCapPct`} min="0" max="100" step="0.1" value={plan?.perTxSellCapPct || initial.devWalletRules.perTxSellCapPct} placeholder="25" />
+                    <WalletPlanNumberField label="cooldown" name={`sniper.${wallet.id}.cooldownSeconds`} min="0" step="1" value={plan?.cooldownSeconds || initial.devWalletRules.cooldownSeconds} placeholder="60" />
+                  </div>
+                </div>
+                <div className="deploymentMatrixLayer task">
+                  <div><span>Task rail</span><strong>{phase === 'task' ? 'Selected' : 'Ready if selected'}</strong></div>
+                  <div className="deploymentMatrixFieldStack task">
+                    <WalletPlanNumberField label="buy min" name={`task.${wallet.id}.buyMinSol`} min="0" step="0.001" value={taskBuyMin} placeholder="0.100" />
+                    <WalletPlanNumberField label="buy max" name={`task.${wallet.id}.buyMaxSol`} min="0" step="0.001" value={taskBuyMax} placeholder="2.000" />
+                    <WalletPlanNumberField label="sell %" name={`task.${wallet.id}.taskSellPercent`} min="0" max="100" step="0.1" value={plan?.taskSellPercent ?? 0} placeholder="25" />
+                    <WalletPlanNumberField label="total max" name={`task.${wallet.id}.taskMaxTotalSol`} min="0" step="0.001" value={plan?.taskMaxTotalSol ?? taskBuyMax} placeholder="4.000" />
+                    <WalletPlanNumberField label="delay" name={`task.${wallet.id}.delaySeconds`} min="0" step="1" value={plan?.taskDelaySeconds ?? 0} placeholder="0" />
+                    <WalletPlanNumberField label="interval" name={`task.${wallet.id}.intervalSeconds`} min="0" step="1" value={plan?.taskIntervalSeconds ?? 0} placeholder="60" />
+                    <WalletPlanNumberField label="runs" name={`task.${wallet.id}.maxExecutions`} min="1" step="1" value={plan?.taskMaxExecutions ?? 1} placeholder="1" />
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })}
+        {!wallets.length && <div className="deploymentExecutionMatrixEmpty">No wallets are attached to this project wallet group.</div>}
       </div>
     </section>
   );
