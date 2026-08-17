@@ -1413,6 +1413,8 @@ test('deployment UI and truth map expose Jito packed orchestration', () => {
   assert.ok(pageSource.includes('/api/live-test-plan'));
   assert.ok(capabilitySource.includes("liveTestPlan: '/api/live-test-plan'"));
   assert.equal(deploymentRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
+  assert.equal(deploymentRail?.steps.find((item) => item.step === 'recovery')?.status, 'rehearsal-only');
+  assert.ok(deploymentRail?.steps.find((item) => item.step === 'recovery')?.blockers.includes('deployment-rebuild-runner-missing'));
   assert.equal(bundleRail?.steps.find((item) => item.step === 'builder')?.detail.includes('route-policy-proven'), true);
   assert.equal(bundleRail?.steps.find((item) => item.step === 'receipt')?.status, 'rehearsal-only');
   assert.equal(bundleRail?.steps.find((item) => item.step === 'monitor')?.detail.includes('Post-chain effect proof'), true);
@@ -2839,6 +2841,13 @@ test('execution recovery readiness reports monitor gaps and no-blind-retry polic
   const readiness = buildExecutionRecoveryReadiness();
   assert.equal(readiness.contract, 'bondr-execution-recovery-readiness-v1');
   assert.equal(readiness.execution, 'recovery-readiness-only-no-monitor-no-retry-no-broadcast');
+  assert.equal(readiness.deploymentRecovery.contract, 'bondr-deployment-recovery-preview-v1');
+  assert.equal(readiness.deploymentRecovery.execution, 'deployment-recovery-preview-only-no-monitor-no-retry-no-broadcast');
+  assert.ok(readiness.deploymentRecovery.requiredReceiptFields.includes('transactionMessageHash'));
+  assert.ok(readiness.deploymentRecovery.rebuildTriggers.includes('blockhash-expired'));
+  assert.ok(readiness.deploymentRecovery.noRetryFailures.includes('risk-or-halt'));
+  assert.ok(readiness.deploymentRecovery.blockers.includes('deployment-rebuild-runner-missing'));
+  assert.equal(readiness.monitors.find((item) => item.name === 'launch tx')?.status, 'rehearsal-only');
   assert.ok(readiness.recoveryPolicy.retryable.includes('blockhash-expired-rebuild'));
   assert.ok(readiness.recoveryPolicy.noRetry.includes('slippage-or-stale-market'));
   assert.equal(readiness.recoveryPolicy.noBlindRetry, true);

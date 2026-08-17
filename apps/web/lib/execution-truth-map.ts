@@ -111,7 +111,7 @@ export function buildExecutionTruthMap(input: {
       step('relay-broadcast', input.activation.deploymentEnabled && input.activation.broadcastEnabled ? 'rehearsal-only' : 'blocked', 'Deploy and broadcast gates remain explicit.', [input.activation.deploymentEnabled ? '' : 'deployment-gate-closed', input.activation.broadcastEnabled ? '' : 'broadcast-gate-closed'].filter(Boolean)),
       step('receipt', 'rehearsal-only', 'Launch receipt persistence and manual reconciliation are proof-bound and auth-protected.'),
       step('monitor', ipfsReady ? 'rehearsal-only' : 'blocked', 'Launch monitor needs CA/pool after deploy; IPFS metadata required before real create.', ipfsReady ? [] : ['ipfs-metadata-uri-missing']),
-      step('recovery', 'missing-implementation', 'Deploy rebuild/expiry/failure recovery flow is not implemented.', ['deployment-recovery-flow-missing'])
+      step('recovery', recoveryReadiness.deploymentRecovery.status, 'Deployment recovery preview defines receipt proof, rebuild triggers, and no-blind-retry failure classes before any live runner.', recoveryReadiness.deploymentRecovery.blockers)
     ]
   });
 
