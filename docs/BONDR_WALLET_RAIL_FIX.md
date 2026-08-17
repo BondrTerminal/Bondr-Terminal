@@ -12,7 +12,7 @@ Wallet Ops persistence is now Postgres-backed in production. That improves durab
 
 BONDR had three overlapping wallet rails:
 
-1. **Browser signer rail** — client-only `window.solana` connection used by Terminal and `/live-beta-test` for A-profile signing.
+1. **Browser signer rail** — client-only `window.solana` connection used by Terminal and Deployment for A-profile signing.
 2. **Wallet Ops inventory rail** — stored public wallet records, either `watch-only` or `managed-local`, used for project wallet assignment and UI selection.
 3. **Vault rail** — encrypted managed-local wallet setup/readiness. The vault can exist, but A-profile does not use server custody or vault signing.
 
@@ -47,11 +47,10 @@ The reusable `WalletRailStatus` component is mounted on:
 - Profile
 - Wallet Ops
 - Terminal `/sniper`
-- Live Beta Test `/live-beta-test`
 - Portfolio
 - Deployment
 
-`/live-beta-test` also records wallet-rail refreshes in the QA event log and includes a sanitized rail summary in Copy QA Report.
+The old manual signing harness has been retired; current verification happens through the real Profile, Terminal, and Deployment surfaces.
 
 ## Proven vs gated
 
@@ -121,11 +120,11 @@ Avoid vague copy like `wallet setup needed` when the real issue is vault/invento
 3. If rail says connected signer is not in Wallet Ops, click **Add connected signer as watch-only wallet**.
 4. Refresh balances.
 5. Confirm connected signer, selected wallet, Wallet Ops inventory, and SOL balance/provider status are visible.
-6. Open `/live-beta-test`.
+6. Open `/sniper` or `/deployment?project=<projectId>`.
 7. Select/match the connected signer wallet.
-8. Run preflight, quote, build unsigned transaction, simulate, then sign locally only after simulation passes.
-9. Confirm the signed transaction is not broadcast.
-10. Open `/sniper` and confirm exact block reasons are visible before build/sign.
+8. Run preflight, quote/build, simulate, then sign locally only after simulation passes.
+9. Confirm the signed transaction is not broadcast while the live broadcast gate is closed.
+10. Confirm exact block reasons are visible before any build/sign/broadcast step.
 
 ## Watch-only connected signer add flow
 

@@ -170,7 +170,7 @@ Pages:
 - `/portfolio?view=wallets&project=sda` -> 200
 - `/sniper?project=sda` -> 200
 - `/projects` -> 200
-- `/live-beta-test` -> 404
+- retired manual signing harness route -> 404
 
 APIs:
 

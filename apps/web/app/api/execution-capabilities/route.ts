@@ -92,7 +92,6 @@ export async function GET(request: Request) {
     warnings: liveActivation.warnings,
     routes: {
       quotePreview: '/api/execution-quote',
-      authenticatedQaChecklist: '/api/authenticated-qa-checklist',
       swapBuilder: '/api/execution-swap',
       broadcaster: '/api/send-signed-transaction',
       jitoRelayStatus: '/api/relay/jito/status',

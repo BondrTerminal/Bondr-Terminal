@@ -38,7 +38,6 @@ Canonical sources by category:
 | --- | --- | --- | --- | --- | --- | --- |
 | `/profile` | auth, browser signer, wallet rail, test entry | `LiveBetaStatus`, `WalletRailStatus`, `TurnkeyProfileLogin` | live/provider/status | yes | proven entry surface | wallet extension/auth/provider state |
 | `/wallets` | inventory, balances, readiness, wallet rail | `/api/wallets`, `hydrateWalletBalances`, `WalletRailStatus` | Postgres inventory + live/modelled balances | yes | inventory/match prep | watch-only is not custody; modeled fallback must be labeled |
-| `/live-beta-test` | capabilities, signer, selected wallet, preflight, quote/build/sim/sign | `/api/execution-capabilities`, `/api/wallets`, `/api/wallet-rail`, quote/swap/sim routes | live/client local | yes | production user-verified through sign | broadcast disabled; repeatability/provider health still required |
 | `/sniper` | terminal market data, wallet routing, token balances, signing ladder | server props, `/api/wallet-token-balances`, `WalletRailStatus`, execution routes | mixed live/modelled/market | yes | should follow same A-profile ladder | mismatch, simulation, provider state, no broadcast |
 | `/portfolio` | reporting holdings, PnL, rewards, wallet status | `/api/portfolio`, store snapshots, `WalletRailStatus` | reporting/snapshot + rail | yes | no direct signing | provider-limited vs reporting clarity; not payout truth |
 | `/deployment` | project wallet assignment, deployment readiness, adapter status | project context, `WalletRailStatus`, deployment components | config/reporting + rail | yes | readiness only | deployment disabled by gate |
@@ -67,7 +66,7 @@ Canonical sources by category:
 1. Profile: connect browser wallet and operator auth.
 2. Wallet rail: confirm connected signer, selected wallet, Wallet Ops inventory, SOL/token balance status.
 3. If signer is not in Wallet Ops: add connected signer as watch-only wallet by explicit click.
-4. Live Beta Test: preflight mint/amount/slippage/auth/wallet match.
+4. Terminal/Deployment action panel: preflight mint/amount/slippage/auth/wallet match.
 5. Quote preview: `/api/execution-quote`.
 6. Build unsigned transaction: `/api/execution-swap`.
 7. Simulate unsigned transaction: `/api/terminal/signer-dry-run`.

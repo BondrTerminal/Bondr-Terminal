@@ -7,7 +7,6 @@ import { buildDeploymentLaunchReadiness, DEPLOYMENT_ROUTE_ADAPTERS } from '../ap
 import { buildDeploymentEngineReadiness } from '../apps/web/lib/deployment-engine-readiness.js';
 import { buildExecutionRecoveryReadiness } from '../apps/web/lib/execution-recovery-readiness.js';
 import { buildExecutionTruthMap } from '../apps/web/lib/execution-truth-map.js';
-import { buildAuthenticatedQaChecklist } from '../apps/web/lib/authenticated-qa-checklist.js';
 import { buildIpfsMetadataReadiness, buildTokenMetadataJson, pinataJwt } from '../apps/web/lib/ipfs-metadata-readiness.js';
 import { buildJitoAddressLookupTablePlan } from '../apps/web/lib/jito-address-lookup-table-plan.js';
 import { buildJitoBundleChainEffectProof } from '../apps/web/lib/jito-bundle-chain-effect-proof.js';
@@ -179,34 +178,6 @@ test('Meridian view payloads strip inline project asset data', () => {
   const strippedStore = stripMeridianInlineAssetData(store);
   assert.equal(strippedStore.projects[0].metadata.imageDataUrl, undefined);
   assert.equal(store.projects[0].metadata.imageDataUrl, projectWithInlineAsset.metadata.imageDataUrl);
-});
-
-test('authenticated QA checklist requires an operator session and covers core tabs', () => {
-  const store: MeridianStore = {
-    projects: [project],
-    wallets: [wallet],
-    walletGroups: [{ id: 'operator-wallets', name: 'Operator Wallets', scope: 'global', walletIds: [wallet.id] }],
-    flowEvents: [],
-    eventLog: []
-  };
-  const blocked = buildAuthenticatedQaChecklist({
-    auth: { configured: true, authenticated: false, reason: 'missing-session' },
-    store,
-    projectId: project.id
-  });
-  assert.equal(blocked.contract, 'bondr-authenticated-manual-qa-checklist-v1');
-  assert.equal(blocked.status, 'blocked');
-  assert.ok(blocked.blockers.includes('operator-session-required'));
-
-  const ready = buildAuthenticatedQaChecklist({
-    auth: { configured: true, authenticated: true, reason: 'operator-key-header' },
-    store,
-    projectId: project.id
-  });
-  assert.equal(ready.status, 'ready');
-  assert.ok(ready.tabs.some((tab) => tab.href === `/deployment?project=${project.id}`));
-  assert.ok(ready.tabs.some((tab) => tab.id === 'profile'));
-  assert.equal(ready.safety.noMutation, true);
 });
 
 const validMintPublicKey = 'Mint111111111111111111111111111111111111111';
@@ -1371,7 +1342,7 @@ test('deployment launch builder stages signed PumpPortal create packets for sign
   assert.ok(source.includes('safeToBroadcastIfLiveEnabled'));
 });
 
-test('deployment UI and truth map expose authenticated QA and Jito packed orchestration', () => {
+test('deployment UI and truth map expose Jito packed orchestration', () => {
   const pageSource = readFileSync(new URL('../apps/web/app/deployment/page.tsx', import.meta.url), 'utf8');
   const capabilitySource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
   const truthMapProject: Project = {
@@ -1400,7 +1371,6 @@ test('deployment UI and truth map expose authenticated QA and Jito packed orches
   assert.ok(pageSource.includes('Pump.fun/Raydium/Jupiter route policy proof'));
   assert.ok(pageSource.includes('/api/bundle-sequencer mode=build-packed'));
   assert.ok(pageSource.includes('/api/relay/jito/wave-dispatch-plan'));
-  assert.ok(capabilitySource.includes("authenticatedQaChecklist: '/api/authenticated-qa-checklist'"));
   assert.equal(deploymentRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
   assert.equal(bundleRail?.steps.find((item) => item.step === 'builder')?.detail.includes('route-policy-proven'), true);
   assert.equal(bundleRail?.steps.find((item) => item.step === 'receipt')?.status, 'rehearsal-only');

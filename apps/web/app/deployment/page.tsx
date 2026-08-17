@@ -33,7 +33,6 @@ const routeMap = [
   ['/api/projects/[id]/launch-receipt', 'Post-launch receipt reconciliation', 'real'],
   ['/api/projects/[id]/launch-reconciliation', 'Read-only market reconciliation from launch receipt', 'real'],
   ['/api/bundle-sequencer', 'Bundle validation/build coordination + Jito relay contract', 'preview'],
-  ['/api/authenticated-qa-checklist', 'Authenticated manual QA checklist', 'real'],
   ['/api/relay/jito/packed-transaction-build', 'Jito packed v0 transaction builder', 'rehearsal-only'],
   ['/api/relay/jito/multi-wallet-signing-session', 'Jito multi-wallet signature tracker', 'rehearsal-only'],
   ['/api/relay/jito/wave-dispatch-plan', 'Jito per-wave dispatch approval plan', 'rehearsal-only'],

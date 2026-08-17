@@ -35,7 +35,6 @@ Immediate response:
 
 Resolution proof:
 
-- `/api/authenticated-qa-checklist?project=<projectId>` returns ready.
 - Profile Audit shows the expected signer and active profile subject.
 - The original route loads without a new error digest.
 
