@@ -91,6 +91,7 @@ export async function GET(request: Request) {
     blockers: liveActivation.blockers,
     warnings: liveActivation.warnings,
     routes: {
+      liveTestPlan: '/api/live-test-plan',
       quotePreview: '/api/execution-quote',
       swapBuilder: '/api/execution-swap',
       broadcaster: '/api/send-signed-transaction',

@@ -30,6 +30,7 @@ import { normalizeDeploymentLaunchPath, normalizeDeploymentRoutePlatform, routeP
 import { buildLpBurnTransaction, buildSimulationVerifiedLpBurnSignatureHandoff, buildVerifiedLpBurnTransaction } from '../apps/web/lib/lp-burn-transaction-builder.js';
 import { normalizeLaunchReceipt } from '../apps/web/lib/launch-receipts.js';
 import { buildLaunchReconciliation } from '../apps/web/lib/launch-reconciliation.js';
+import { buildLiveTestPlan } from '../apps/web/lib/live-test-plan.js';
 import { stripMeridianInlineAssetData, stripProjectInlineAssetData, walletPlanEntries, type MeridianStore, type Project, type Wallet } from '../apps/web/lib/meridian-store.js';
 import { Keypair, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { POST as deploymentEnginePost } from '../apps/web/app/api/deployment-engine/route.js';
@@ -1371,6 +1372,8 @@ test('deployment UI and truth map expose Jito packed orchestration', () => {
   assert.ok(pageSource.includes('Pump.fun/Raydium/Jupiter route policy proof'));
   assert.ok(pageSource.includes('/api/bundle-sequencer mode=build-packed'));
   assert.ok(pageSource.includes('/api/relay/jito/wave-dispatch-plan'));
+  assert.ok(pageSource.includes('/api/live-test-plan'));
+  assert.ok(capabilitySource.includes("liveTestPlan: '/api/live-test-plan'"));
   assert.equal(deploymentRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
   assert.equal(bundleRail?.steps.find((item) => item.step === 'builder')?.detail.includes('route-policy-proven'), true);
   assert.equal(bundleRail?.steps.find((item) => item.step === 'receipt')?.status, 'rehearsal-only');
@@ -1383,6 +1386,26 @@ test('deployment UI and truth map expose Jito packed orchestration', () => {
   assert.equal(taskRail?.steps.find((item) => item.step === 'builder')?.status, 'rehearsal-only');
   assert.equal(taskRail?.steps.find((item) => item.step === 'simulation')?.status, 'rehearsal-only');
   assert.ok(taskRail?.steps.find((item) => item.step === 'monitor')?.blockers.includes('durable-task-runner-missing'));
+});
+
+test('live test plan lists remaining controlled tests and retired harnesses', () => {
+  const routeSource = readFileSync(new URL('../apps/web/app/api/live-test-plan/route.ts', import.meta.url), 'utf8');
+  const capabilitySource = readFileSync(new URL('../apps/web/app/api/execution-capabilities/route.ts', import.meta.url), 'utf8');
+  const plan = buildLiveTestPlan();
+  assert.equal(plan.contract, 'bondr-live-test-plan-v1');
+  assert.equal(plan.liveExecutionAllowed, false);
+  assert.equal(plan.safety.noSigning, true);
+  assert.equal(plan.safety.noBroadcast, true);
+  assert.ok(plan.items.some((item) => item.id === 'single-broadcast-gate' && item.harnesses.includes('/api/send-signed-transaction')));
+  assert.ok(plan.items.some((item) => item.id === 'pumpfun-controlled-launch' && item.harnesses.includes('/api/deployment/pumpportal/build-create')));
+  assert.ok(plan.items.some((item) => item.id === 'raydium-lp-burn' && item.harnesses.includes('/api/deployment/raydium/lp-account-proof')));
+  assert.ok(plan.items.some((item) => item.id === 'jito-bundle-launch' && item.harnesses.includes('/api/relay/jito/wave-dispatch-plan')));
+  assert.ok(plan.items.some((item) => item.id === 'sniper-task-automation' && item.harnesses.includes('/api/tasks/queue-preview')));
+  assert.ok(plan.retiredHarnesses.some((item) => item.removedRoute === '/api/authenticated-qa-checklist'));
+  assert.ok(plan.retiredHarnesses.some((item) => item.removedRoute === '/live-beta-test'));
+  assert.doesNotMatch(JSON.stringify(plan.retainedHarnesses), /authenticated-qa-checklist/);
+  assert.ok(routeSource.includes('live-test-plan-read-only-no-signing-no-broadcast-no-mutation'));
+  assert.ok(capabilitySource.includes("liveTestPlan: '/api/live-test-plan'"));
 });
 
 test('pump direct SDK adapter stays gated behind explicit env and shares handoff shape', () => {
